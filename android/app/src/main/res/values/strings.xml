@@ -1,0 +1,71 @@
+<resources>
+    <string name="app_name">语音助手</string>
+
+    <!-- Main Screen -->
+    <string name="status_online">在线</string>
+    <string name="status_offline">离线</string>
+    <string name="btn_hold_to_speak">按住说话</string>
+    <string name="btn_settings">设置</string>
+    <string name="btn_help">帮助</string>
+    <string name="btn_manual_trigger">手动触发</string>
+
+    <!-- Voice States -->
+    <string name="state_idle">待机中</string>
+    <string name="state_listening">正在倾听</string>
+    <string name="state_recording">正在录音</string>
+    <string name="state_recognizing">识别中</string>
+    <string name="state_thinking">思考中</string>
+    <string name="state_speaking">正在回复</string>
+
+    <!-- Model Download Screen -->
+    <string name="init_title">正在初始化语音引擎</string>
+    <string name="init_subtitle">请稍候，正在加载语音模型</string>
+    <string name="download_progress">下载进度</string>
+    <string name="downloading_file">正在下载: %s</string>
+    <string name="btn_start_use">开始使用</string>
+
+    <!-- Status Messages -->
+    <string name="status_preparing">准备中…</string>
+    <string name="status_loading_models">加载模型中…</string>
+    <string name="status_downloading">下载中…</string>
+    <string name="status_completed">完成</string>
+    <string name="status_failed">失败</string>
+
+    <!-- Warnings -->
+    <string name="warning_memory_low">内存不足，部分功能已暂停</string>
+
+    <!-- Accessibility -->
+    <string name="cd_settings">设置</string>
+    <string name="cd_mic">麦克风</string>
+    <string name="cd_status_indicator">状态指示器</string>
+    <string name="cd_voice_visualizer">语音可视化</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">设置</string>
+    <string name="settings_category_music">音乐服务</string>
+    <string name="settings_category_ai">AI 服务</string>
+    <string name="settings_category_voice">语音设置</string>
+
+    <string name="settings_navidrome_url">Navidrome 地址</string>
+    <string name="settings_navidrome_url_hint">http://192.168.1.100:4533</string>
+    <string name="settings_navidrome_username">用户名</string>
+    <string name="settings_navidrome_username_hint">请输入用户名</string>
+    <string name="settings_navidrome_password">密码</string>
+    <string name="settings_navidrome_password_hint">请输入密码</string>
+
+    <string name="settings_llm_url">LLM API 地址</string>
+    <string name="settings_llm_url_hint">https://api.deepseek.com</string>
+    <string name="settings_llm_api_key">API Key</string>
+    <string name="settings_llm_api_key_hint">请输入 API Key</string>
+    <string name="settings_llm_model">模型</string>
+    <string name="settings_llm_model_hint">deepseek-chat</string>
+
+    <string name="settings_wake_sensitivity">唤醒灵敏度</string>
+    <string name="settings_tts_speed">TTS 语速</string>
+
+    <string name="settings_save">保存</string>
+    <string name="settings_saved">设置已保存</string>
+    <string name="settings_test_connection">测试连接</string>
+    <string name="settings_connection_success">连接成功</string>
+    <string name="settings_connection_failed">连接失败</string>
+</resources>
