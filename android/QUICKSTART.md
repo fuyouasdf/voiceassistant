@@ -11,8 +11,13 @@
 ### 1. 下载 Sherpa-ONNX 库
 本项目使用 Sherpa-ONNX 作为语音识别/合成引擎，需要下载 AAR 文件：
 
-1. 从 GitHub Releases 下载：[sherpa-onnx-android-aar](https://github.com/k2-fsa/sherpa-onnx/releases)
-2. 将 `sherpa-onnx-android.aar` 复制到以下位置：
+**下载页面**: https://github.com/k2-fsa/sherpa-onnx/releases
+
+**步骤**：
+1. 打开上方链接，找到最新版本的 Android AAR 文件
+2. 下载 `sherpa-onnx-android-aar-{version}.aar`
+3. 重命名为 `sherpa-onnx-android.aar`
+4. 复制到以下位置：
    - `app/libs/sherpa-onnx-android.aar`
    - `core/libs/sherpa-onnx-android.aar`
 
