@@ -6,6 +6,23 @@
 - Android SDK 34
 - 测试设备: Android 6.0+ (API 23)
 
+## 前提条件
+
+### 1. 下载 Sherpa-ONNX 库
+本项目使用 Sherpa-ONNX 作为语音识别/合成引擎，需要下载 AAR 文件：
+
+1. 从 GitHub Releases 下载：[sherpa-onnx-android-aar](https://github.com/k2-fsa/sherpa-onnx/releases)
+2. 将 `sherpa-onnx-android.aar` 复制到以下位置：
+   - `app/libs/sherpa-onnx-android.aar`
+   - `core/libs/sherpa-onnx-android.aar`
+
+### 2. 下载模型文件（可选）
+如需本地模型，请运行：
+```bash
+cd android
+./scripts/download_models.sh
+```
+
 ## 构建步骤
 
 ### 1. 下载模型文件

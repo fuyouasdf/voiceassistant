@@ -51,3 +51,6 @@ Thumbs.db
 **/models/tts
 .claude
 
+# Local libs (Sherpa-ONNX AAR - see QUICKSTART.md)
+**/libs/
+
