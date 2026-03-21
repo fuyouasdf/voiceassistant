@@ -28,7 +28,8 @@ enum class PipelineState {
  */
 data class StateInfo(
     val state: PipelineState,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val message: String = ""  // Optional message, e.g., recognized text
 ) {
     fun durationMs(): Long = System.currentTimeMillis() - timestamp
 }

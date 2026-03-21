@@ -15,10 +15,10 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val voicePipeline: VoicePipeline
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
-    
+
     init {
         viewModelScope.launch {
             voicePipeline.state.collect { stateInfo ->
@@ -29,14 +29,20 @@ class MainViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun onManualTrigger() {
-        // Simulate wake word detection
         viewModelScope.launch {
-            // Trigger listening state
+            try {
+                voicePipeline.interrupt()
+                voicePipeline.start()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    stateText = "启动失败"
+                )
+            }
         }
     }
-    
+
     private fun getStateText(state: PipelineState): String {
         return when (state) {
             PipelineState.IDLE -> "待机中"

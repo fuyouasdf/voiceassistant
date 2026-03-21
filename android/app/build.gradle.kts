@@ -37,6 +37,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -80,9 +81,8 @@ dependencies {
     // Timber (Logging)
     implementation("com.jakewharton.timber:timber:5.0.1")
 
-    // TODO: Add DLNA and Sherpa-ONNX dependencies when available
-    // Cling (DLNA/UPnP) - need to find correct Maven coordinates
-    // Sherpa-ONNX (Voice) - need to download AAR manually or build from source
+    // Sherpa-ONNX (Voice) - local AAR file
+    implementation(files("libs/sherpa-onnx-android.aar"))
 
     // Test
     testImplementation("junit:junit:4.13.2")

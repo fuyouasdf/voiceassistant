@@ -3,7 +3,6 @@ package com.voiceassistant.core.audio
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,35 +23,34 @@ class AudioCapture(
     
     fun start(onAudioChunk: (FloatArray) -> Unit) {
         stop() // Stop any existing recording
-        
+
         val minBuffer = AudioRecord.getMinBufferSize(
             sampleRate,
             AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_FLOAT
+            AudioFormat.ENCODING_PCM_16BIT
         )
-        
+
         audioRecord = createAudioRecord(minBuffer)
-        
+
         if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
             Timber.e("AudioRecord initialization failed")
             return
         }
-        
+
         audioRecord?.startRecording()
-        
+
         recordingJob = scope.launch {
-            val buffer = FloatArray(bufferSize)
-            
+            val buffer = ShortArray(bufferSize)
+
             while (isActive) {
-                val read = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    audioRecord?.read(buffer, 0, bufferSize, AudioRecord.READ_BLOCKING) ?: 0
-                } else {
-                    @Suppress("DEPRECATION")
-                    audioRecord?.read(buffer, 0, bufferSize) ?: 0
-                }
-                
+                val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
+
                 if (read > 0) {
-                    onAudioChunk(buffer.copyOf(read))
+                    // Convert ShortArray to FloatArray
+                    val floatBuffer = FloatArray(read) { i ->
+                        buffer[i] / 32768.0f
+                    }
+                    onAudioChunk(floatBuffer)
                 }
             }
         }
@@ -61,41 +59,35 @@ class AudioCapture(
     fun stop() {
         recordingJob?.cancel()
         recordingJob = null
-        
-        audioRecord?.stop()
-        audioRecord?.release()
-        audioRecord = null
+
+        try {
+            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
+                audioRecord?.stop()
+            }
+        } catch (e: IllegalStateException) {
+            Timber.w(e, "AudioRecord already stopped")
+        } finally {
+            audioRecord?.release()
+            audioRecord = null
+        }
     }
     
     private fun createAudioRecord(minBuffer: Int): AudioRecord? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // API 23+ use Builder
-            try {
-                AudioRecord.Builder()
-                    .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setSampleRate(sampleRate)
-                            .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                            .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(minBuffer * 2)
-                    .build()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to create AudioRecord with Builder")
-                null
-            }
-        } else {
-            // API 23 fallback
-            @Suppress("DEPRECATION")
-            AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                minBuffer * 2
-            )
+        return try {
+            AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(minBuffer * 2)
+                .build()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to create AudioRecord")
+            null
         }
     }
 }

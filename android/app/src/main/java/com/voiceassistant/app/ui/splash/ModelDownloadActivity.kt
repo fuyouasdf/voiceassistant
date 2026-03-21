@@ -1,11 +1,14 @@
 package com.voiceassistant.app.ui.splash
 
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.voiceassistant.app.R
 import com.voiceassistant.app.model.ModelDownloadState
@@ -16,48 +19,58 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
- * Activity shown on first launch to download models
+ * Activity shown on first launch to initialize models from assets
  */
 class ModelDownloadActivity : AppCompatActivity() {
-    
+
     private lateinit var modelInitializer: ModelInitializer
-    
+
     private lateinit var tvTitle: TextView
+    private lateinit var tvSubtitle: TextView
     private lateinit var tvStatus: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var tvProgress: TextView
     private lateinit var btnAction: Button
-    
+    private lateinit var vLogo: android.view.View
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         modelInitializer = ModelInitializer(this)
-        
+
         // Check if models already ready
         if (modelInitializer.areModelsReady()) {
             navigateToMain()
             return
         }
-        
+
         setContentView(R.layout.activity_model_download)
-        
+
         initViews()
+        setupLogoAnimation()
         observeDownloadState()
-        startDownload()
+        startInitialization()
     }
-    
+
     private fun initViews() {
         tvTitle = findViewById(R.id.tvTitle)
+        tvSubtitle = findViewById(R.id.tvSubtitle)
         tvStatus = findViewById(R.id.tvStatus)
         progressBar = findViewById(R.id.progressBar)
         tvProgress = findViewById(R.id.tvProgress)
         btnAction = findViewById(R.id.btnAction)
-        
+        vLogo = findViewById(R.id.vLogo)
+
         btnAction.setOnClickListener {
-            startDownload()
+            navigateToMain()
         }
     }
-    
+
+    private fun setupLogoAnimation() {
+        val drawable = vLogo.background as? GradientDrawable
+        drawable?.setColor(ContextCompat.getColor(this, R.color.primary))
+    }
+
     private fun observeDownloadState() {
         lifecycleScope.launch {
             modelInitializer.downloadStates.collectLatest { states ->
@@ -65,66 +78,66 @@ class ModelDownloadActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun updateUI(states: List<ModelDownloadState>) {
         if (states.isEmpty()) return
-        
+
         val allReady = states.all { it.status == ModelStatus.READY }
         val hasError = states.any { it.status == ModelStatus.ERROR }
-        val downloading = states.filter { it.status == ModelStatus.DOWNLOADING || it.status == ModelStatus.EXTRACTING }
-        
+        val processing = states.filter {
+            it.status == ModelStatus.EXTRACTING ||
+            it.status == ModelStatus.DOWNLOADING
+        }
+
         when {
             allReady -> {
-                tvTitle.text = "模型准备完成"
-                tvStatus.text = "所有模型已就绪"
+                tvTitle.text = "初始化完成"
+                tvSubtitle.text = "所有模型已就绪，可以开始使用"
                 progressBar.progress = 100
                 tvProgress.text = "100%"
-                btnAction.text = "开始使用"
-                btnAction.setOnClickListener { navigateToMain() }
+                tvStatus.text = "✓ 准备完成"
+                tvStatus.setTextColor(getColor(R.color.success))
+                btnAction.visibility = android.view.View.VISIBLE
             }
             hasError -> {
-                tvTitle.text = "下载失败"
+                tvTitle.text = "初始化失败"
+                tvSubtitle.text = "模型加载过程中出错"
                 tvStatus.text = states.firstOrNull { it.error != null }?.error ?: "未知错误"
+                btnAction.visibility = android.view.View.VISIBLE
                 btnAction.text = "重试"
-                btnAction.isEnabled = true
+                btnAction.setOnClickListener { startInitialization() }
             }
-            downloading.isNotEmpty() -> {
-                val current = downloading.first()
+            processing.isNotEmpty() -> {
+                val current = processing.first()
                 val totalProgress = states.map { it.progress }.average()
-                
-                tvTitle.text = "正在下载模型"
-                tvStatus.text = when (current.status) {
-                    ModelStatus.DOWNLOADING -> "正在下载: ${current.modelInfo.name}"
-                    ModelStatus.EXTRACTING -> "正在解压: ${current.modelInfo.name}"
-                    else -> "处理中..."
-                }
-                progressBar.progress = (totalProgress * 100).toInt()
-                tvProgress.text = "${(totalProgress * 100).toInt()}%"
-                btnAction.isEnabled = false
-                btnAction.text = "下载中..."
+                val progressPercent = (totalProgress * 100).toInt()
+
+                tvTitle.text = "正在初始化"
+                tvSubtitle.text = "正在加载 ${current.modelInfo.name} 模型"
+                progressBar.progress = progressPercent
+                tvProgress.text = "$progressPercent%"
+                tvStatus.text = "请稍候..."
+                btnAction.visibility = android.view.View.GONE
             }
             else -> {
-                tvStatus.text = "准备下载..."
-                btnAction.isEnabled = true
+                tvStatus.text = "准备中..."
             }
         }
     }
-    
-    private fun startDownload() {
-        btnAction.isEnabled = false
-        
+
+    private fun startInitialization() {
         lifecycleScope.launch {
             val result = modelInitializer.initialize()
-            
-            if (result.isSuccess) {
-                navigateToMain()
-            } else {
-                btnAction.isEnabled = true
-                tvStatus.text = "下载失败: ${result.exceptionOrNull()?.message}"
+
+            if (result.isFailure) {
+                tvStatus.text = "初始化失败：${result.exceptionOrNull()?.message}"
+                btnAction.visibility = android.view.View.VISIBLE
+                btnAction.text = "重试"
+                btnAction.setOnClickListener { startInitialization() }
             }
         }
     }
-    
+
     private fun navigateToMain() {
         startActivity(Intent(this, MainActivity::class.java))
         finish()

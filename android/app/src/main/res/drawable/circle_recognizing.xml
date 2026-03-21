@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="#9C27B0" />
+    <gradient
+        android:startColor="@color/state_recognizing"
+        android:centerColor="#FCD34D"
+        android:endColor="#FEF3C7"
+        android:angle="135"
+        android:type="linear" />
     <size
         android:width="200dp"
         android:height="200dp" />

@@ -93,7 +93,7 @@
 | `LISTENING` | 唤醒成功，等待语音 | `RECORDING`, `IDLE`(超时) |
 | `RECORDING` | 正在录音 | `RECOGNIZING`, `IDLE`(取消) |
 | `RECOGNIZING` | ASR处理中 | `THINKING` |
-| `THINKING` | 意图路由+LLM | `SPEAKING`, `IDLE`(打断) |
+| `THINKING` | 意图路由（本地规则） | `SPEAKING`, `IDLE`(打断) |
 | `SPEAKING` | TTS播报 | `IDLE`, `LISTENING`(打断) |
 
 ---

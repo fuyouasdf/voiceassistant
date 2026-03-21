@@ -1,10 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Base Colors -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- ========================================
+         Design System: Modern AI Voice Assistant
+         New UI Design - Fluid Gradient Theme
+         ======================================== -->
+
+    <!-- Primary Colors -->
+    <color name="primary">#FF6366F1</color>
+    <color name="primary_variant">#FF4F46E5</color>
+    <color name="primary_light">#FF818CF8</color>
+    <color name="on_primary">#FFFFFFFF</color>
+
+    <!-- Secondary/Accent Colors -->
+    <color name="secondary">#FF8B5CF6</color>
+    <color name="secondary_variant">#FF7C3AED</color>
+    <color name="on_secondary">#FFFFFFFF</color>
+
+    <!-- Background Colors - Deep Dark -->
+    <color name="background">#FF0A0A0F</color>
+    <color name="background_elevated">#FF12121A</color>
+    <color name="surface">#FF1A1A2E</color>
+    <color name="surface_elevated">#FF252542</color>
+
+    <!-- Text Colors -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FF9CA3AF</color>
+    <color name="text_tertiary">#FF6B7280</color>
+    <color name="text_disabled">#FF4B5563</color>
+
+    <!-- State Colors -->
+    <color name="success">#FF10B981</color>
+    <color name="error">#FFEF4444</color>
+    <color name="warning">#FFF59E0B</color>
+    <color name="info">#FF3B82F6</color>
+
+    <!-- ========================================
+         Voice State Gradient Colors
+         New gradient system for fluid animations
+         ======================================== -->
+
+    <!-- IDLE State: Blue to Purple gradient -->
+    <color name="gradient_idle_start">#FF6366F1</color>
+    <color name="gradient_idle_end">#FF8B5CF6</color>
+    <color name="state_idle">#FF6B7280</color>
+
+    <!-- LISTENING State: Blue to Cyan gradient -->
+    <color name="gradient_listening_start">#FF3B82F6</color>
+    <color name="gradient_listening_end">#FF06B6D4</color>
+    <color name="state_listening">#FF3B82F6</color>
+
+    <!-- RECORDING State: Orange to Red gradient -->
+    <color name="gradient_recording_start">#FFF97316</color>
+    <color name="gradient_recording_end">#FFEF4444</color>
+    <color name="state_recording">#FFEF4444</color>
+
+    <!-- RECOGNIZING State: Yellow/Gold -->
+    <color name="gradient_recognizing_start">#FFFBBF24</color>
+    <color name="gradient_recognizing_end">#FFF59E0B</color>
+    <color name="state_recognizing">#FFF59E0B</color>
+
+    <!-- THINKING State: Purple to Pink gradient -->
+    <color name="gradient_thinking_start">#FF8B5CF6</color>
+    <color name="gradient_thinking_end">#FFEC4899</color>
+    <color name="state_thinking">#FF8B5CF6</color>
+
+    <!-- SPEAKING State: Green to Blue gradient -->
+    <color name="gradient_speaking_start">#FF10B981</color>
+    <color name="gradient_speaking_end">#FF3B82F6</color>
+    <color name="state_speaking">#FF10B981</color>
+
+    <!-- Gradient Colors for Visualizer (Legacy) -->
+    <color name="gradient_start">#6366F1</color>
+    <color name="gradient_center">#8B5CF6</color>
+    <color name="gradient_end">#A855F7</color>
+
+    <!-- Glass Effect -->
+    <color name="glass_background">#401A1A2E</color>
+    <color name="glass_border">#33FFFFFF</color>
+
+    <!-- Shadow and Glow Colors -->
+    <color name="glow_primary">#406366F1</color>
+    <color name="glow_listening">#403B82F6</color>
+    <color name="glow_recording">#40EF4444</color>
+    <color name="glow_thinking">#408B5CF6</color>
+    <color name="glow_speaking">#4010B981</color>
+
+    <!-- Legacy Colors (for compatibility) -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
     <color name="teal_200">#FF03DAC5</color>
     <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="gray">#FF9AA0A6</color>
 </resources>

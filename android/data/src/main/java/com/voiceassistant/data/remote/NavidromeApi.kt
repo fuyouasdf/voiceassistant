@@ -58,3 +58,9 @@ data class Song(
     val album: String?,
     val duration: Int
 )
+
+data class SubsonicAuth(
+    val username: String,
+    val token: String,
+    val salt: String
+)

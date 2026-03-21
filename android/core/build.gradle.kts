@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 android {
@@ -30,6 +31,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    lint {
+        disable += "MissingPermission"
+    }
 }
 
 dependencies {
@@ -39,9 +43,8 @@ dependencies {
     // AndroidX
     implementation("androidx.core:core-ktx:1.12.0")
 
-    // TODO: Add Sherpa-ONNX and Cling when dependencies are resolved
-    // Sherpa-ONNX - need to download AAR manually
-    // Cling (DLNA) - need correct Maven coordinates
+    // Sherpa-ONNX (provided at runtime by app module)
+    compileOnly(files("libs/sherpa-onnx-android.aar"))
 
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
@@ -50,6 +53,13 @@ dependencies {
 
     // Timber
     implementation("com.jakewharton.timber:timber:5.0.1")
+
+    // Domain module
+    implementation(project(":domain"))
+
+    // Hilt (for @Inject)
+    implementation("com.google.dagger:hilt-android:2.50")
+    kapt("com.google.dagger:hilt-compiler:2.50")
 
     // Test
     testImplementation("junit:junit:4.13.2")

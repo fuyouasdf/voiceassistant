@@ -1,38 +1,29 @@
 package com.voiceassistant.app.model
 
 /**
- * Model information for download and initialization
+ * Model information for initialization
  */
 data class ModelInfo(
     val name: String,
     val type: ModelType,
-    val fileName: String,
-    val downloadUrl: String,
-    val sizeBytes: Long,
-    val md5Hash: String? = null
+    val assetPath: String
 ) {
     companion object {
         fun getRequiredModels(): List<ModelInfo> = listOf(
             ModelInfo(
-                name = "KWS Wake Word",
+                name = "KWS 唤醒词",
                 type = ModelType.KWS,
-                fileName = "kws.zip",
-                downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.tar.bz2",
-                sizeBytes = 3_500_000
+                assetPath = "models/kws"
             ),
             ModelInfo(
-                name = "ASR Chinese",
+                name = "ASR 语音识别",
                 type = ModelType.ASR,
-                fileName = "asr.zip",
-                downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-2024-03-09.tar.bz2",
-                sizeBytes = 105_000_000
+                assetPath = "models/asr"
             ),
             ModelInfo(
-                name = "TTS Chinese",
+                name = "TTS 语音合成",
                 type = ModelType.TTS,
-                fileName = "tts.zip",
-                downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/piper-zh_CN-huayan-medium.tar.bz2",
-                sizeBytes = 125_000_000
+                assetPath = "models/tts"
             )
         )
     }

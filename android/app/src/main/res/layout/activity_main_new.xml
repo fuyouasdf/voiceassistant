@@ -71,7 +71,7 @@
 
 
     <!-- ========================
-         Center Section: Visualizer
+         Center Section: Fluid Gradient Visualizer
          ======================== -->
 
     <FrameLayout
@@ -85,40 +85,13 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Glow Effect Background -->
-        <View
-            android:id="@+id/vGlow"
-            android:layout_width="280dp"
-            android:layout_height="280dp"
-            android:layout_gravity="center"
-            android:background="@drawable/glow_circle"
-            android:alpha="0.3" />
-
         <!-- Main Visualizer Circle -->
         <View
-            android:id="@+id/vVisualizer"
+            android:id="@+id/fluidGradientView"
             android:layout_width="200dp"
             android:layout_height="200dp"
             android:layout_gravity="center"
             android:background="@drawable/circle_idle" />
-
-        <!-- Inner Ring Decoration -->
-        <View
-            android:id="@+id/vInnerRing"
-            android:layout_width="160dp"
-            android:layout_height="160dp"
-            android:layout_gravity="center"
-            android:background="@drawable/circle_inner_ring" />
-
-        <!-- Microphone Icon in Center -->
-        <ImageView
-            android:id="@+id/ivMic"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="center"
-            android:src="@android:drawable/ic_btn_speak_now"
-            app:tint="@color/text_primary"
-            android:contentDescription="麦克风" />
 
     </FrameLayout>
 
