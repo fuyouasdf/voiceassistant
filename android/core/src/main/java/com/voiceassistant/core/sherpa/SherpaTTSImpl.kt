@@ -11,7 +11,7 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
 
     override fun initialize(modelPath: String): Boolean {
         return try {
-            val modelDir = copyModelsFromAssets("models/tts")
+            val modelDir = copyModelsFromAssets("vits-piper-zh_CN-huayan-medium")
 
             val onnxFile = modelDir.listFiles { f -> f.name.endsWith(".onnx") }?.firstOrNull()
                 ?: throw Exception("No TTS model found")
@@ -22,7 +22,7 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
                         model = onnxFile.absolutePath,
                         lexicon = "",
                         tokens = File(modelDir, "tokens.txt").absolutePath,
-                        dataDir = modelDir.absolutePath,
+                        dataDir = File(modelDir, "phontab").absolutePath,
                         dictDir = "",
                         noiseScale = 0.667f,
                         noiseScaleW = 0.8f,

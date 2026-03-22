@@ -30,7 +30,7 @@ class VoicePipeline(
     private val config: PipelineConfig,
     private val kws: SherpaKWS,
     private val vad: SherpaVAD,
-    private val asr: SherpaASR,
+    private val asrManager: ASRManager,
     private val tts: SherpaTTS,
     private val intentRouter: IntentRouter,
     private val audioCapture: AudioCapture,
@@ -48,7 +48,6 @@ class VoicePipeline(
 
     // Track initialization status
     private var isCoreInitialized = false // KWS + VAD
-    private var isAsrLoaded = false
     private var isTtsLoaded = false
 
     // Flag to track if initialization failed
@@ -93,48 +92,46 @@ class VoicePipeline(
     private suspend fun initializeCoreComponentsSafe() {
         Timber.d("Initializing core voice pipeline components (KWS + VAD)...")
 
+        var kwsInitSuccess = false
+        var vadInitSuccess = false
+
         try {
             withContext(Dispatchers.IO) {
                 try {
                     // Initialize KWS (Keyword Spotter)
                     val kwsResult = kws.initialize(config.modelPath + "/kws")
                     Timber.d("KWS initialized: $kwsResult")
+                    kwsInitSuccess = kwsResult
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to initialize KWS - continuing without wake word")
+                }
 
+                try {
                     // Initialize VAD (Voice Activity Detector)
                     val vadResult = vad.initialize(config.modelPath + "/vad")
                     Timber.d("VAD initialized: $vadResult")
+                    vadInitSuccess = vadResult
                 } catch (e: Exception) {
-                    Timber.e(e, "Failed to initialize KWS/VAD - continuing without wake word")
-                    // Don't throw - allow app to continue without wake word
+                    Timber.e(e, "Failed to initialize VAD - continuing without VAD")
                 }
             }
 
-            isCoreInitialized = true
-            initJob = null
-            Timber.d("Core voice pipeline components initialized successfully")
+            // Only mark as initialized if at least KWS succeeded
+            // VAD failure is non-fatal, but KWS is required for wake word
+            if (kwsInitSuccess) {
+                isCoreInitialized = true
+                initJob = null
+                Timber.d("Core voice pipeline components initialized successfully")
+            } else {
+                // KWS failed - cannot use voice pipeline without wake word detection
+                initJob = null
+                initFailed = true
+                Timber.e("KWS initialization failed - voice pipeline disabled")
+            }
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize core voice pipeline components")
             initJob = null
             initFailed = true
-        }
-    }
-
-    /**
-     * Lazy load ASR when needed for recognition
-     */
-    private suspend fun ensureAsrInitialized() {
-        if (!isAsrLoaded) {
-            try {
-                Timber.d("Lazy loading ASR...")
-                withContext(Dispatchers.IO) {
-                    val asrResult = asr.initialize(config.modelPath + "/asr")
-                    Timber.d("ASR initialized: $asrResult")
-                    isAsrLoaded = true
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to initialize ASR")
-                throw e
-            }
         }
     }
 
@@ -170,7 +167,7 @@ class VoicePipeline(
             }
 
             // Initialize ASR
-            ensureAsrInitialized()
+            asrManager.ensureInitialized()
 
             // Initialize TTS
             ensureTtsInitialized()
@@ -180,6 +177,48 @@ class VoicePipeline(
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize all models")
             false
+        }
+    }
+
+    /**
+     * Initialize ASR and TTS in the background with user-friendly progress updates.
+     * Called on app startup to prepare voice recognition without blocking the UI.
+     * This is non-blocking - it reports progress through state and completes asynchronously.
+     */
+    fun initializeInBackground() {
+        // Skip if already initialized or already initializing
+        if (asrManager.isLoaded() && isTtsLoaded) {
+            return
+        }
+
+        // If core failed, don't try to initialize more
+        if (initFailed) {
+            return
+        }
+
+        Timber.d("Starting background initialization of ASR and TTS")
+        transitionTo(PipelineState.INITIALIZING, "正在准备语音识别...")
+
+        scope.launch {
+            try {
+                // Initialize ASR (the heavy one that takes time)
+                if (!asrManager.isLoaded()) {
+                    _state.value = _state.value.copy(message = "正在加载语音识别...")
+                    asrManager.ensureInitialized()
+                }
+
+                // Initialize TTS
+                if (!isTtsLoaded) {
+                    _state.value = _state.value.copy(message = "正在加载语音合成...")
+                    ensureTtsInitialized()
+                }
+
+                Timber.d("Background initialization complete")
+                transitionTo(PipelineState.IDLE, "语音识别已就绪")
+            } catch (e: Exception) {
+                Timber.e(e, "Background initialization failed")
+                transitionTo(PipelineState.IDLE, "语音识别准备就绪")
+            }
         }
     }
 
@@ -290,19 +329,14 @@ class VoicePipeline(
         audioBuffer.clear()
         silenceFrames = 0
 
-        // maxSilenceFrames and maxRecordingFrames for VAD-based recording (currently unused)
-        // val maxSilenceFrames = (config.sampleRate * config.silenceTimeoutSec).toInt() / config.frameSize
-        // val maxRecordingFrames = (config.sampleRate * config.maxRecordingSec).toInt() / config.frameSize
-
         try {
             audioCapture.start { audioChunk ->
                 try {
-                    // Skip VAD for now, just collect all audio
-                    // TODO: Re-enable VAD once it's working correctly
+                    // 收集音频用于最终识别
                     audioBuffer.add(audioChunk)
 
-                    // Simple timeout based on audio buffer size (~10 seconds max)
-                    val maxBufferSize = config.sampleRate * 10 / config.frameSize // 10 seconds
+                    // Simple timeout based on audio buffer size (~5 seconds max)
+                    val maxBufferSize = config.sampleRate * 5 / config.frameSize // 5 seconds
                     if (audioBuffer.size > maxBufferSize) {
                         val speechAudio = audioBuffer.flattenToFloatArray()
                         Timber.d("Recording stopped: max duration reached, audioSize=${speechAudio.size}")
@@ -325,19 +359,29 @@ class VoicePipeline(
         transitionTo(PipelineState.RECOGNIZING, message = "正在识别...")
 
         try {
-            // 确保 ASR 已初始化（懒加载）
-            ensureAsrInitialized()
+            // 使用流式识别，实时显示部分结果
+            var finalText = ""
 
-            // 在 Default 调度器上执行 ASR 推理
-            val text = withContext(Dispatchers.Default) {
-                asr.recognize(audioData)
-            }
+            asrManager.recognizeStreaming(audioData, object : SherpaASR.RecognitionListener {
+                override fun onPartialResult(text: String) {
+                    // 实时更新部分识别结果
+                    Timber.d("ASR partial: '$text'")
+                    _state.value = _state.value.copy(message = "识别中: $text")
+                }
 
-            Timber.d("ASR result: $text")
+                override fun onFinalResult(text: String) {
+                    finalText = text
+                    Timber.d("ASR final: '$text'")
+                }
 
-            if (text.isNotBlank()) {
-                _state.value = _state.value.copy(message = "你说: $text")
-                processIntent(text)
+                override fun onEndpointDetected() {
+                    Timber.d("ASR endpoint detected")
+                }
+            })
+
+            if (finalText.isNotBlank()) {
+                _state.value = _state.value.copy(message = "你说: $finalText")
+                processIntent(finalText)
             } else {
                 // 识别为空，返回待机
                 transitionTo(PipelineState.IDLE, message = "没听清，请再说一遍")
@@ -375,14 +419,26 @@ class VoicePipeline(
             return
         }
 
-        // Skip TTS due to memory issues - just show text response
         transitionTo(PipelineState.SPEAKING, message = text)
 
         try {
-            // Simulate TTS playing by waiting a bit
-            delay(1500)
+            // Ensure TTS is initialized
+            ensureTtsInitialized()
 
-            transitionTo(PipelineState.IDLE, message = "")
+            // Synthesize text to audio
+            val samples = tts.synthesize(text)
+
+            if (samples.isEmpty()) {
+                // TTS failed - fall back to text display
+                Timber.w("TTS synthesis returned empty, falling back to text display")
+                transitionTo(PipelineState.IDLE, message = text)
+            } else {
+                // Play synthesized audio and wait for completion
+                playAudio(samples)
+
+                transitionTo(PipelineState.IDLE, message = "")
+            }
+
             if (isCoreInitialized) {
                 startKWSListening()
             }

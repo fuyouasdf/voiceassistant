@@ -16,9 +16,9 @@ class ConfigHolder @Inject constructor() {
     var navidromeUrl: String = ""
     var navidromeUsername: String = ""
     var navidromePassword: String = ""
-    var llmBaseUrl: String = "https://api.deepseek.com"
-    var llmApiKey: String = ""
-    var llmModel: String = "deepseek-chat"
+    var llmBaseUrl: String = "http://192.168.31.244:20034"
+    var llmApiKey: String = "sk-lm-gqABXq7E:Gi6jm1G0BCyrVhhHcTEl"
+    var llmModel: String = "unsloth/Qwen3.5-35B-A3B-no"
 
     fun reload() {
         settingsRepository?.let { repo ->

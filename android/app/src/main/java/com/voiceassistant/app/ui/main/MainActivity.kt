@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity() {
     // UI Components
     private lateinit var statusDot: View
     private lateinit var tvStatus: TextView
+    private lateinit var tvProvider: TextView
     private lateinit var btnSettings: ImageButton
 
     // Conversation
@@ -106,7 +107,12 @@ class MainActivity : AppCompatActivity() {
         // Status
         statusDot = findViewById(R.id.statusDot)
         tvStatus = findViewById(R.id.tvStatus)
+        tvProvider = findViewById(R.id.tvProvider)
         btnSettings = findViewById(R.id.btnSettings)
+
+        // 显示检测到的计算单元
+        val provider = com.voiceassistant.core.sherpa.GpuDetector.getBestProvider()
+        tvProvider.text = provider.uppercase()
 
         // Conversation
         tvEmptyHint = findViewById(R.id.tvEmptyHint)
@@ -200,9 +206,8 @@ class MainActivity : AppCompatActivity() {
 
         try {
             voicePipeline.interrupt()
-            voicePipeline.start()
         } catch (e: Exception) {
-            Timber.e(e, "Failed to start voice pipeline")
+            Timber.e(e, "Failed to interrupt")
         }
     }
 
@@ -250,6 +255,12 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             try {
                 when (state) {
+                    PipelineState.INITIALIZING -> {
+                        tvInputState.text = message ?: "正在准备..."
+                        btnInterrupt.visibility = View.INVISIBLE
+                        icMic.visibility = View.INVISIBLE
+                        waveformContainer.visibility = View.INVISIBLE
+                    }
                     PipelineState.IDLE -> {
                         resetUI()
                         updateStatus(true)
@@ -294,6 +305,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Update wave color based on state
                 val waveColor = when (state) {
+                    PipelineState.INITIALIZING -> R.color.primary
                     PipelineState.IDLE -> R.color.primary
                     PipelineState.WAKEWORD_DETECTED -> R.color.success
                     PipelineState.LISTENING, PipelineState.RECORDING -> R.color.info
@@ -503,5 +515,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(intent)
         }
+
+        // Start ASR/TTS background initialization after service starts
+        voicePipeline.initializeInBackground()
     }
 }

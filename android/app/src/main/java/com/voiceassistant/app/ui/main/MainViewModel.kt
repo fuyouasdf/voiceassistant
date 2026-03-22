@@ -34,7 +34,6 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 voicePipeline.interrupt()
-                voicePipeline.start()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     stateText = "启动失败"
@@ -45,6 +44,7 @@ class MainViewModel @Inject constructor(
 
     private fun getStateText(state: PipelineState): String {
         return when (state) {
+            PipelineState.INITIALIZING -> "准备中"
             PipelineState.IDLE -> "待机中"
             PipelineState.WAKEWORD_DETECTED -> "唤醒成功"
             PipelineState.LISTENING -> "请说话"

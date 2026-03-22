@@ -44,11 +44,11 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setDLNADeviceUuid(uuid: String) = setString(ConfigKeys.DLNA_DEVICE_UUID, uuid)
     
     // LLM
-    override suspend fun getLLMBaseUrl(): String = getString(ConfigKeys.LLM_BASE_URL, "https://api.deepseek.com")
+    override suspend fun getLLMBaseUrl(): String = getString(ConfigKeys.LLM_BASE_URL, "http://192.168.31.244:20034")
     override suspend fun setLLMBaseUrl(url: String) = setString(ConfigKeys.LLM_BASE_URL, url)
-    override suspend fun getLLMApiKey(): String = getString(ConfigKeys.LLM_API_KEY, "")
+    override suspend fun getLLMApiKey(): String = getString(ConfigKeys.LLM_API_KEY, "sk-lm-gqABXq7E:Gi6jm1G0BCyrVhhHcTEl")
     override suspend fun setLLMApiKey(key: String) = setString(ConfigKeys.LLM_API_KEY, key)
-    override suspend fun getLLMModel(): String = getString(ConfigKeys.LLM_MODEL, "deepseek-chat")
+    override suspend fun getLLMModel(): String = getString(ConfigKeys.LLM_MODEL, "unsloth/Qwen3.5-35B-A3B-no")
     override suspend fun setLLMModel(model: String) = setString(ConfigKeys.LLM_MODEL, model)
 
     // Voice Settings

@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.room.Room
 import com.voiceassistant.core.audio.AudioCapture
 import com.voiceassistant.core.audio.AudioPlayer
+import com.voiceassistant.core.dlna.DLNAManager
+import com.voiceassistant.core.dlna.DLNAPlayer
 import com.voiceassistant.core.intent.IntentRouter
+import com.voiceassistant.core.pipeline.ASRManager
 import com.voiceassistant.core.pipeline.PipelineConfig
 import com.voiceassistant.core.pipeline.VoicePipeline
 import com.voiceassistant.core.sherpa.SherpaASR
@@ -25,6 +28,7 @@ import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.data.repository.SettingsRepositoryImpl
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.MusicRepository
+import com.voiceassistant.domain.repository.PlayerRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -110,6 +114,9 @@ object AppModule {
             .addConverterFactory(GsonConverterFactory.create())
             .client(
                 okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                     .addInterceptor { chain ->
                         val original = chain.request()
                         // Get config from config holder
@@ -177,6 +184,24 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideDLNAManager(@ApplicationContext context: Context): DLNAManager {
+        return DLNAManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideDLNAPlayer(dlnaManager: DLNAManager): DLNAPlayer {
+        return DLNAPlayer(dlnaManager)
+    }
+
+    @Provides
+    @Singleton
+    fun providePlayerRepository(dlnaPlayer: DLNAPlayer): PlayerRepository {
+        return dlnaPlayer
+    }
+
+    @Provides
+    @Singleton
     fun provideSherpaKWS(@ApplicationContext context: Context): SherpaKWS {
         return SherpaKWSImpl(context)
     }
@@ -195,6 +220,15 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideASRManager(
+        sherpaASR: SherpaASR
+    ): ASRManager {
+        // ASR 模型: sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30
+        return ASRManager(sherpaASR, "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30")
+    }
+
+    @Provides
+    @Singleton
     fun provideSherpaTTS(@ApplicationContext context: Context): SherpaTTS {
         return SherpaTTSImpl(context)
     }
@@ -203,9 +237,10 @@ object AppModule {
     @Singleton
     fun provideIntentRouter(
         musicRepository: MusicRepository?,
-        llmRepository: LLMRepository?
+        llmRepository: LLMRepository?,
+        playerRepository: PlayerRepository?
     ): IntentRouter {
-        return IntentRouter(musicRepository, llmRepository)
+        return IntentRouter(musicRepository, llmRepository, playerRepository)
     }
 
     @Provides
@@ -213,7 +248,7 @@ object AppModule {
     fun provideVoicePipeline(
         kws: SherpaKWS,
         vad: SherpaVAD,
-        asr: SherpaASR,
+        asrManager: ASRManager,
         tts: SherpaTTS,
         intentRouter: IntentRouter,
         audioCapture: AudioCapture,
@@ -223,7 +258,7 @@ object AppModule {
             config = PipelineConfig(),
             kws = kws,
             vad = vad,
-            asr = asr,
+            asrManager = asrManager,
             tts = tts,
             intentRouter = intentRouter,
             audioCapture = audioCapture,

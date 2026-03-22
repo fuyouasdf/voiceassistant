@@ -6,11 +6,24 @@ package com.voiceassistant.core.sherpa
 interface SherpaASR {
 
     /**
+     * Callback for streaming recognition
+     */
+    interface RecognitionListener {
+        /** Called with partial recognition result during speaking */
+        fun onPartialResult(text: String)
+        /** Called with final result after endpoint detected */
+        fun onFinalResult(text: String)
+        /** Called when speech endpoint is detected (user stopped speaking) */
+        fun onEndpointDetected()
+    }
+
+    /**
      * Initialize the ASR engine with model
      * @param modelPath Path to the model directory
+     * @param provider Compute provider: "cpu", "gpu", or "npu"
      * @return true if initialization successful
      */
-    fun initialize(modelPath: String): Boolean
+    fun initialize(modelPath: String, provider: String = "cpu"): Boolean
 
     /**
      * Recognize speech from audio
@@ -18,6 +31,14 @@ interface SherpaASR {
      * @return Recognized text
      */
     suspend fun recognize(audio: FloatArray): String
+
+    /**
+     * Streaming recognition with real-time callbacks
+     * Processes audio incrementally and calls listener with partial results
+     * @param audio Audio samples (16kHz, float)
+     * @param listener Callback for recognition events
+     */
+    suspend fun recognizeStreaming(audio: FloatArray, listener: RecognitionListener)
 
     /**
      * Reset the recognizer state

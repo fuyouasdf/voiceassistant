@@ -6,38 +6,41 @@ import timber.log.Timber
 
 /**
  * Sherpa-ONNX ASR 实现
- * 使用 streaming zipformer transducer 模型
+ * 使用 streaming zipformer2 transducer 模型 (sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30)
  */
 class SherpaASRImpl(private val context: Context) : SherpaASR {
 
     private var recognizer: OnlineRecognizer? = null
 
-    override fun initialize(modelPath: String): Boolean {
+    override fun initialize(modelPath: String, provider: String): Boolean {
         return try {
-            // 使用 sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20 模型
-            // 该模型支持中英文双语识别
-            val modelDir = "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
+            // modelPath 格式: "models/asr"
+            // 模型目录名从 modelPath 末尾提取
+            val modelDir = modelPath.substringAfterLast("/")
 
-            Timber.d("Initializing ASR with model dir: $modelDir")
+            Timber.d("Initializing ASR with model path: $modelPath, dir: $modelDir, provider: $provider")
 
             val config = OnlineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80),
                 modelConfig = OnlineModelConfig(
                     transducer = OnlineTransducerModelConfig(
-                        encoder = "$modelDir/encoder-epoch-99-avg-1.int8.onnx",
-                        decoder = "$modelDir/decoder-epoch-99-avg-1.onnx",
-                        joiner = "$modelDir/joiner-epoch-99-avg-1.onnx"
+                        encoder = "$modelDir/encoder.int8.onnx",
+                        decoder = "$modelDir/decoder.onnx",
+                        joiner = "$modelDir/joiner.int8.onnx"
                     ),
                     tokens = "$modelDir/tokens.txt",
-                    numThreads = 2,
+                    numThreads = 4,
                     debug = false,
-                    provider = "cpu",
-                    modelType = "zipformer"  // 必须指定模型类型
+                    provider = provider,
+                    modelType = "zipformer2"  // 新模型使用 zipformer2
                 ),
                 endpointConfig = EndpointConfig(
-                    rule1 = EndpointRule(false, 2.4f, 0.0f),
-                    rule2 = EndpointRule(true, 1.4f, 0.0f),
-                    rule3 = EndpointRule(false, 0.0f, 20.0f)
+                    // 增大静音阈值，减少误触发
+                    // rule1: 非语音连续超时（静音多久认为一句话结束）
+                    // rule2: 语音段落后的静音超时
+                    rule1 = EndpointRule(false, 4.0f, 0.0f),
+                    rule2 = EndpointRule(true, 2.5f, 0.0f),
+                    rule3 = EndpointRule(false, 0.0f, 30.0f)
                 ),
                 enableEndpoint = true,
                 decodingMethod = "greedy_search"
@@ -48,7 +51,7 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
                 config = config
             )
 
-            Timber.d("ASR initialized successfully with model: $modelDir")
+            Timber.d("ASR initialized successfully with model: $modelDir, provider: $provider")
             true
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize ASR: ${e.message}")
@@ -101,6 +104,66 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
         } catch (e: Exception) {
             Timber.e(e, "ASR recognition error")
             ""
+        }
+    }
+
+    override suspend fun recognizeStreaming(audio: FloatArray, listener: SherpaASR.RecognitionListener) {
+        val r = recognizer ?: return
+
+        if (audio.isEmpty()) {
+            Timber.w("ASR received empty audio for streaming")
+            return
+        }
+
+        Timber.d("ASR streaming recognition: ${audio.size} samples")
+
+        return try {
+            val stream = r.createStream()
+            val interval = 0.1  // 100ms per chunk
+            val bufferSize = (interval * 16000).toInt()
+            var offset = 0
+            var isEndpointReached = false
+            var finalText = ""
+
+            while (offset < audio.size && !isEndpointReached) {
+                val end = minOf(offset + bufferSize, audio.size)
+                val chunk = audio.copyOfRange(offset, end)
+
+                stream.acceptWaveform(chunk, sampleRate = 16000)
+
+                while (r.isReady(stream)) {
+                    r.decode(stream)
+                }
+
+                // Get partial result
+                val partialResult = r.getResult(stream)
+                val partialText = partialResult.text ?: ""
+                if (partialText.isNotEmpty()) {
+                    listener.onPartialResult(partialText)
+                }
+
+                // Check for endpoint
+                isEndpointReached = r.isEndpoint(stream)
+                if (isEndpointReached) {
+                    // Add tail padding for better recognition
+                    val tailPaddings = FloatArray((0.8 * 16000).toInt())
+                    stream.acceptWaveform(tailPaddings, sampleRate = 16000)
+                    while (r.isReady(stream)) {
+                        r.decode(stream)
+                    }
+
+                    finalText = r.getResult(stream).text ?: ""
+                    listener.onFinalResult(finalText)
+                    listener.onEndpointDetected()
+                    r.reset(stream)
+                }
+
+                offset = end
+            }
+
+            stream.release()
+        } catch (e: Exception) {
+            Timber.e(e, "ASR streaming recognition error")
         }
     }
 

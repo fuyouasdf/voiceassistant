@@ -36,6 +36,9 @@ dependencies {
     // Kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
+    // Timber
+    implementation("com.jakewharton.timber:timber:5.0.1")
+
     // Hilt
     implementation("com.google.dagger:hilt-android:2.50")
     kapt("com.google.dagger:hilt-compiler:2.50")

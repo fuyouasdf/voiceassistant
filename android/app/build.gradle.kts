@@ -103,13 +103,13 @@ val downloadModels by tasks.registering {
     group = "voice assistant"
     description = "下载语音模型文件到 assets 目录"
 
-    // 模型版本（与 sherpa-onnx v1.12.32 对应）
+    // 模型版本
     val kwsModelVersion = "2024-01-01"
-    val asrModelVersion = "2023-02-20"
+    val asrModelVersion = "2025-06-30"  // sherpa-onnx-streaming-zipformer-zh-int8
 
     // HuggingFace 下载地址
     val kwsUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-$kwsModelVersion/resolve/main/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-$kwsModelVersion.zip"
-    val asrUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-$asrModelVersion/resolve/main/sherpa-onnx-streaming-zipformer-bilingual-zh-en-$asrModelVersion.zip"
+    val asrUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion/resolve/main/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion.zip"
     val vadUrl = "https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx"
     val ttsUrl = "https://huggingface.co/csukuangfj/vits-piper-zh_CN-huayan-medium/resolve/main/vits-piper-zh_CN-huayan-medium.tar.gz"
 
@@ -118,7 +118,7 @@ val downloadModels by tasks.registering {
 
     doLast {
         val kwsDir = file("${assetsDir}/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-$kwsModelVersion")
-        val asrDir = file("${assetsDir}/sherpa-onnx-streaming-zipformer-bilingual-zh-en-$asrModelVersion")
+        val asrDir = file("${assetsDir}/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion")
         val vadFile = file("${assetsDir}/silero_vad.onnx")
         val ttsDir = file("${assetsDir}/vits-piper-zh_CN-huayan-medium")
 
@@ -132,9 +132,9 @@ val downloadModels by tasks.registering {
             "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
             "tokens.txt", "keywords.txt")
         val asrComplete = isModelComplete(asrDir,
-            "encoder-epoch-99-avg-1.int8.onnx",
-            "decoder-epoch-99-avg-1.onnx",
-            "joiner-epoch-99-avg-1.onnx",
+            "encoder.int8.onnx",
+            "decoder.onnx",
+            "joiner.int8.onnx",
             "tokens.txt")
         val vadComplete = vadFile.exists() && vadFile.length() > 0
         val ttsComplete = ttsDir.isDirectory && file("$ttsDir/zh_CN-huayan-medium.onnx").exists()
@@ -196,11 +196,26 @@ val downloadModels by tasks.registering {
             println("[KWS] 已存在，跳过")
         }
 
-        // 2. ASR 模型
+        // 2. ASR 模型 (单独下载每个文件)
         if (!asrComplete) {
-            val asrZip = file("${tempDir}/asr.zip")
-            download(asrUrl, asrZip, "ASR")
-            extractZip(asrZip, asrDir, "sherpa-onnx-streaming")
+            asrDir.mkdirs()
+            val asrFiles = listOf(
+                "encoder.int8.onnx" to "encoder.int8.onnx",
+                "decoder.onnx" to "decoder.onnx",
+                "joiner.int8.onnx" to "joiner.int8.onnx",
+                "tokens.txt" to "tokens.txt"
+            )
+            asrFiles.forEach { (fileName, urlSuffix) ->
+                val fileUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion/resolve/main/$urlSuffix"
+                val destFile = file("${asrDir}/$fileName")
+                if (!destFile.exists() || destFile.length() == 0L) {
+                    println("[ASR] 下载: $fileName")
+                    exec { commandLine("curl", "-L", "-o", destFile.absolutePath, fileUrl) }
+                    println("[ASR] 完成: $fileName (${destFile.length() / 1024 / 1024} MB)")
+                } else {
+                    println("[ASR] 已存在: $fileName")
+                }
+            }
         } else {
             println("[ASR] 已存在，跳过")
         }

@@ -48,6 +48,15 @@
                     android:text="@string/status_online"
                     android:textColor="@color/text_tertiary"
                     android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tvProvider"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="CPU"
+                    android:textColor="@color/text_tertiary"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <ImageButton

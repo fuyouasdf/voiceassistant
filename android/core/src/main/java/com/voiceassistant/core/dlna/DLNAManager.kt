@@ -25,8 +25,15 @@ class DLNAManager(private val context: Context) {
     private var discoveryJob: Job? = null
     private val foundDevices = CopyOnWriteArrayList<DLNADevice>()
 
+    // Preselected device (e.g., restored from saved settings on startup)
+    private val _preselectedDevice = MutableStateFlow<DLNADevice?>(null)
+    val preselectedDevice: StateFlow<DLNADevice?> = _preselectedDevice.asStateFlow()
+
     // Callback for device discovery
     var onDeviceFound: ((DLNADevice) -> Unit)? = null
+
+    // Current/restored device (used as the active DLNA device)
+    private var _currentDevice: DLNADevice? = null
 
     // Device types to search for
     private val searchTargets = listOf(
@@ -297,8 +304,26 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
     fun stopDiscovery() {
         discoveryJob?.cancel()
         _isScanning.value = false
+        _devices.value = emptyList()
         Timber.d("DLNA discovery stopped")
     }
+
+    /**
+     * Restore a previously saved device (e.g., from settings).
+     * This device will be used first before starting discovery.
+     */
+    fun restoreDevice(name: String, ipAddress: String, uuid: String) {
+        val device = DLNADevice(
+            uuid = uuid,
+            name = name,
+            ipAddress = ipAddress
+        )
+        _preselectedDevice.value = device
+        _currentDevice = device
+        Timber.d("DLNA device restored: $name ($uuid) at $ipAddress")
+    }
+
+    fun getCurrentDevice(): DLNADevice? = _currentDevice
 
     fun getDeviceById(uuid: String): DLNADevice? {
         return _devices.value.find { it.uuid == uuid }

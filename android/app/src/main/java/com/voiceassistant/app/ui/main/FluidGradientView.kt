@@ -158,6 +158,7 @@ class FluidGradientView @JvmOverloads constructor(
         val colors = stateColors[currentState] ?: stateColors[PipelineState.IDLE]!!
 
         when (currentState) {
+            PipelineState.INITIALIZING -> drawIdleState(canvas, colors)
             PipelineState.IDLE -> drawIdleState(canvas, colors)
             PipelineState.WAKEWORD_DETECTED -> drawListeningState(canvas, colors) // Use listening visual for wake word
             PipelineState.LISTENING -> drawListeningState(canvas, colors)
@@ -461,6 +462,13 @@ class FluidGradientView @JvmOverloads constructor(
 
     private fun updateAnimationsForState() {
         when (currentState) {
+            PipelineState.INITIALIZING -> {
+                // Same as IDLE while initializing
+                startBreathAnimation()
+                startWaveAnimation()
+                pulseAnimator?.cancel()
+                pulseAlpha = 0f
+            }
             PipelineState.IDLE -> {
                 startBreathAnimation()
                 startWaveAnimation()

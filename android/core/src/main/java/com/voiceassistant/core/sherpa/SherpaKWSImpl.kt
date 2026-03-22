@@ -49,8 +49,14 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
     }
 
     override fun process(audio: FloatArray): Boolean {
-        val s = stream ?: return false
-        val k = kws ?: return false
+        val s = stream
+        val k = kws
+
+        // Defensive null checks - should not happen but prevents native crash
+        if (s == null || k == null) {
+            Timber.w("KWS process called but stream or kws is null")
+            return false
+        }
 
         return try {
             s.acceptWaveform(audio, 16000)

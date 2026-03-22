@@ -3,6 +3,7 @@ package com.voiceassistant.core.intent
 import com.voiceassistant.domain.model.Song
 import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.LLMRepository
+import com.voiceassistant.domain.repository.PlayerRepository
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -33,11 +34,12 @@ data class Intent(
  * Routes voice commands to appropriate handlers
  * @param musicRepository For music playback
  * @param llmRepository For chat functionality
- * @param dlnaController For device control (optional)
+ * @param playerRepository For DLNA playback
  */
 class IntentRouter @Inject constructor(
     private val musicRepository: MusicRepository?,
-    private val llmRepository: LLMRepository?
+    private val llmRepository: LLMRepository?,
+    private val playerRepository: PlayerRepository?
 ) {
 
     /**
@@ -161,6 +163,8 @@ class IntentRouter @Inject constructor(
             return "音乐服务未配置"
         }
 
+        val player = playerRepository
+
         return when (intent.action) {
             "play" -> {
                 val query = intent.query ?: ""
@@ -176,18 +180,44 @@ class IntentRouter @Inject constructor(
                         } else {
                             val song = songs.first()
                             val streamUrl = musicRepo.getStreamUrl(song.id)
-                            // Store stream URL for playback (would need DLNA integration)
-                            "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+                            if (player != null) {
+                                val playResult = player.play(streamUrl, song.title, song.artist ?: "未知艺术家")
+                                if (playResult.isSuccess) {
+                                    "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+                                } else {
+                                    val error = playResult.exceptionOrNull()?.message ?: "播放失败"
+                                    Timber.e("Play failed: $error")
+                                    "播放失败：$error"
+                                }
+                            } else {
+                                // No player available, just report success
+                                "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+                            }
                         }
                     },
                     onFailure = { "搜索歌曲失败，请稍后重试" }
                 )
             }
-            "pause" -> "已暂停播放"
-            "resume" -> "继续播放"
+            "pause" -> {
+                if (player != null) {
+                    val result = player.pause()
+                    if (result.isSuccess) "已暂停播放" else "暂停失败"
+                } else "已暂停播放"
+            }
+            "resume" -> {
+                if (player != null) {
+                    val result = player.resume()
+                    if (result.isSuccess) "继续播放" else "继续播放失败"
+                } else "继续播放"
+            }
             "next" -> "正在播放下一首"
             "previous" -> "正在播放上一首"
-            "stop" -> "已停止播放"
+            "stop" -> {
+                if (player != null) {
+                    val result = player.stop()
+                    if (result.isSuccess) "已停止播放" else "停止失败"
+                } else "已停止播放"
+            }
             else -> "音乐操作"
         }
     }
@@ -224,9 +254,10 @@ class IntentRouter @Inject constructor(
         }
 
         // Use LLM to handle the query
-        return llm.chat(intent.query ?: "").getOrElse {
-            "查询失败，请稍后重试"
-        }
+        return llm.chat(intent.query ?: "").fold(
+            onSuccess = { it },
+            onFailure = { "查询失败，请稍后重试" }
+        )
     }
 
     private suspend fun handleChat(intent: Intent): String {
@@ -235,8 +266,9 @@ class IntentRouter @Inject constructor(
             return "需要联网才能聊天，请配置 LLM API"
         }
 
-        return llm.chat(intent.query ?: "").getOrElse {
-            "抱歉，聊天服务暂时不可用"
-        }
+        return llm.chat(intent.query ?: "").fold(
+            onSuccess = { it },
+            onFailure = { "抱歉，聊天服务暂时不可用" }
+        )
     }
 }

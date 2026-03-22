@@ -4,6 +4,9 @@ package com.voiceassistant.core.pipeline
  * Voice pipeline states
  */
 enum class PipelineState {
+    /** Initializing models in background */
+    INITIALIZING,
+
     /** Idle, waiting for wake word */
     IDLE,
 

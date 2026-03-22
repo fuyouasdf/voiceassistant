@@ -59,6 +59,7 @@ class SettingsActivity : AppCompatActivity() {
     private var selectedDevice: DLNADevice? = null
     private var isDialogShowing = false
     private var isLoading = false
+    private var isScanStopped = false  // Flag to prevent dialog re-show after manual dismiss
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,7 +105,8 @@ class SettingsActivity : AppCompatActivity() {
         // Observe DLNA devices
         lifecycleScope.launch {
             dlnaManager?.devices?.collectLatest { devices ->
-                if (devices.isNotEmpty() && !isDialogShowing) {
+                // Only show dialog if scan hasn't been stopped by user dismissal
+                if (devices.isNotEmpty() && !isDialogShowing && !isScanStopped) {
                     // Show device selection dialog immediately when devices found
                     showDeviceSelectionDialog(devices)
                 }
@@ -220,6 +222,7 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "DLNA 初始化中，请稍后再试", Toast.LENGTH_SHORT).show()
             return
         }
+        isScanStopped = false  // Allow dialog to show when devices are found
         lifecycleScope.launch {
             manager.startDiscovery()
             // Show toast after a short delay to indicate scan started
@@ -233,6 +236,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         isDialogShowing = true
+        isScanStopped = false  // Reset flag when dialog is shown
 
         val deviceNames = devices.map { it.name }.toTypedArray()
 
@@ -242,12 +246,18 @@ class SettingsActivity : AppCompatActivity() {
                 val device = devices[which]
                 selectDevice(device)
                 isDialogShowing = false
+                isScanStopped = false  // Reset so next scan can show dialog
+                dlnaManager?.stopDiscovery()
             }
             .setNegativeButton(android.R.string.cancel) { _, _ ->
                 isDialogShowing = false
+                isScanStopped = true  // Prevent dialog from re-showing
+                dlnaManager?.stopDiscovery()
             }
             .setOnDismissListener {
                 isDialogShowing = false
+                isScanStopped = true  // Prevent dialog from re-showing
+                dlnaManager?.stopDiscovery()
             }
             .show()
     }

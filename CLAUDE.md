@@ -48,7 +48,6 @@ voice-assistant/
 ## 重要规则
 planmode只设计不修改
 ### 代码修改
-- 所有文件路径使用 **绝对 Windows 路径**（如 `C:\Users\qweqwe\...`）
 - 语音处理在前台服务中运行
 - 音频捕获：16kHz, mono, PCM_FLOAT
 
