@@ -9,10 +9,13 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
 
     private var kws: KeywordSpotter? = null
     private var stream: OnlineStream? = null
+    private var currentModelDir: File? = null
 
     override fun initialize(modelPath: String): Boolean {
         return try {
-            val modelDir = copyModelsFromAssets("models/kws")
+            // KWS模型目录: sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01
+            val modelDir = copyKWSModelsFromAssets()
+            currentModelDir = modelDir
 
             val config = KeywordSpotterConfig(
                 featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80),
@@ -30,14 +33,14 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
                 maxActivePaths = 4,
                 keywordsFile = File(modelDir, "keywords.txt").absolutePath,
                 keywordsScore = 1.0f,
-                keywordsThreshold = 0.7f,
+                keywordsThreshold = 0.5f,
                 numTrailingBlanks = 0
             )
 
             kws = KeywordSpotter(assetManager = null, config = config)
             stream = kws?.createStream("")
 
-            Timber.d("KWS initialized with model: $modelPath")
+            Timber.d("KWS initialized with model: ${modelDir.absolutePath}")
             true
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize KWS")
@@ -51,10 +54,16 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
 
         return try {
             s.acceptWaveform(audio, 16000)
-            k.decode(s)
+
+            // Process all ready audio (official pattern)
+            while (k.isReady(s)) {
+                k.decode(s)
+            }
 
             val result = k.getResult(s)
-            if (result != null) {
+            // Check if keyword is detected (non-empty)
+            val detected = result.keyword.isNotEmpty()
+            if (detected) {
                 Timber.d("Wake word detected: ${result.keyword}")
                 k.reset(s)
                 true
@@ -72,41 +81,60 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
     }
 
     override fun release() {
-        stream = null
+        try {
+            stream = null
+            kws?.release()
+        } catch (e: Exception) {
+            Timber.e(e, "Error releasing KWS resources")
+        }
         kws = null
+        currentModelDir = null
     }
 
-    private fun copyModelsFromAssets(assetPath: String): File {
-        val destDir = File(context.filesDir, assetPath)
+    /**
+     * Copy KWS model files from assets to internal storage
+     * The model is located at: sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01/
+     */
+    private fun copyKWSModelsFromAssets(): File {
+        val assetModelDir = "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+        val destDir = File(context.filesDir, "models/kws")
+
+        // If already copied, return existing directory
         if (destDir.exists() && destDir.listFiles()?.isNotEmpty() == true) {
+            Timber.d("KWS models already copied to: ${destDir.absolutePath}")
             return destDir
         }
+
         destDir.mkdirs()
+        Timber.d("Copying KWS models from assets to: ${destDir.absolutePath}")
+
+        // List of required files
+        val requiredFiles = listOf(
+            "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "tokens.txt",
+            "keywords.txt"
+        )
 
         try {
-            context.assets.list(assetPath)?.forEach { fileName ->
-                val fullAssetPath = "$assetPath/$fileName"
-                val isDir = try {
-                    context.assets.list(fullAssetPath)?.isNotEmpty() == true
-                } catch (e: Exception) {
-                    false
-                }
+            requiredFiles.forEach { fileName ->
+                val assetPath = "$assetModelDir/$fileName"
+                val destFile = File(destDir, fileName)
 
-                if (isDir) {
-                    copyModelsFromAssets(fullAssetPath)
-                } else {
-                    val destFile = File(destDir, fileName)
-                    if (!destFile.exists()) {
-                        context.assets.open(fullAssetPath).use { input ->
-                            destFile.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
+                if (!destFile.exists()) {
+                    context.assets.open(assetPath).use { input ->
+                        destFile.outputStream().use { output ->
+                            input.copyTo(output)
                         }
                     }
+                    Timber.d("Copied: $fileName")
                 }
             }
+            Timber.i("KWS models copied successfully")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to copy models from assets")
+            Timber.e(e, "Failed to copy KWS models from assets")
+            throw e
         }
 
         return destDir

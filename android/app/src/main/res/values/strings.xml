@@ -45,6 +45,7 @@
     <string name="settings_category_music">音乐服务</string>
     <string name="settings_category_ai">AI 服务</string>
     <string name="settings_category_voice">语音设置</string>
+    <string name="settings_category_dlna">DLNA 投屏</string>
 
     <string name="settings_navidrome_url">Navidrome 地址</string>
     <string name="settings_navidrome_url_hint">http://192.168.1.100:4533</string>
@@ -62,6 +63,15 @@
 
     <string name="settings_wake_sensitivity">唤醒灵敏度</string>
     <string name="settings_tts_speed">TTS 语速</string>
+
+    <string name="settings_dlna_device_name">已选设备</string>
+    <string name="settings_dlna_device_ip">设备地址</string>
+    <string name="settings_dlna_scan">扫描设备</string>
+    <string name="settings_dlna_scanning">正在扫描...</string>
+    <string name="settings_dlna_no_device">未选择设备</string>
+    <string name="settings_dlna_select_device">选择投屏设备</string>
+    <string name="settings_dlna_no_devices_found">未发现设备</string>
+    <string name="settings_dlna_scan_complete">扫描完成，发现 %d 个设备</string>
 
     <string name="settings_save">保存</string>
     <string name="settings_saved">设置已保存</string>

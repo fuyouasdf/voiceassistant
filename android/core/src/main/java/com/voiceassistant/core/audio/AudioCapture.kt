@@ -15,59 +15,109 @@ import timber.log.Timber
  */
 class AudioCapture(
     private val sampleRate: Int = 16000,
-    private val bufferSize: Int = 320
+    private val bufferSize: Int = 512
 ) {
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
-    
+
+    // 同步锁，防止并发启动/停止
+    private val lock = Any()
+
+    // 当前录音状态
+    @Volatile
+    var isRecording = false
+        private set
+
     fun start(onAudioChunk: (FloatArray) -> Unit) {
-        stop() // Stop any existing recording
+        synchronized(lock) {
+            // 如果已经在录音，先停止
+            if (isRecording) {
+                Timber.d("AudioCapture already recording, stopping first")
+                stopInternal()
+            }
 
-        val minBuffer = AudioRecord.getMinBufferSize(
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
+            val minBuffer = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
 
-        audioRecord = createAudioRecord(minBuffer)
+            audioRecord = createAudioRecord(minBuffer)
 
-        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-            Timber.e("AudioRecord initialization failed")
-            return
-        }
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                Timber.e("AudioRecord initialization failed")
+                return
+            }
 
-        audioRecord?.startRecording()
+            try {
+                audioRecord?.startRecording()
+                isRecording = true
+                Timber.d("AudioCapture started recording")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start AudioRecord recording")
+                audioRecord?.release()
+                audioRecord = null
+                return
+            }
 
-        recordingJob = scope.launch {
-            val buffer = ShortArray(bufferSize)
+            recordingJob = scope.launch {
+                val buffer = ShortArray(bufferSize)
 
-            while (isActive) {
-                val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
+                while (isActive && isRecording) {
+                    try {
+                        val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
 
-                if (read > 0) {
-                    // Convert ShortArray to FloatArray
-                    val floatBuffer = FloatArray(read) { i ->
-                        buffer[i] / 32768.0f
+                        if (read > 0) {
+                            // Convert ShortArray to FloatArray
+                            val floatBuffer = FloatArray(read) { i ->
+                                buffer[i] / 32768.0f
+                            }
+                            onAudioChunk(floatBuffer)
+                        } else if (read < 0) {
+                            Timber.w("AudioRecord read error: $read")
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Error reading audio")
+                        break
                     }
-                    onAudioChunk(floatBuffer)
                 }
             }
         }
     }
-    
+
     fun stop() {
+        synchronized(lock) {
+            stopInternal()
+        }
+    }
+
+    private fun stopInternal() {
+        if (!isRecording && audioRecord == null) {
+            Timber.d("AudioCapture already stopped")
+            return
+        }
+
+        isRecording = false
         recordingJob?.cancel()
         recordingJob = null
 
         try {
-            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
+            // 只有在 recording 状态下才调用 stop
+            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 audioRecord?.stop()
+                Timber.d("AudioCapture stopped")
             }
         } catch (e: IllegalStateException) {
-            Timber.w(e, "AudioRecord already stopped")
+            Timber.w("AudioRecord already stopped: ${e.message}")
         } finally {
-            audioRecord?.release()
+            try {
+                audioRecord?.release()
+                Timber.d("AudioCapture released")
+            } catch (e: Exception) {
+                Timber.w("Error releasing AudioRecord: ${e.message}")
+            }
             audioRecord = null
         }
     }

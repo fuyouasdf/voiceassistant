@@ -38,6 +38,10 @@ class SettingsRepositoryImpl @Inject constructor(
     // DLNA
     override suspend fun getDLNADeviceIp(): String = getString(ConfigKeys.DLNA_DEVICE_IP, "")
     override suspend fun setDLNADeviceIp(ip: String) = setString(ConfigKeys.DLNA_DEVICE_IP, ip)
+    override suspend fun getDLNADeviceName(): String = getString(ConfigKeys.DLNA_DEVICE_NAME, "")
+    override suspend fun setDLNADeviceName(name: String) = setString(ConfigKeys.DLNA_DEVICE_NAME, name)
+    override suspend fun getDLNADeviceUuid(): String = getString(ConfigKeys.DLNA_DEVICE_UUID, "")
+    override suspend fun setDLNADeviceUuid(uuid: String) = setString(ConfigKeys.DLNA_DEVICE_UUID, uuid)
     
     // LLM
     override suspend fun getLLMBaseUrl(): String = getString(ConfigKeys.LLM_BASE_URL, "https://api.deepseek.com")
@@ -71,6 +75,10 @@ interface SettingsRepository {
     // DLNA
     suspend fun getDLNADeviceIp(): String
     suspend fun setDLNADeviceIp(ip: String)
+    suspend fun getDLNADeviceName(): String
+    suspend fun setDLNADeviceName(name: String)
+    suspend fun getDLNADeviceUuid(): String
+    suspend fun setDLNADeviceUuid(uuid: String)
     
     // LLM
     suspend fun getLLMBaseUrl(): String

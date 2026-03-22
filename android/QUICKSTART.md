@@ -12,6 +12,7 @@
 本项目使用 Sherpa-ONNX 作为语音识别/合成引擎，需要下载 AAR 文件：
 
 **下载页面**: https://github.com/k2-fsa/sherpa-onnx/releases
+**当前版本**: v1.12.32 (2026-03-22)
 
 **步骤**：
 1. 打开上方链接，找到最新版本的 Android AAR 文件

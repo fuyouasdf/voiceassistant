@@ -62,32 +62,82 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideNavidromeApi(): NavidromeApi {
-        // URL is read from settings at runtime; default placeholder
+    fun provideConfigHolder(): ConfigHolder {
+        return ConfigHolder()
+    }
+
+    @Provides
+    @Singleton
+    fun provideNavidromeApi(configHolder: ConfigHolder): NavidromeApi {
+        // Use dynamic URL from settings via interceptor
         return Retrofit.Builder()
-            .baseUrl("http://192.168.1.100:4533/")
+            .baseUrl("http://localhost/") // Placeholder, actual URL set in interceptor
             .addConverterFactory(GsonConverterFactory.create())
+            .client(
+                okhttp3.OkHttpClient.Builder()
+                    .addInterceptor { chain ->
+                        val original = chain.request()
+                        // Get base URL from config holder
+                        val baseUrl = configHolder.navidromeUrl.ifEmpty { "http://192.168.31.206:4533" }
+                        val host = baseUrl.removePrefix("http://").removePrefix("https://")
+                            .substringBefore(":").substringBefore("/")
+
+                        val portStr = baseUrl.substringAfterLast(":")
+                        val port = if (portStr.toIntOrNull() != null) portStr.toInt() else if (baseUrl.startsWith("https")) 443 else 80
+
+                        val newUrl = original.url.newBuilder()
+                            .scheme(if (baseUrl.startsWith("https")) "https" else "http")
+                            .host(host)
+                            .port(port)
+                            .build()
+                        val request = original.newBuilder()
+                            .url(newUrl)
+                            .build()
+                        chain.proceed(request)
+                    }
+                    .build()
+            )
             .build()
             .create(NavidromeApi::class.java)
     }
 
     @Provides
     @Singleton
-    fun provideLLMApi(): LLMApi {
-        // Note: API base URL and key are read from SettingsRepository at runtime
-        // Default values are used here; settings take effect after app restart
+    fun provideLLMApi(configHolder: ConfigHolder): LLMApi {
+        // Use dynamic URL and API key from settings
         return Retrofit.Builder()
-            .baseUrl("https://api.deepseek.com")
+            .baseUrl("https://localhost/") // Placeholder, actual URL set in interceptor
             .addConverterFactory(GsonConverterFactory.create())
             .client(
                 okhttp3.OkHttpClient.Builder()
                     .addInterceptor { chain ->
                         val original = chain.request()
-                        val request = original.newBuilder()
-                            .header("Content-Type", "application/json")
-                            .method(original.method, original.body)
+                        // Get config from config holder
+                        val baseUrl = configHolder.llmBaseUrl.ifEmpty { "https://api.deepseek.com" }
+                        val apiKey = configHolder.llmApiKey
+
+                        // Rebuild URL
+                        val host = baseUrl.removePrefix("http://").removePrefix("https://")
+                            .substringBefore("/").substringBefore(":")
+
+                        val portStr = baseUrl.substringAfterLast(":")
+                        val port = if (portStr.toIntOrNull() != null) portStr.toInt() else if (baseUrl.startsWith("https")) 443 else 80
+
+                        val newUrl = original.url.newBuilder()
+                            .scheme(if (baseUrl.startsWith("https")) "https" else "http")
+                            .host(host)
+                            .port(port)
                             .build()
-                        chain.proceed(request)
+
+                        val requestBuilder = original.newBuilder()
+                            .url(newUrl)
+                            .header("Content-Type", "application/json")
+
+                        if (apiKey.isNotEmpty()) {
+                            requestBuilder.header("Authorization", "Bearer $apiKey")
+                        }
+
+                        chain.proceed(requestBuilder.build())
                     }
                     .build()
             )

@@ -227,11 +227,11 @@ class DialogContext {
 接入智能家居：音乐控制、设备控制、消息推送
 
 ### 新增功能
-- [ ] Navidrome音乐控制（搜索、播放、切歌）
-- [ ] DLNA设备控制（发现、推送、音量）
-- [ ] OpenClaw消息推送
-- [ ] 局域网设备发现
-- [ ] 配置管理界面
+- [x] Navidrome音乐控制（搜索、播放、切歌）
+- [x] DLNA设备控制（发现、推送、音量）
+- [x] OpenClaw消息推送
+- [x] 局域网设备发现
+- [x] 配置管理界面
 
 ### 技术实现
 
@@ -313,24 +313,53 @@ class OpenClawClient(baseUrl: String) {
 
 ### 依赖配置
 
+**项目级别** (`settings.gradle.kts`):
+```gradle
+repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+    maven { url = uri("https://clojars.org/repo") }
+    maven { url = uri("https://s01.oss.sonatype.org/content/repositories/releases/") }
+}
+```
+
+**核心依赖**:
 ```gradle
 dependencies {
-    // Sherpa-ONNX
-    implementation 'com.github.k2-fsa:sherpa-onnx-android:1.10.0'
-    
+    // Sherpa-ONNX (本地 AAR)
+    implementation(files("libs/sherpa-onnx-android.aar"))
+
+    // 依赖注入 (Hilt 2.50)
+    implementation("com.google.dagger:hilt-android:2.50")
+    kapt("com.google.dagger:hilt-compiler:2.50")
+
     // 网络
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
-    
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
     // 协程
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-    
-    // JSON
-    implementation 'com.google.code.gson:gson:2.10.1'
-    
-    // DLNA (Cling)
-    implementation 'org.fourthline.cling:cling-core:2.1.2'
-    implementation 'org.fourthline.cling:cling-support:2.1.2'
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // 本地数据库 (Room 2.6.1)
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+
+    // 加密存储
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // 日志
+    implementation("com.jakewharton.timber:timber:5.0.1")
+
+    // AndroidX 核心
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 }
 ```
 

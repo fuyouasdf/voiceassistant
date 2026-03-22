@@ -157,6 +157,32 @@ class VoicePipeline(
         }
     }
 
+    /**
+     * Public method to initialize all models upfront
+     */
+    suspend fun initializeAllModels(): Boolean {
+        return try {
+            Timber.d("Manually initializing all models...")
+
+            // Initialize core components (KWS + VAD)
+            if (!isCoreInitialized) {
+                initializeCoreComponentsSafe()
+            }
+
+            // Initialize ASR
+            ensureAsrInitialized()
+
+            // Initialize TTS
+            ensureTtsInitialized()
+
+            Timber.d("All models initialized successfully")
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize all models")
+            false
+        }
+    }
+
     fun stop() {
         Timber.d("VoicePipeline stopping")
         currentJob?.cancel()
@@ -177,10 +203,8 @@ class VoicePipeline(
                 } catch (e: Exception) {
                     Timber.e(e, "Error stopping TTS")
                 }
-                transitionTo(PipelineState.LISTENING)
-                currentJob = scope.launch {
-                    startRecording()
-                }
+                // 停止后直接返回IDLE，不再自动开始录音
+                transitionTo(PipelineState.IDLE)
             }
             PipelineState.IDLE -> {
                 // Manual trigger - go directly to recording
@@ -190,12 +214,8 @@ class VoicePipeline(
                 }
             }
             else -> {
+                // 先停止任何正在进行的操作，然后返回IDLE
                 transitionTo(PipelineState.IDLE)
-                currentJob = scope.launch {
-                    if (isCoreInitialized) {
-                        startKWSListening()
-                    }
-                }
             }
         }
     }
@@ -206,20 +226,35 @@ class VoicePipeline(
             return
         }
 
+        // If already recording, stop first
+        if (audioCapture.isRecording) {
+            Timber.d("AudioCapture is recording, stopping first before KWS")
+            audioCapture.stop()
+        }
+
         transitionTo(PipelineState.IDLE)
 
-        // Skip KWS wake word for now due to crash issues
-        // Just start listening but don't detect wake word
+        // Start wake word detection
         try {
+            var wakeWordTriggered = false
             audioCapture.start { audioChunk ->
                 try {
-                    // Simply discard audio in idle mode to keep mic warm
-                    // No wake word detection due to native crash issues
+                    // Prevent processing after wake word detected
+                    if (wakeWordTriggered) return@start
+
+                    // Process audio for wake word detection
+                    if (kws.process(audioChunk)) {
+                        // Wake word detected
+                        wakeWordTriggered = true
+                        Timber.d("Wake word detected!")
+                        audioCapture.stop()
+                        onWakeWordDetected()
+                    }
                 } catch (e: Exception) {
-                    Timber.e(e, "Error in idle audio capture")
+                    Timber.e(e, "Error in KWS audio processing")
                 }
             }
-            Timber.d("KWS listening started (idle mode - no wake word)")
+            Timber.d("KWS listening started (wake word detection active)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start KWS listening")
         }
@@ -228,35 +263,49 @@ class VoicePipeline(
     private fun onWakeWordDetected() {
         currentJob = scope.launch {
             Timber.d("Wake word detected")
+            // Show wake word feedback
+            transitionTo(PipelineState.WAKEWORD_DETECTED, message = "我在听...")
+            // Short delay for visual feedback and audio system settle
+            delay(500)
             transitionTo(PipelineState.LISTENING)
+            // Ensure audio capture is fully stopped before starting recording
+            if (audioCapture.isRecording) {
+                Timber.d("Stopping audio capture before recording")
+                audioCapture.stop()
+                delay(200) // Wait for audio system to settle
+            }
             startRecording()
         }
     }
 
     private fun startRecording() {
+        // 如果已经在录音，先停止
+        if (audioCapture.isRecording) {
+            Timber.d("AudioCapture is recording, stopping first")
+            audioCapture.stop()
+        }
+
         transitionTo(PipelineState.RECORDING)
 
         audioBuffer.clear()
         silenceFrames = 0
 
-        val maxSilenceFrames = (config.sampleRate * config.silenceTimeoutSec).toInt() / config.frameSize
-        val maxRecordingFrames = (config.sampleRate * config.maxRecordingSec).toInt() / config.frameSize
+        // maxSilenceFrames and maxRecordingFrames for VAD-based recording (currently unused)
+        // val maxSilenceFrames = (config.sampleRate * config.silenceTimeoutSec).toInt() / config.frameSize
+        // val maxRecordingFrames = (config.sampleRate * config.maxRecordingSec).toInt() / config.frameSize
 
         try {
             audioCapture.start { audioChunk ->
                 try {
-                    val isSpeech = vad.process(audioChunk)
+                    // Skip VAD for now, just collect all audio
+                    // TODO: Re-enable VAD once it's working correctly
+                    audioBuffer.add(audioChunk)
 
-                    if (isSpeech) {
-                        audioBuffer.add(audioChunk)
-                        silenceFrames = 0
-                    } else {
-                        silenceFrames++
-                    }
-
-                    // Stop condition: silence timeout or max duration
-                    if (silenceFrames > maxSilenceFrames || audioBuffer.size > maxRecordingFrames) {
+                    // Simple timeout based on audio buffer size (~10 seconds max)
+                    val maxBufferSize = config.sampleRate * 10 / config.frameSize // 10 seconds
+                    if (audioBuffer.size > maxBufferSize) {
                         val speechAudio = audioBuffer.flattenToFloatArray()
+                        Timber.d("Recording stopped: max duration reached, audioSize=${speechAudio.size}")
                         scope.launch {
                             startRecognition(speechAudio)
                         }
@@ -276,9 +325,13 @@ class VoicePipeline(
         transitionTo(PipelineState.RECOGNIZING, message = "正在识别...")
 
         try {
-            // Skip ASR loading due to memory issues on MI5
-            // Just show a placeholder for now
-            val text = "测试语音识别" // Placeholder - would be from ASR
+            // 确保 ASR 已初始化（懒加载）
+            ensureAsrInitialized()
+
+            // 在 Default 调度器上执行 ASR 推理
+            val text = withContext(Dispatchers.Default) {
+                asr.recognize(audioData)
+            }
 
             Timber.d("ASR result: $text")
 
@@ -286,14 +339,15 @@ class VoicePipeline(
                 _state.value = _state.value.copy(message = "你说: $text")
                 processIntent(text)
             } else {
-                transitionTo(PipelineState.IDLE)
+                // 识别为空，返回待机
+                transitionTo(PipelineState.IDLE, message = "没听清，请再说一遍")
                 if (isCoreInitialized) {
                     startKWSListening()
                 }
             }
         } catch (e: Exception) {
-            Timber.e(e, "Failed to recognize")
-            transitionTo(PipelineState.IDLE, message = "识别失败")
+            Timber.e(e, "ASR recognition failed")
+            transitionTo(PipelineState.IDLE, message = "识别失败，请重试")
             if (isCoreInitialized) {
                 startKWSListening()
             }
@@ -391,7 +445,7 @@ class VoicePipeline(
  */
 data class PipelineConfig(
     val sampleRate: Int = 16000,
-    val frameSize: Int = 320, // 20ms @ 16kHz
+    val frameSize: Int = 512, // 32ms @ 16kHz (must match VAD windowSize)
     val silenceTimeoutSec: Float = 0.8f,
     val maxRecordingSec: Int = 30,
     val llmTimeoutMs: Long = 30000,

@@ -46,6 +46,7 @@ class MainViewModel @Inject constructor(
     private fun getStateText(state: PipelineState): String {
         return when (state) {
             PipelineState.IDLE -> "待机中"
+            PipelineState.WAKEWORD_DETECTED -> "唤醒成功"
             PipelineState.LISTENING -> "请说话"
             PipelineState.RECORDING -> "正在录音"
             PipelineState.RECOGNIZING -> "正在识别"

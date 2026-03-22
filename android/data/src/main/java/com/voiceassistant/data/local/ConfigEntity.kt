@@ -20,6 +20,7 @@ object ConfigKeys {
     
     const val DLNA_DEVICE_IP = "dlna_device_ip"
     const val DLNA_DEVICE_NAME = "dlna_device_name"
+    const val DLNA_DEVICE_UUID = "dlna_device_uuid"
     
     const val LLM_BASE_URL = "llm_base_url"
     const val LLM_API_KEY = "llm_api_key"

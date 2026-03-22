@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -9,386 +9,334 @@
     android:fitsSystemWindows="true">
 
     <!-- ========================
-         Top Section: Status Bar
+         Main Content
          ======================== -->
-
-    <!-- Settings Button (Top Right) -->
-    <ImageButton
-        android:id="@+id/btnSettings"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp"
-        android:background="@drawable/bg_icon_button"
-        android:contentDescription="@string/cd_settings"
-        android:src="@android:drawable/ic_menu_manage"
-        app:tint="@color/text_secondary"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- App Logo/Title (Top Left) -->
-    <TextView
-        android:id="@+id/tvAppTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="20dp"
-        android:text="@string/app_name"
-        android:textColor="@color/text_primary"
-        android:textSize="20sp"
-        android:fontFamily="sans-serif-medium"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <!-- Status Indicator -->
     <LinearLayout
-        android:id="@+id/statusContainer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        app:layout_constraintTop_toBottomOf="@id/tvAppTitle"
-        app:layout_constraintStart_toStartOf="parent">
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <View
-            android:id="@+id/statusDot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:background="@drawable/circle_status_online" />
-
-        <TextView
-            android:id="@+id/tvStatusTop"
-            android:layout_width="wrap_content"
+        <!-- ========================
+             Top: Status Bar
+             ======================== -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/status_online"
-            android:textColor="@color/text_tertiary"
-            android:textSize="12sp" />
+            android:layout_marginTop="24dp"
+            android:layout_marginHorizontal="24dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-    </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
+                <View
+                    android:id="@+id/statusDot"
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/circle_status_online" />
 
-    <!-- ========================
-         Center Section: Visualizer
-         ======================== -->
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/status_online"
+                    android:textColor="@color/text_tertiary"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
-    <FrameLayout
-        android:id="@+id/visualizerContainer"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="24dp"
-        app:layout_constraintTop_toBottomOf="@id/statusContainer"
-        app:layout_constraintBottom_toTopOf="@id/promptText"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_manage"
+                android:contentDescription="@string/cd_settings"
+                app:tint="@color/text_secondary" />
+        </LinearLayout>
 
-        <!-- Glow Effect Background -->
-        <View
-            android:id="@+id/vGlow"
-            android:layout_width="280dp"
-            android:layout_height="280dp"
-            android:layout_gravity="center"
-            android:background="@drawable/glow_circle"
-            android:alpha="0.3" />
+        <!-- ========================
+             Center: Conversation Area
+             ======================== -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="24dp">
 
-        <!-- Main Visualizer Circle -->
-        <View
-            android:id="@+id/vVisualizer"
-            android:layout_width="200dp"
-            android:layout_height="200dp"
-            android:layout_gravity="center"
-            android:background="@drawable/circle_idle" />
+            <!-- Empty State Hint -->
+            <TextView
+                android:id="@+id/tvEmptyHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="有什么可以帮你的？"
+                android:textColor="@color/text_secondary"
+                android:textSize="18sp"
+                android:fontFamily="sans-serif-light" />
 
-        <!-- Inner Ring Decoration -->
-        <View
-            android:id="@+id/vInnerRing"
-            android:layout_width="160dp"
-            android:layout_height="160dp"
-            android:layout_gravity="center"
-            android:background="@drawable/circle_inner_ring" />
+            <!-- Conversation ScrollView -->
+            <ScrollView
+                android:id="@+id/conversationScroll"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone"
+                android:scrollbars="none">
 
-        <!-- Microphone Icon in Center -->
-        <ImageView
-            android:id="@+id/ivMic"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="center"
-            android:src="@android:drawable/ic_btn_speak_now"
-            app:tint="@color/text_primary"
-            android:contentDescription="麦克风" />
+                <LinearLayout
+                    android:id="@+id/conversationContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="16dp">
 
-    </FrameLayout>
+                    <!-- Messages will be added here dynamically -->
 
-    <!-- Prompt Text -->
-    <TextView
-        android:id="@+id/promptText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:text="请对我说..."
-        android:textColor="@color/text_secondary"
-        android:textSize="16sp"
-        android:fontFamily="sans-serif-light"
-        app:layout_constraintBottom_toTopOf="@id/tvState"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+                </LinearLayout>
+            </ScrollView>
 
-    <!-- State Text -->
-    <TextView
-        android:id="@+id/tvState"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="@string/state_idle"
-        android:textColor="@color/text_primary"
-        android:textSize="24sp"
-        android:fontFamily="sans-serif-medium"
-        android:letterSpacing="0.05"
-        app:layout_constraintBottom_toTopOf="@id/transcriptCard"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+            <!-- ========================
+                 Real-time ASR Text (Floating)
+                 ======================== -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/asrResultCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone"
+                android:layerType="software"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="16dp">
 
-    <!-- ========================
-         Transcript Section
-         ======================== -->
+                    <!-- Pulsing Dot -->
+                    <View
+                        android:id="@+id/asrPulseDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/circle_pulse" />
 
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/transcriptCard"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="24dp"
-        app:cardBackgroundColor="@color/surface"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="0dp"
-        app:strokeColor="@color/surface_elevated"
-        app:strokeWidth="1dp"
-        app:layout_constraintBottom_toTopOf="@id/buttonContainer"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+                    <TextView
+                        android:id="@+id/tvAsrResult"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:text=""
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:maxLines="3"
+                        android:ellipsize="end" />
 
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </FrameLayout>
+
+        <!-- ========================
+             Bottom: Input Area
+             ======================== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="24dp"
+            android:paddingBottom="32dp">
 
-            <!-- Transcript Label -->
-            <TextView
-                android:id="@+id/tvTranscriptLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="你说"
-                android:textColor="@color/text_tertiary"
-                android:textSize="11sp"
-                android:textAllCaps="true"
-                android:letterSpacing="0.1" />
-
-            <!-- Transcript Text -->
-            <TextView
-                android:id="@+id/tvTranscript"
+            <!-- Quick Actions Row -->
+            <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textColor="@color/text_primary"
-                android:textSize="15sp"
-                android:maxLines="3"
-                android:ellipsize="end"
-                tools:text="播放周杰伦的音乐" />
+                android:layout_marginBottom="16dp"
+                android:scrollbars="none">
 
-            <!-- Response Text (hidden by default) -->
+                <LinearLayout
+                    android:id="@+id/quickActionsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipMusic"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="播放音乐"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        app:chipBackgroundColor="@color/surface"
+                        app:chipStrokeWidth="0dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipLight"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:text="开灯"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        app:chipBackgroundColor="@color/surface"
+                        app:chipStrokeWidth="0dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipWeather"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:text="天气"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        app:chipBackgroundColor="@color/surface"
+                        app:chipStrokeWidth="0dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipAlarm"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:text="设闹钟"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        app:chipBackgroundColor="@color/surface"
+                        app:chipStrokeWidth="0dp" />
+
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <!-- Voice Input Bar -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/voiceInputCard"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layerType="software"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="28dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Voice Indicator (Waveform) -->
+                    <FrameLayout
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp">
+
+                        <!-- Static Mic Icon -->
+                        <ImageView
+                            android:id="@+id/icMic"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:src="@android:drawable/ic_btn_speak_now"
+                            app:tint="@color/text_secondary" />
+
+                        <!-- Recording Waveform (animated bars) -->
+                        <LinearLayout
+                            android:id="@+id/waveformContainer"
+                            android:layout_width="32dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:orientation="horizontal"
+                            android:gravity="center"
+                            android:visibility="invisible">
+
+                            <View
+                                android:id="@+id/waveBar1"
+                                android:layout_width="3dp"
+                                android:layout_height="8dp"
+                                android:background="@color/primary"
+                                android:layout_marginHorizontal="1dp" />
+
+                            <View
+                                android:id="@+id/waveBar2"
+                                android:layout_width="3dp"
+                                android:layout_height="16dp"
+                                android:background="@color/primary"
+                                android:layout_marginHorizontal="1dp" />
+
+                            <View
+                                android:id="@+id/waveBar3"
+                                android:layout_width="3dp"
+                                android:layout_height="12dp"
+                                android:background="@color/primary"
+                                android:layout_marginHorizontal="1dp" />
+
+                            <View
+                                android:id="@+id/waveBar4"
+                                android:layout_width="3dp"
+                                android:layout_height="20dp"
+                                android:background="@color/primary"
+                                android:layout_marginHorizontal="1dp" />
+
+                            <View
+                                android:id="@+id/waveBar5"
+                                android:layout_width="3dp"
+                                android:layout_height="10dp"
+                                android:background="@color/primary"
+                                android:layout_marginHorizontal="1dp" />
+                        </LinearLayout>
+
+                        <!-- Active Ring (shown when wake word detected) -->
+                        <View
+                            android:id="@+id/activeRing"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_gravity="center"
+                            android:background="@drawable/circle_active_ring"
+                            android:visibility="invisible" />
+                    </FrameLayout>
+
+                    <!-- State Text / Input Hint -->
+                    <TextView
+                        android:id="@+id/tvInputState"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginHorizontal="12dp"
+                        android:text="按住说话"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="15sp" />
+
+                    <!-- Send/Interrupt Button -->
+                    <ImageButton
+                        android:id="@+id/btnInterrupt"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@android:drawable/ic_media_pause"
+                        android:visibility="invisible"
+                        android:contentDescription="打断"
+                        app:tint="@color/text_secondary" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Touch Area for Voice Input (overlay) -->
             <View
-                android:id="@+id/responseDivider"
+                android:id="@+id/voiceTouchArea"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginVertical="12dp"
-                android:background="@color/surface_elevated"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/tvResponseLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="我"
-                android:textColor="@color/text_tertiary"
-                android:textSize="11sp"
-                android:textAllCaps="true"
-                android:letterSpacing="0.1"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/tvResponse"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textColor="@color/secondary"
-                android:textSize="15sp"
-                android:maxLines="3"
-                android:ellipsize="end"
-                android:visibility="gone"
-                tools:text="正在为你播放周杰伦的七里香" />
+                android:layout_height="56dp"
+                android:layout_marginTop="-56dp"
+                android:background="@android:color/transparent" />
 
         </LinearLayout>
-
-    </com.google.android.material.card.MaterialCardView>
-
-
-    <!-- ========================
-         Bottom Section: Action Buttons
-         ======================== -->
-
-    <LinearLayout
-        android:id="@+id/buttonContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="48dp"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingHorizontal="32dp"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <!-- Main Voice Button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnTrigger"
-            style="@style/Widget.VoiceAssistant.Button.Primary"
-            android:layout_width="0dp"
-            android:layout_height="60dp"
-            android:layout_weight="1"
-            android:text="@string/btn_hold_to_speak"
-            android:textSize="16sp"
-            app:icon="@android:drawable/ic_btn_speak_now"
-            app:iconGravity="textStart"
-            app:iconPadding="12dp"
-            app:cornerRadius="30dp" />
-
-        <!-- Interrupt Button (hidden in IDLE state) -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnInterrupt"
-            style="@style/Widget.VoiceAssistant.Button.Secondary"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_marginStart="16dp"
-            android:visibility="gone"
-            app:icon="@android:drawable/ic_media_pause"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp"
-            app:cornerRadius="30dp"
-            app:strokeWidth="2dp"
-            android:contentDescription="打断" />
-
     </LinearLayout>
-
-
-    <!-- ========================
-         Secondary Action Buttons
-         ======================== -->
-
-    <LinearLayout
-        android:id="@+id/secondaryButtons"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:orientation="horizontal"
-        android:gravity="center"
-        app:layout_constraintBottom_toTopOf="@id/buttonContainer"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnHistory"
-            style="@style/Widget.VoiceAssistant.Button.Ghost"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="历史"
-            android:textSize="13sp"
-            app:icon="@android:drawable/ic_menu_recent_history"
-            app:iconSize="18dp"
-            app:iconGravity="textStart"
-            app:iconPadding="6dp" />
-
-        <View
-            android:layout_width="1dp"
-            android:layout_height="20dp"
-            android:layout_marginHorizontal="24dp"
-            android:background="@color/text_tertiary" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnQuickActions"
-            style="@style/Widget.VoiceAssistant.Button.Ghost"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="快捷指令"
-            android:textSize="13sp"
-            app:icon="@android:drawable/ic_menu_add"
-            app:iconSize="18dp"
-            app:iconGravity="textStart"
-            app:iconPadding="6dp" />
-
-        <View
-            android:layout_width="1dp"
-            android:layout_height="20dp"
-            android:layout_marginHorizontal="24dp"
-            android:background="@color/text_tertiary" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnHelp"
-            style="@style/Widget.VoiceAssistant.Button.Ghost"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="帮助"
-            android:textSize="13sp"
-            app:icon="@android:drawable/ic_menu_help"
-            app:iconSize="18dp"
-            app:iconGravity="textStart"
-            app:iconPadding="6dp" />
-
-    </LinearLayout>
-
-
-    <!-- ========================
-         Memory Warning Card (hidden by default)
-         ======================== -->
-
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/memoryWarningCard"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:visibility="gone"
-        app:cardBackgroundColor="@color/error"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="0dp"
-        app:layout_constraintTop_toBottomOf="@id/statusContainer">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="12dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@android:drawable/ic_dialog_alert"
-                app:tint="@color/white"
-                android:contentDescription="警告" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="@string/warning_memory_low"
-                android:textColor="@color/white"
-                android:textSize="13sp" />
-
-        </LinearLayout>
-
-    </com.google.android.material.card.MaterialCardView>
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

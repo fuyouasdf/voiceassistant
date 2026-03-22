@@ -43,8 +43,8 @@ dependencies {
     // AndroidX
     implementation("androidx.core:core-ktx:1.12.0")
 
-    // Sherpa-ONNX (provided at runtime by app module)
-    compileOnly(files("libs/sherpa-onnx-android.aar"))
+    // Sherpa-ONNX (AAR module built from sherpa-onnx-aar)
+    implementation(project(":sherpa-onnx-aar:sherpa_onnx"))
 
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

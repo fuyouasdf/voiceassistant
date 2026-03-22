@@ -2,10 +2,51 @@
 
 > 目标兼容 Android 6.0 (API 23)，基于 MVVM + Clean Architecture
 
-**版本**: 1.0  
-**日期**: 2026-03-20  
-**minSdk**: 23 (Android 6.0)  
+**版本**: 1.1
+**日期**: 2026-03-22
+**minSdk**: 26
 **targetSdk**: 34
+
+---
+
+## 技术栈与依赖
+
+### 核心框架
+| 库 | 版本 | 用途 |
+|-----|------|------|
+| Kotlin | 1.9.x | 主语言 |
+| Hilt | 2.50 | 依赖注入 |
+| Coroutines | 1.7.3 | 异步处理 |
+
+### AndroidX
+| 库 | 版本 |
+|-----|------|
+| core-ktx | 1.12.0 |
+| appcompat | 1.6.1 |
+| material | 1.11.0 |
+| lifecycle | 2.7.0 |
+| room | 2.6.1 |
+| security-crypto | 1.1.0-alpha06 |
+
+### 网络与数据
+| 库 | 版本 |
+|-----|------|
+| Retrofit | 2.9.0 |
+| OkHttp | 4.12.0 |
+| Timber | 5.0.1 |
+
+### 语音引擎
+| 组件 | 来源 |
+|------|------|
+| Sherpa-ONNX | sherpa-onnx-aar 模块 (v1.12.32) |
+
+### 构建配置
+```gradle
+compileSdk = 34
+minSdk = 26
+targetSdk = 34
+sourceCompatibility = JavaVersion.VERSION_17
+```
 
 ---
 
@@ -74,88 +115,97 @@
 
 ```
 voice-assistant-android/
-├── app/
-│   ├── src/main/
-│   │   ├── java/com/voiceassistant/app/
-│   │   │   ├── VoiceAssistantApp.kt
-│   │   │   ├── di/
-│   │   │   │   ├── AppModule.kt
-│   │   │   │   └── ViewModelModule.kt
-│   │   │   ├── ui/
-│   │   │   │   ├── main/
-│   │   │   │   │   ├── MainActivity.kt
-│   │   │   │   │   └── MainViewModel.kt
-│   │   │   │   ├── voice/
-│   │   │   │   │   ├── VoiceFragment.kt
-│   │   │   │   │   ├── VoiceViewModel.kt
-│   │   │   │   │   └── VoiceUiState.kt
-│   │   │   │   ├── settings/
-│   │   │   │   │   ├── SettingsFragment.kt
-│   │   │   │   │   └── SettingsViewModel.kt
-│   │   │   │   └── service/
-│   │   │   │       ├── VoiceAssistantService.kt
-│   │   │   │       ├── KeepAliveManager.kt
-│   │   │   │       └── NotificationHelper.kt
-│   │   │   └── receiver/
-│   │   │       ├── BootReceiver.kt
-│   │   │       └── PowerReceiver.kt
-│   │   ├── res/
-│   │   └── assets/models/
-│   └── build.gradle.kts
+├── app/                                    # 应用模块 (UI + Service)
+│   └── src/main/
+│       ├── java/com/voiceassistant/app/
+│       │   ├── VoiceAssistantApp.kt
+│       │   ├── di/
+│       │   │   ├── AppModule.kt
+│       │   │   └── ConfigHolder.kt
+│       │   ├── model/
+│       │   │   ├── ModelInfo.kt
+│       │   │   └── ModelInitializer.kt
+│       │   ├── service/
+│       │   │   └── VoiceAssistantService.kt
+│       │   └── ui/
+│       │       ├── main/
+│       │       │   ├── MainActivity.kt
+│       │       │   ├── MainViewModel.kt
+│       │       │   └── FluidGradientView.kt
+│       │       ├── settings/
+│       │       │   └── SettingsActivity.kt
+│       │       ├── splash/
+│       │       │   └── ModelDownloadActivity.kt
+│       │       └── util/
+│       │           └── ErrorHandler.kt
+│       ├── res/
+│       └── assets/models/                  # 模型文件目录
 │
-├── core/
-│   ├── src/main/java/com/voiceassistant/core/
-│   │   ├── audio/
-│   │   │   ├── AudioCapture.kt
-│   │   │   ├── AudioPlayer.kt
-│   │   │   └── AudioPreprocessor.kt
-│   │   ├── sherpa/
-│   │   │   ├── SherpaKWS.kt
-│   │   │   ├── SherpaASR.kt
-│   │   │   ├── SherpaTTS.kt
-│   │   │   └── SherpaVAD.kt
-│   │   ├── pipeline/
-│   │   │   ├── VoicePipeline.kt
-│   │   │   └── PipelineState.kt
-│   │   ├── intent/
-│   │   │   ├── IntentClassifier.kt
-│   │   │   ├── IntentRouter.kt
-│   │   │   └── SkillManager.kt
-│   │   └── dlna/
-│   │       ├── DLNAManager.kt
-│   │       └── DLNARenderer.kt
-│   └── src/main/cpp/
-│       ├── sherpa_jni.cpp
-│       └── CMakeLists.txt
+├── core/                                   # 核心模块 (语音管道)
+│   └── src/main/java/com/voiceassistant/core/
+│       ├── audio/
+│       │   ├── AudioCapture.kt            # 音频录制
+│       │   └── AudioPlayer.kt             # 音频播放
+│       ├── sherpa/                        # Sherpa-ONNX 实现
+│       │   ├── SherpaKWS.kt / Impl       # 关键词唤醒
+│       │   ├── SherpaASR.kt / Impl       # 语音识别
+│       │   ├── SherpaTTS.kt / Impl       # 语音合成
+│       │   ├── SherpaVAD.kt / Impl       # 语音活动检测
+│       │   └── ModelConfig.kt             # 模型配置
+│       ├── pipeline/
+│       │   ├── VoicePipeline.kt           # 语音管道控制器
+│       │   └── PipelineState.kt           # 管道状态
+│       ├── intent/
+│       │   └── IntentRouter.kt            # 意图路由
+│       └── dlna/
+│           ├── DLNAManager.kt            # DLNA 管理器
+│           └── DLNAController.kt          # DLNA 控制器
 │
-├── data/
-│   ├── src/main/java/com/voiceassistant/data/
-│   │   ├── repository/
-│   │   │   ├── VoiceEngineRepositoryImpl.kt
-│   │   │   ├── LLMRepositoryImpl.kt
-│   │   │   └── MusicRepositoryImpl.kt
-│   │   ├── local/
-│   │   │   ├── SettingsDao.kt
-│   │   │   └── AppDatabase.kt
-│   │   └── remote/
-│   │       ├── LLMApiService.kt
-│   │       └── NavidromeApiService.kt
-│   └── build.gradle.kts
+├── data/                                  # 数据模块
+│   └── src/main/java/com/voiceassistant/data/
+│       ├── local/
+│       │   ├── AppDatabase.kt
+│       │   ├── ConfigDao.kt
+│       │   └── ConfigEntity.kt
+│       ├── remote/
+│       │   ├── LLMApi.kt
+│       │   └── NavidromeApi.kt
+│       └── repository/
+│           ├── Repositories.kt
+│           ├── SettingsRepositoryImpl.kt
+│           └── MusicRepositoryImpl.kt
 │
-├── domain/
-│   ├── src/main/java/com/voiceassistant/domain/
-│   │   ├── repository/
-│   │   │   ├── VoiceEngineRepository.kt
-│   │   │   ├── LLMRepository.kt
-│   │   │   └── MusicRepository.kt
-│   │   ├── model/
-│   │   │   ├── VoiceState.kt
-│   │   │   ├── Intent.kt
-│   │   │   └── Command.kt
-│   │   └── usecase/
-│   │       ├── StartVoicePipelineUseCase.kt
-│   │       └── SendCommandUseCase.kt
-│   └── build.gradle.kts
+├── domain/                                # 领域模块
+│   └── src/main/java/com/voiceassistant/domain/
+│       ├── model/
+│       │   ├── ConfigModels.kt
+│       │   └── Song.kt
+│       ├── repository/
+│       │   ├── LLMRepository.kt
+│       │   └── MusicRepository.kt
+│       └── usecase/
+│           └── StartVoicePipelineUseCase.kt
+│
+├── sherpa-onnx-aar/                       # Sherpa-ONNX 库模块 (v1.12.32)
+│   ├── build.gradle.kts
+│   ├── settings.gradle.kts
+│   ├── gradle.properties
+│   └── sherpa_onnx/                       # 库子模块
+│       ├── build.gradle.kts
+│       └── src/main/
+│           ├── AndroidManifest.xml
+│           ├── java/com/k2fsa/sherpa/onnx/  # Kotlin API
+│           │   ├── OnlineRecognizer.kt
+│           │   ├── OnlineStream.kt
+│           │   ├── Vad.kt
+│           │   ├── KeywordSpotter.kt
+│           │   ├── Tts.kt
+│           │   └── ...
+│           └── jniLibs/                    # 原生库
+│               ├── arm64-v8a/
+│               ├── armeabi-v7a/
+│               ├── x86/
+│               └── x86_64/
 │
 └── build.gradle.kts
 ```

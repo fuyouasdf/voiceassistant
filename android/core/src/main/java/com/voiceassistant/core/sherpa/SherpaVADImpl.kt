@@ -1,30 +1,38 @@
 package com.voiceassistant.core.sherpa
 
 import android.content.Context
+import com.k2fsa.sherpa.onnx.*
 import timber.log.Timber
-import java.io.File
 
-/**
- * Voice Activity Detection using energy-based fallback
- * Note: Full Sherpa-ONNX VAD integration requires matching library version
- */
 class SherpaVADImpl(private val context: Context) : SherpaVAD {
 
-    // Energy-based VAD parameters
-    private var speechFrames = 0
-    private var silenceFrames = 0
-    private val minSpeechFrames = 5
-    private val minSilenceFrames = 10
-    private val threshold = 0.01f
-
+    private var vad: Vad? = null
     private var isInitialized = false
+    private val windowSize = 512
 
     override fun initialize(modelPath: String): Boolean {
         return try {
-            // For now, use energy-based VAD
-            // Full Sherpa-ONNX integration can be added when library version is confirmed
-            Timber.d("Using energy-based VAD")
+            val config = VadModelConfig(
+                sileroVadModelConfig = SileroVadModelConfig(
+                    model = "silero_vad.onnx",
+                    threshold = 0.3F,  // Lower threshold for better sensitivity
+                    minSilenceDuration = 0.5F,  // Longer silence to avoid cutting off
+                    minSpeechDuration = 0.25F,
+                    windowSize = windowSize,
+                ),
+                sampleRate = 16000,
+                numThreads = 1,
+                provider = "cpu",
+                debug = false
+            )
+
+
+            vad = Vad(
+                assetManager = context.assets,
+                config = config
+            )
             isInitialized = true
+            Timber.d("VAD initialized with windowSize=$windowSize")
             true
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize VAD")
@@ -33,34 +41,29 @@ class SherpaVADImpl(private val context: Context) : SherpaVAD {
     }
 
     override fun process(audio: FloatArray): Boolean {
-        // Energy-based voice activity detection
-        var sum = 0f
-        for (sample in audio) {
-            sum += sample * sample
+        return try {
+            val v = vad ?: return false
+            // VAD requires exactly windowSize samples per call
+            // AudioCapture provides 320 samples (20ms), we need to buffer them
+            v.acceptWaveform(audio)
+            val isSpeech = v.isSpeechDetected()
+            Timber.v("VAD process: ${audio.size} samples, isSpeech=$isSpeech")
+            isSpeech
+        } catch (e: Exception) {
+            Timber.e(e, "VAD process error")
+            false
         }
-        val energy = kotlin.math.sqrt(sum / audio.size.coerceAtLeast(1))
-
-        val isSpeech = energy > threshold
-
-        if (isSpeech) {
-            speechFrames++
-            silenceFrames = 0
-        } else {
-            speechFrames = maxOf(0, speechFrames - 1)
-            silenceFrames++
-        }
-
-        // Require minimum speech frames to detect speech
-        return speechFrames >= minSpeechFrames
     }
 
     override fun reset() {
-        speechFrames = 0
-        silenceFrames = 0
+        vad?.clear()
+        Timber.d("VAD reset")
     }
 
     override fun release() {
-        // No resources to release for energy-based VAD
+        vad?.release()
+        vad = null
         isInitialized = false
+        Timber.d("VAD released")
     }
 }

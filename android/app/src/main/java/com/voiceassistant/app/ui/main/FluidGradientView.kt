@@ -159,6 +159,7 @@ class FluidGradientView @JvmOverloads constructor(
 
         when (currentState) {
             PipelineState.IDLE -> drawIdleState(canvas, colors)
+            PipelineState.WAKEWORD_DETECTED -> drawListeningState(canvas, colors) // Use listening visual for wake word
             PipelineState.LISTENING -> drawListeningState(canvas, colors)
             PipelineState.RECORDING -> drawRecordingState(canvas, colors)
             PipelineState.RECOGNIZING -> drawRecognizingState(canvas, colors)
@@ -465,6 +466,13 @@ class FluidGradientView @JvmOverloads constructor(
                 startWaveAnimation()
                 pulseAnimator?.cancel()
                 pulseAlpha = 0f
+            }
+            PipelineState.WAKEWORD_DETECTED -> {
+                // Wake word detected - show pulse animation briefly
+                breathAnimator?.cancel()
+                breathScale = 1f
+                startPulseAnimation()
+                startWaveAnimation()
             }
             PipelineState.LISTENING -> {
                 breathAnimator?.cancel()

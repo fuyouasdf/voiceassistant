@@ -43,7 +43,8 @@
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="true"
-            android:launchMode="singleTask" />
+            android:launchMode="singleTask"
+            android:hardwareAccelerated="false" />
 
         <!-- Settings Activity -->
         <activity
