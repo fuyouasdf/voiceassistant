@@ -5,7 +5,6 @@
   <img src="https://img.shields.io/badge/Android-6.0%2B-blue.svg" alt="Android Version">
   <img src="https://img.shields.io/badge/Kotlin-1.9-orange.svg" alt="Language">
   <img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License">
-  <img src="https://img.shields.io/github/stars/your-repo/voice-assistant?style=social" alt="GitHub Stars">
 </p>
 
 > 🇨🇳 中文 | [English](README_EN.md)
@@ -13,6 +12,18 @@
 将旧 Android 手机变成离线语音控制中枢，替代小爱同学，支持多模型 API 接入、Navidrome/DLNA 音乐控制。
 
 <!-- PROJECT_NAME_END -->
+
+---
+
+## 📚 文档导航
+
+| 文档 | 内容 |
+|------|------|
+| **[项目状态](PROJECT_STATUS.md)** | 当前进度、已知问题、下一步计划 |
+| **[Android 架构](ARCHITECTURE_ANDROID.md)** | 技术栈、模块结构、核心组件 |
+| **[语音管道](ARCHITECTURE_VOICE_PIPELINE.md)** | 状态机、音频流、核心类设计 |
+| **[快速开始](android/QUICKSTART.md)** | 环境配置、构建步骤、测试流程 |
+| **[进度报告](android/PROGRESS.md)** | 版本历史、模块完成情况 |
 
 ---
 
@@ -29,35 +40,30 @@
 
 ## 🏗️ 架构
 
+详细架构设计请参考：[Android 架构](ARCHITECTURE_ANDROID.md) | [语音管道](ARCHITECTURE_VOICE_PIPELINE.md)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Android 客户端                          │
 ├─────────────────────────────────────────────────────────────┤
-│  UI Layer                                                  │
+│  UI Layer (MVVM)                                          │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
 │  │  MainActivity│  │SettingsView │  │  Dialogs    │        │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
-└─────────┼────────────────┼────────────────┼────────────────┘
-          │                │                │
-┌─────────┴────────────────┴────────────────┴────────────────┐
-│  Domain Layer                                             │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+├─────────────────────────────────────────────────────────────┤
+│  Domain Layer (Use Cases)                                 │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐                 │
 │  │StartVoice│  │SendCmd   │  │ConfigUseCase              │
 │  │Pipeline  │  │ToLLM     │  │                      │    │
 │  └──────────┘  └──────────┘  └──────────┘                 │
-└─────────────────────────────────────────────────────────────┘
-          │
-┌─────────┴────────────────────────────────────────────────┐
-│  Core - Voice Pipeline                                   │
+├─────────────────────────────────────────────────────────────┤
+│  Core - Voice Pipeline (Sherpa-ONNX)                      │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
 │  │   KWS    │  │   VAD    │  │   ASR    │  │   TTS    │ │
 │  │(唤醒检测) │  │(端点检测) │  │(语音识别) │  │(语音合成) │ │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │
-│                    Sherpa-ONNX Engine                      │
-└─────────────────────────────────────────────────────────────┘
-          │
-┌─────────┴────────────────────────────────────────────────┐
-│  Skills                                                  │
+├─────────────────────────────────────────────────────────────┤
+│  Skills                                                   │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
 │  │Navidrome │  │ DLNA控制 │  │LLM对话   │  │OpenClaw │  │
 │  │  Subsonic│  │  UPnP    │  │ (可选)   │  │消息推送 │  │
@@ -68,43 +74,10 @@
 ### 语音管道状态机
 
 ```
-                    ┌─────────────┐
-         ┌─────────→│   IDLE      │←────────┐
-         │          │  (待机)     │         │
-         │          └──────┬──────┘         │
-         │                 │ 检测到唤醒词    │
-         │                 ↓                │
-         │          ┌─────────────┐         │
-         │    ┌────→│  LISTENING  │         │
-         │    │     │  (聆听中)   │         │
-         │    │     └──────┬──────┘         │
-         │    │            │ VAD检测到语音   │
-         │    │            ↓                │
-         │    │     ┌─────────────┐         │
-         │    │     │  RECORDING  │         │
-         │    │     │  (录音中)   │         │
-         │    │     └──────┬──────┘         │
-         │    │            │ VAD检测到静音   │
-         │    │            ↓                │
-         │    │     ┌─────────────┐         │
-         │    │     │  RECOGNIZING│         │
-         │    │     │  (识别中)   │         │
-         │    │     └──────┬──────┘         │
-         │    │            │ ASR完成        │
-         │    │            ↓                │
-         │    │     ┌─────────────┐         │
-         │    └────→│  THINKING   │─────────┘
-         │          │  (处理中)   │  (打断)
-         │          └──────┬──────┘
-         │                 │ 意图处理完成
-         │                 ↓
-         │          ┌─────────────┐
-         │          │  SPEAKING   │
-         │          │  (播报中)   │
-         │          └──────┬──────┘
-         │                 │ TTS完成/被打断
-         └─────────────────┘
+IDLE → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → IDLE
 ```
+
+详细状态机说明见 [语音管道文档](ARCHITECTURE_VOICE_PIPELINE.md)
 
 ---
 
@@ -185,34 +158,18 @@ buildConfigField("String", "NAVIDROME_PASSWORD", "\"password\"")
 ```
 voice-assistant/
 ├── android/                      # Android 项目根目录
-│   ├── app/                     # 应用层
-│   │   └── src/main/
-│   │       ├── java/com/voiceassistant/app/
-│   │       │   ├── ui/main/     # 主界面
-│   │       │   ├── service/     # 前台服务
-│   │       │   └── di/          # 依赖注入
-│   │       ├── res/             # 资源文件
-│   │       └── assets/models/   # 语音模型
+│   ├── app/                     # 应用层 (UI + Service)
 │   ├── core/                    # 核心语音管道
-│   │   └── src/main/java/com/voiceassistant/core/
-│   │       ├── audio/           # 音频采集
-│   │       ├── sherpa/          # Sherpa-ONNX 封装
-│   │       ├── pipeline/        # 语音管道
-│   │       └── intent/          # 意图路由
 │   ├── data/                    # 数据层
-│   │   └── src/main/java/com/voiceassistant/data/
-│   │       ├── repository/     # 仓库实现
-│   │       └── remote/          # API 接口
 │   ├── domain/                  # 领域层
-│   │   └── src/main/java/com/voiceassistant/domain/
-│   │       ├── repository/      # 仓库接口
-│   │       └── usecase/        # 用例
 │   └── sherpa-onnx-aar/        # Sherpa-ONNX 本地 AAR
-├── VOICE_ASSISTANT_DESIGN.md    # 设计文档
-├── ARCHITECTURE_ANDROID.md      # 架构文档
-├── ARCHITECTURE_VOICE_PIPELINE.md # 语音管道文档
+├── ARCHITECTURE_ANDROID.md      # Android 架构详细文档
+├── ARCHITECTURE_VOICE_PIPELINE.md # 语音管道详细文档
+├── PROJECT_STATUS.md             # 项目当前状态
 └── README.md                    # 本文件
 ```
+
+详细目录结构请参考：[Android 架构 - 完整目录结构](ARCHITECTURE_ANDROID.md#完整目录结构)
 
 ---
 
@@ -233,46 +190,28 @@ voice-assistant/
 
 ## 📦 模型下载
 
-项目使用以下模型（首次启动自动下载）:
+通过 Gradle 任务预下载（详见 [快速开始](android/QUICKSTART.md)）:
 
 | 模型 | 大小 | 用途 |
 |------|------|------|
-| Sherpa-ONNX KWS | ~3MB | 唤醒词检测 |
-| Paraformer ASR | ~80MB | 语音识别 |
-| Piper TTS | ~120MB | 语音合成 |
+| sherpa-onnx-kws-zipformer-wenetspeech-3.3M | ~35MB | 唤醒词检测 |
+| sherpa-onnx-streaming-zipformer-bilingual-zh-en | ~200MB | 语音识别 |
+| silero_vad.onnx | ~2MB | 端点检测 |
+| vits-piper-zh_CN-huayan-medium | ~61MB | 语音合成 |
 
 ---
 
 ## ⚙️ 配置说明
 
-### BuildConfig 配置
+服务配置在应用内设置界面完成（设置 → 服务配置），配置保存在本地数据库。
 
-```kotlin
-// app/build.gradle.kts
-buildConfigField("String", "NAVIDROME_URL", "\"http://192.168.1.x:4533/\"")
-buildConfigField("String", "NAVIDROME_USERNAME", "\"admin\"")
-buildConfigField("String", "NAVIDROME_PASSWORD", "\"password\"")
-
-// LLM 配置 (可选)
-buildConfigField("String", "LLM_API_KEY", "\"your-api-key\"")
-buildConfigField("String", "LLM_BASE_URL", "\"https://api.deepseek.com\"")
-```
-
-### 唤醒词修改
-
-在模型配置文件中修改 `wake_word` 参数。
+详见：[快速开始 - 配置服务](android/QUICKSTART.md#配置服务)
 
 ---
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/xxx`)
-3. 提交更改 (`git commit -m 'Add xxx'`)
-4. 推送分支 (`git push origin feature/xxx`)
-5. 创建 Pull Request
 
 ---
 
@@ -297,7 +236,7 @@ See [LICENSE](LICENSE) for details.
 ## 📞 联系方式
 
 - GitHub Issues: [https://github.com/your-repo/voice-assistant/issues](https://github.com/your-repo/voice-assistant/issues)
-- Email: your-email@example.com
+- Email: fuyouasdf@gmail.com
 
 ---
 

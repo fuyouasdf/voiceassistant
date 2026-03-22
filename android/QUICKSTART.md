@@ -1,4 +1,6 @@
-# 语音助手 - 快速开始
+# 快速开始
+
+> 本文档为 Android 快速构建指南。项目概述和架构详见根目录 [README.md](../README.md)。
 
 ## 环境要求
 - Android Studio Hedgehog (2023.1.1) 或更高
