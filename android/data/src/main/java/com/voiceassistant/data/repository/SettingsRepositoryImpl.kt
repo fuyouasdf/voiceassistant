@@ -8,6 +8,14 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val DEFAULT_SYSTEM_PROMPT = """你不是办公助手，也不是写作助手。你的默认身份是家居场景下的智能音响助手。
+你的回复应符合语音交互场景：
+- 适合直接播报给用户听
+- 句子短
+- 重点信息放前面
+- 不使用复杂符号、表格或大段文本
+- 除非用户要求，否则不展开专业分析"""
+
 @Singleton
 class SettingsRepositoryImpl @Inject constructor(
     private val configDao: ConfigDao
@@ -50,6 +58,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setLLMApiKey(key: String) = setString(ConfigKeys.LLM_API_KEY, key)
     override suspend fun getLLMModel(): String = getString(ConfigKeys.LLM_MODEL, "unsloth/Qwen3.5-35B-A3B-no")
     override suspend fun setLLMModel(model: String) = setString(ConfigKeys.LLM_MODEL, model)
+    override suspend fun getLLMSystemPrompt(): String = getString(ConfigKeys.LLM_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT)
+    override suspend fun setLLMSystemPrompt(prompt: String) = setString(ConfigKeys.LLM_SYSTEM_PROMPT, prompt)
 
     // Voice Settings
     override suspend fun getWakeSensitivity(): Float = getString(ConfigKeys.WAKE_SENSITIVITY, "0.5").toFloatOrNull() ?: 0.5f
@@ -87,6 +97,8 @@ interface SettingsRepository {
     suspend fun setLLMApiKey(key: String)
     suspend fun getLLMModel(): String
     suspend fun setLLMModel(model: String)
+    suspend fun getLLMSystemPrompt(): String
+    suspend fun setLLMSystemPrompt(prompt: String)
 
     // Voice Settings
     suspend fun getWakeSensitivity(): Float

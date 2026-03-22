@@ -11,6 +11,7 @@ import timber.log.Timber
 class SherpaASRImpl(private val context: Context) : SherpaASR {
 
     private var recognizer: OnlineRecognizer? = null
+    private val partialResultFilter = PartialResultFilter()
 
     override fun initialize(modelPath: String, provider: String): Boolean {
         return try {
@@ -124,6 +125,7 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
             var offset = 0
             var isEndpointReached = false
             var finalText = ""
+            partialResultFilter.reset()
 
             while (offset < audio.size && !isEndpointReached) {
                 val end = minOf(offset + bufferSize, audio.size)
@@ -138,7 +140,8 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
                 // Get partial result
                 val partialResult = r.getResult(stream)
                 val partialText = partialResult.text ?: ""
-                if (partialText.isNotEmpty()) {
+                // 使用过滤器只在有新增文字时触发回调
+                if (partialResultFilter.shouldNotify(partialText)) {
                     listener.onPartialResult(partialText)
                 }
 

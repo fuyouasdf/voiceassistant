@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "models": {
+    "kws": {
+      "name": "KWS 唤醒词模型",
+      "version": "2025-02-28",
+      "type": "kws",
+      "files": {
+        "model": "model.onnx",
+        "tokens": "tokens.txt",
+        "keywords": "keywords.txt"
+      },
+      "config": {
+        "numThreads": 1,
+        "provider": "cpu",
+        "sampleRate": 16000,
+        "decodingMethod": "greedy_search"
+      }
+    },
+    "asr": {
+      "name": "ASR 语音识别模型 (Paraformer)",
+      "version": "v1.12.30",
+      "type": "asr",
+      "files": {
+        "model": "model.onnx",
+        "decodeit": "decodeit.nemo",
+        "vocab": "vocab.txt"
+      },
+      "config": {
+        "numThreads": 4,
+        "provider": "cpu",
+        "sampleRate": 16000,
+        "decodingMethod": "greedy_search"
+      }
+    },
+    "tts": {
+      "name": "TTS 语音合成模型",
+      "version": "2025-01-15",
+      "type": "tts",
+      "files": {
+        "model": "zh_CN-huayan-medium.onnx"
+      },
+      "config": {
+        "numThreads": 2,
+        "provider": "cpu",
+        "sampleRate": 22050,
+        "speed": 1.0
+      }
+    }
+  }
+}

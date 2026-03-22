@@ -25,11 +25,12 @@ class LLMRepositoryImpl(
         try {
             // Read config from settings at runtime
             val model = settingsRepository.getLLMModel()
+            val systemPrompt = settingsRepository.getLLMSystemPrompt()
 
             val request = ChatRequest(
                 model = model,
                 messages = listOf(
-                    ChatMessage(role = "system", content = SYSTEM_PROMPT),
+                    ChatMessage(role = "system", content = systemPrompt),
                     ChatMessage(role = "user", content = message)
                 ),
                 temperature = 0.7,
@@ -54,12 +55,5 @@ class LLMRepositoryImpl(
             Timber.e(e, "LLM chat failed")
             Result.failure(e)
         }
-    }
-
-    companion object {
-        private const val SYSTEM_PROMPT = """你是一个友好的语音助手助手。请用简洁、口语化的中文回答用户的问题。
-回答应该简短，最多2-3句话。
-如果用户问的问题需要搜索信息，你可以建议他们联网查询。
-不要使用特殊格式，直接用普通文本回答。"""
     }
 }

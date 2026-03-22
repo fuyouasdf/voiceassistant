@@ -40,6 +40,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etLlmUrl: TextInputEditText
     private lateinit var etLlmApiKey: TextInputEditText
     private lateinit var etLlmModel: TextInputEditText
+    private lateinit var etLlmSystemPrompt: TextInputEditText
 
     // Voice Settings
     private lateinit var sliderWakeSensitivity: Slider
@@ -129,6 +130,7 @@ class SettingsActivity : AppCompatActivity() {
         etLlmUrl = findViewById(R.id.etLlmUrl)
         etLlmApiKey = findViewById(R.id.etLlmApiKey)
         etLlmModel = findViewById(R.id.etLlmModel)
+        etLlmSystemPrompt = findViewById(R.id.etLlmSystemPrompt)
 
         // Voice Settings
         sliderWakeSensitivity = findViewById(R.id.sliderWakeSensitivity)
@@ -188,6 +190,7 @@ class SettingsActivity : AppCompatActivity() {
             etLlmUrl.setText(settingsRepository.getLLMBaseUrl())
             etLlmApiKey.setText(settingsRepository.getLLMApiKey())
             etLlmModel.setText(settingsRepository.getLLMModel())
+            etLlmSystemPrompt.setText(settingsRepository.getLLMSystemPrompt())
 
             // Load Voice Settings
             val wakeSensitivity = settingsRepository.getWakeSensitivity()
@@ -281,6 +284,7 @@ class SettingsActivity : AppCompatActivity() {
                 settingsRepository.setLLMBaseUrl(etLlmUrl.text.toString())
                 settingsRepository.setLLMApiKey(etLlmApiKey.text.toString())
                 settingsRepository.setLLMModel(etLlmModel.text.toString())
+                settingsRepository.setLLMSystemPrompt(etLlmSystemPrompt.text.toString())
 
                 // Save Voice Settings
                 settingsRepository.setWakeSensitivity(sliderWakeSensitivity.value)

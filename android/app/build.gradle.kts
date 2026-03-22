@@ -97,53 +97,70 @@ kapt {
 // ============================================================
 // 模型下载任务
 // 用法: ./gradlew downloadModels
+//
+// 注意：此任务的模型 URL 必须与 ModelConfig.kt 中的 getDownloadUrl() 保持一致
 // ============================================================
 
 val downloadModels by tasks.registering {
     group = "voice assistant"
     description = "下载语音模型文件到 assets 目录"
 
-    // 模型版本
-    val kwsModelVersion = "2024-01-01"
-    val asrModelVersion = "2025-06-30"  // sherpa-onnx-streaming-zipformer-zh-int8
+    // 模型版本 - 与 ModelConfig.kt 保持一致
+    val kwsModelVersion = "2025-02-28"
+    val asrModelVersion = "v1.12.30"
+    val ttsModelVersion = "2025-01-15"
 
-    // HuggingFace 下载地址
-    val kwsUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-$kwsModelVersion/resolve/main/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-$kwsModelVersion.zip"
-    val asrUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion/resolve/main/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion.zip"
-    val vadUrl = "https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx"
-    val ttsUrl = "https://huggingface.co/csukuangfj/vits-piper-zh_CN-huayan-medium/resolve/main/vits-piper-zh_CN-huayan-medium.tar.gz"
+    // GitHub releases 下载地址 - 与 ModelConfig.kt getDownloadUrl() 一致
+    val kwsUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-$kwsModelVersion.tar.bz2"
+    val asrUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/$asrModelVersion/sherpa-onnx-$asrModelVersion-vad-asr-zh_en-paraformer_large.tar.bz2"
+    val ttsUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-huayan-medium-$ttsModelVersion.tar.bz2"
 
     val assetsDir = file("src/main/assets")
     val tempDir = file("${buildDir}/models_temp")
 
     doLast {
-        val kwsDir = file("${assetsDir}/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-$kwsModelVersion")
-        val asrDir = file("${assetsDir}/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion")
-        val vadFile = file("${assetsDir}/silero_vad.onnx")
+        // 解压后的目录名（与实际发布版本保持一致）
+        val kwsDir = file("${assetsDir}/sherpa-onnx-kws-zipformer-gigaspeech-3.3M")
+        val asrDir = file("${assetsDir}/sherpa-onnx-$asrModelVersion-vad-asr-zh_en-paraformer_large")
+        val vadDir = file("${assetsDir}/models/vad")  // VAD 单独目录
         val ttsDir = file("${assetsDir}/vits-piper-zh_CN-huayan-medium")
 
         // 检查模型是否已完整存在（防止重复下载）
-        fun isModelComplete(dir: File, vararg requiredFiles: String): Boolean {
-            return dir.isDirectory && requiredFiles.all { file("$dir/$it").exists() }
+        // KWS 模型文件检查
+        fun isKwsComplete(): Boolean {
+            if (!kwsDir.isDirectory) return false
+            val required = listOf("model.onnx", "tokens.txt", "keywords.txt")
+            return required.all { file("$kwsDir/$it").exists() }
         }
-        val kwsComplete = isModelComplete(kwsDir,
-            "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
-            "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
-            "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
-            "tokens.txt", "keywords.txt")
-        val asrComplete = isModelComplete(asrDir,
-            "encoder.int8.onnx",
-            "decoder.onnx",
-            "joiner.int8.onnx",
-            "tokens.txt")
-        val vadComplete = vadFile.exists() && vadFile.length() > 0
-        val ttsComplete = ttsDir.isDirectory && file("$ttsDir/zh_CN-huayan-medium.onnx").exists()
+
+        // ASR 模型文件检查 (paraformer_large)
+        fun isAsrComplete(): Boolean {
+            if (!asrDir.isDirectory) return false
+            val required = listOf("model.onnx", "decodeit.nemo", "vocab.txt")
+            return required.all { file("$asrDir/$it").exists() }
+        }
+
+        // VAD 模型文件检查
+        fun isVadComplete(): Boolean {
+            return vadDir.isDirectory && file("$vadDir/silero_vad.onnx").exists()
+        }
+
+        // TTS 模型文件检查
+        fun isTtsComplete(): Boolean {
+            if (!ttsDir.isDirectory) return false
+            return file("$ttsDir/zh_CN-huayan-medium.onnx").exists()
+        }
+
+        val kwsComplete = isKwsComplete()
+        val asrComplete = isAsrComplete()
+        val vadComplete = isVadComplete()
+        val ttsComplete = isTtsComplete()
 
         if (kwsComplete && asrComplete && vadComplete && ttsComplete) {
             println("所有模型已存在，跳过下载:")
             println("  KWS: ${kwsDir.name}")
             println("  ASR: ${asrDir.name}")
-            println("  VAD: ${vadFile.name}")
+            println("  VAD: ${vadDir.name}")
             println("  TTS: ${ttsDir.name}")
             return@doLast
         }
@@ -162,76 +179,63 @@ val downloadModels by tasks.registering {
             println("[$desc] 完成: ${dest.length() / 1024 / 1024} MB")
         }
 
-        fun extractZip(zipFile: File, destDir: File, namePrefix: String) {
-            if (destDir.exists()) {
-                println("[${namePrefix}] 已解压，跳过")
-                return
-            }
-            println("[$namePrefix] 解压: ${zipFile.name}")
-            exec { commandLine("tar", "-xzf", zipFile.absolutePath, "-C", assetsDir.absolutePath) }
-            // 重命名解压后的目录为预期名称
-            assetsDir.listFiles()?.find { it.isDirectory && it.name.startsWith(namePrefix) }?.let { actual ->
-                if (actual != destDir) actual.renameTo(destDir)
-            }
-        }
-
-        fun extractTarGz(tarFile: File, destDir: File, namePrefix: String) {
-            if (destDir.exists()) {
-                println("[${namePrefix}] 已解压，跳过")
+        // 解压 tar.bz2 函数
+        fun extractTarBz2(tarFile: File, namePrefix: String) {
+            val extractedDir = file("${assetsDir}/$namePrefix")
+            if (extractedDir.exists()) {
+                println("[$namePrefix] 已解压，跳过")
                 return
             }
             println("[$namePrefix] 解压: ${tarFile.name}")
-            exec { commandLine("tar", "-xzf", tarFile.absolutePath, "-C", assetsDir.absolutePath) }
+            // tar.bz2 格式使用 -xjf 参数
+            exec { commandLine("tar", "-xjf", tarFile.absolutePath, "-C", assetsDir.absolutePath) }
+            // 重命名解压后的目录为预期名称
             assetsDir.listFiles()?.find { it.isDirectory && it.name.startsWith(namePrefix) }?.let { actual ->
-                if (actual != destDir) actual.renameTo(destDir)
+                if (actual != extractedDir) {
+                    actual.renameTo(extractedDir)
+                }
             }
         }
 
         // 1. KWS 模型
         if (!kwsComplete) {
-            val kwsZip = file("${tempDir}/kws.zip")
-            download(kwsUrl, kwsZip, "KWS")
-            extractZip(kwsZip, kwsDir, "sherpa-onnx-kws")
+            val kwsTar = file("${tempDir}/kws.tar.bz2")
+            download(kwsUrl, kwsTar, "KWS")
+            extractTarBz2(kwsTar, "sherpa-onnx-kws-zipformer-gigaspeech-3.3M")
         } else {
             println("[KWS] 已存在，跳过")
         }
 
-        // 2. ASR 模型 (单独下载每个文件)
+        // 2. ASR 模型 (paraformer_large)
         if (!asrComplete) {
-            asrDir.mkdirs()
-            val asrFiles = listOf(
-                "encoder.int8.onnx" to "encoder.int8.onnx",
-                "decoder.onnx" to "decoder.onnx",
-                "joiner.int8.onnx" to "joiner.int8.onnx",
-                "tokens.txt" to "tokens.txt"
-            )
-            asrFiles.forEach { (fileName, urlSuffix) ->
-                val fileUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-$asrModelVersion/resolve/main/$urlSuffix"
-                val destFile = file("${asrDir}/$fileName")
-                if (!destFile.exists() || destFile.length() == 0L) {
-                    println("[ASR] 下载: $fileName")
-                    exec { commandLine("curl", "-L", "-o", destFile.absolutePath, fileUrl) }
-                    println("[ASR] 完成: $fileName (${destFile.length() / 1024 / 1024} MB)")
-                } else {
-                    println("[ASR] 已存在: $fileName")
-                }
-            }
+            val asrTar = file("${tempDir}/asr.tar.bz2")
+            download(asrUrl, asrTar, "ASR")
+            extractTarBz2(asrTar, "sherpa-onnx-$asrModelVersion-vad-asr-zh_en-paraformer_large")
         } else {
             println("[ASR] 已存在，跳过")
         }
 
-        // 3. VAD 模型
+        // 3. VAD 模型 (silero_vad.onnx) - 单独下载
         if (!vadComplete) {
-            download(vadUrl, vadFile, "VAD")
+            vadDir.mkdirs()
+            val vadFile = file("${vadDir}/silero_vad.onnx")
+            val vadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+            if (!vadFile.exists() || vadFile.length() == 0L) {
+                println("[VAD] 下载: $vadUrl")
+                exec { commandLine("curl", "-L", "-o", vadFile.absolutePath, vadUrl) }
+                println("[VAD] 完成: ${vadFile.length() / 1024 / 1024} MB")
+            } else {
+                println("[VAD] 已存在，跳过")
+            }
         } else {
             println("[VAD] 已存在，跳过")
         }
 
         // 4. TTS 模型
         if (!ttsComplete) {
-            val ttsTar = file("${tempDir}/tts.tar.gz")
+            val ttsTar = file("${tempDir}/tts.tar.bz2")
             download(ttsUrl, ttsTar, "TTS")
-            extractTarGz(ttsTar, ttsDir, "vits")
+            extractTarBz2(ttsTar, "vits-piper-zh_CN-huayan-medium")
         } else {
             println("[TTS] 已存在，跳过")
         }
@@ -243,7 +247,7 @@ val downloadModels by tasks.registering {
         println("=== 模型下载完成 ===")
         if (kwsDir.exists()) println("  KWS: ${kwsDir.name}")
         if (asrDir.exists()) println("  ASR: ${asrDir.name}")
-        if (vadFile.exists()) println("  VAD: ${vadFile.name}")
+        if (vadDir.exists()) println("  VAD: ${vadDir.name}")
         if (ttsDir.exists()) println("  TTS: ${ttsDir.name}")
     }
 }
