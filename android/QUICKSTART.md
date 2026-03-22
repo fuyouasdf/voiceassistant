@@ -8,33 +8,39 @@
 
 ## 前提条件
 
-### 1. 下载 Sherpa-ONNX 库
-本项目使用 Sherpa-ONNX 作为语音识别/合成引擎，需要下载 AAR 文件：
+### 1. 构建 Sherpa-ONNX AAR（首次）
+需要编译本地 AAR 模块：
 
-**下载页面**: https://github.com/k2-fsa/sherpa-onnx/releases
-**当前版本**: v1.12.32 (2026-03-22)
-
-**步骤**：
-1. 打开上方链接，找到最新版本的 Android AAR 文件
-2. 下载 `sherpa-onnx-android-aar-{version}.aar`
-3. 重命名为 `sherpa-onnx-android.aar`
-4. 复制到以下位置：
-   - `app/libs/sherpa-onnx-android.aar`
-   - `core/libs/sherpa-onnx-android.aar`
-
-### 2. 下载模型文件（可选）
-如需本地模型，请运行：
 ```bash
 cd android
-./scripts/download_models.sh
+./gradlew :sherpa-onnx-aar:sherpa_onnx:assembleRelease
 ```
+
+> **注意**: 需要 NDK 和 CMake，请确保 Android SDK 中已安装。
+
+### 2. 下载模型文件
+通过 Gradle 任务自动下载（约 298 MB）：
+
+```bash
+cd android
+./gradlew :app:downloadModels
+```
+
+该任务会下载以下模型到 `app/src/main/assets/`：
+
+| 模型 | 用途 | 大小 |
+|------|------|------|
+| sherpa-onnx-kws-zipformer-wenetspeech-3.3M | 关键词唤醒 | ~35 MB |
+| sherpa-onnx-streaming-zipformer-bilingual-zh-en | 语音识别 | ~200 MB |
+| silero_vad.onnx | 语音活动检测 | ~2 MB |
+| vits-piper-zh_CN-huayan-medium | 语音合成 | ~61 MB |
 
 ## 构建步骤
 
-### 1. 下载模型文件
+### 1. 下载模型
 ```bash
 cd android
-./scripts/download_models.sh
+./gradlew :app:downloadModels
 ```
 
 ### 2. 打开项目
@@ -55,7 +61,7 @@ cd android
 
 ## 测试流程
 
-1. **首次启动** - 自动下载模型（约 230MB）
+1. **首次启动** - 模型已在构建前通过 `downloadModels` 任务下载完毕
 2. **主界面** - 显示待机状态
 3. **语音唤醒** - 喊唤醒词或点击手动触发
 4. **播放音乐** - 说 "播放周杰伦的 Mine Mine"
@@ -64,11 +70,11 @@ cd android
 ## 项目结构
 ```
 android/
-├── app/          # UI + Service
-├── core/         # 语音管道 + DLNA
-├── data/         # 数据层
-├── domain/       # 领域层
-└── scripts/      # 工具脚本
+├── app/              # UI + Service（含 downloadModels 任务）
+├── core/             # 语音管道 + DLNA
+├── data/             # 数据层
+├── domain/           # 领域层
+└── sherpa-onnx-aar/  # Sherpa-ONNX 本地 AAR 模块
 ```
 
 ## 已知问题

@@ -53,4 +53,4 @@ Thumbs.db
 
 # Local libs (Sherpa-ONNX AAR - see QUICKSTART.md)
 **/libs/
-
+memory

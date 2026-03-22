@@ -128,7 +128,7 @@ cd voice-assistant
 
 # 2. 下载模型文件
 cd android
-./scripts/download_models.sh
+./gradlew :app:downloadModels
 
 # 3. 打开项目
 # Android Studio -> Open -> 选择 android/ 目录
@@ -207,8 +207,7 @@ voice-assistant/
 │   │   └── src/main/java/com/voiceassistant/domain/
 │   │       ├── repository/      # 仓库接口
 │   │       └── usecase/        # 用例
-│   └── scripts/                 # 工具脚本
-│       └── download_models.sh   # 模型下载
+│   └── sherpa-onnx-aar/        # Sherpa-ONNX 本地 AAR
 ├── VOICE_ASSISTANT_DESIGN.md    # 设计文档
 ├── ARCHITECTURE_ANDROID.md      # 架构文档
 ├── ARCHITECTURE_VOICE_PIPELINE.md # 语音管道文档

@@ -44,7 +44,7 @@ cd voice-assistant
 
 # Download models
 cd android
-./scripts/download_models.sh
+./gradlew :app:downloadModels
 
 # Open in Android Studio
 # File -> Open -> Select android/ directory
