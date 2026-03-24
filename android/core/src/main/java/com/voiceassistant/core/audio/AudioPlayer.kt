@@ -8,20 +8,108 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 /**
- * Audio player for playing TTS audio
+ * Audio player for playing TTS audio with streaming support and channel reuse
  */
 class AudioPlayer {
 
-    companion object {
-        private const val SAMPLE_RATE = 16000
-    }
-
     private var audioTrack: AudioTrack? = null
+    private var currentSampleRate: Int = 44100
+    private var isStreamPrepared: Boolean = false
 
     /**
-     * Play audio samples and call onComplete when done
+     * Prepare audio track for streaming playback
+     * Call this before writing samples incrementally
      */
-    fun play(samples: FloatArray, onComplete: () -> Unit) {
+    fun prepareStream(sampleRate: Int): Boolean {
+        return try {
+            currentSampleRate = sampleRate
+            val minBuffer = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+
+            // Release existing track if any
+            release()
+
+            audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(minBuffer * 4)  // Larger buffer for streaming
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+
+            audioTrack?.play()
+            isStreamPrepared = true
+            Timber.d("AudioPlayer: stream prepared at $sampleRate Hz")
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "AudioPlayer: failed to prepare stream")
+            false
+        }
+    }
+
+    /**
+     * Write samples to the audio track (for streaming)
+     * Returns number of bytes written
+     */
+    fun write(samples: FloatArray): Int {
+        val track = audioTrack ?: return 0
+        return try {
+            val shortSamples = ShortArray(samples.size) { i ->
+                (samples[i] * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort()
+            }
+            track.write(shortSamples, 0, shortSamples.size)
+        } catch (e: Exception) {
+            Timber.e(e, "AudioPlayer: error writing samples")
+            0
+        }
+    }
+
+    /**
+     * Stop and finalize the current stream
+     */
+    fun finalizeStream() {
+        try {
+            audioTrack?.stop()
+            isStreamPrepared = false
+        } catch (e: Exception) {
+            Timber.w(e, "AudioPlayer: error stopping stream")
+        }
+    }
+
+    /**
+     * Release the audio track
+     */
+    fun release() {
+        try {
+            audioTrack?.stop()
+            audioTrack?.release()
+        } catch (e: Exception) {
+            Timber.w(e, "AudioPlayer: error releasing")
+        } finally {
+            audioTrack = null
+            isStreamPrepared = false
+        }
+    }
+
+    /**
+     * Play audio samples with specified sample rate and call onComplete when done
+     */
+    fun play(samples: FloatArray, sampleRate: Int = 44100, onComplete: () -> Unit) {
         if (samples.isEmpty()) {
             Timber.w("AudioPlayer: no samples to play")
             onComplete()
@@ -29,22 +117,22 @@ class AudioPlayer {
         }
 
         val minBuffer = AudioTrack.getMinBufferSize(
-            SAMPLE_RATE,
+            sampleRate,
             AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_FLOAT
+            AudioFormat.ENCODING_PCM_16BIT
         )
 
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build()
             )
             .setAudioFormat(
                 AudioFormat.Builder()
-                    .setSampleRate(SAMPLE_RATE)
-                    .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .build()
             )
@@ -57,27 +145,12 @@ class AudioPlayer {
         // Play in background
         Thread {
             try {
-                // Write in chunks to allow streaming
-                val chunkSize = 4096
-                var offset = 0
-
-                while (offset < samples.size) {
-                    val length = minOf(chunkSize, samples.size - offset)
-                    val chunk = samples.copyOfRange(offset, offset + length)
-
-                    // Convert Float to ByteArray (Float = 4 bytes)
-                    val byteBuffer = ByteArray(length * 4)
-                    for (i in chunk.indices) {
-                        val bits = java.lang.Float.floatToIntBits(chunk[i])
-                        byteBuffer[i * 4] = (bits and 0xFF).toByte()
-                        byteBuffer[i * 4 + 1] = ((bits shr 8) and 0xFF).toByte()
-                        byteBuffer[i * 4 + 2] = ((bits shr 16) and 0xFF).toByte()
-                        byteBuffer[i * 4 + 3] = ((bits shr 24) and 0xFF).toByte()
-                    }
-
-                    audioTrack?.write(byteBuffer, 0, byteBuffer.size)
-                    offset += length
+                // Convert Float samples to Short array (PCM 16-bit)
+                val shortSamples = ShortArray(samples.size) { i ->
+                    (samples[i] * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                 }
+
+                audioTrack?.write(shortSamples, 0, shortSamples.size)
 
                 audioTrack?.stop()
                 audioTrack?.release()
@@ -105,18 +178,16 @@ class AudioPlayer {
      * Stop current playback
      */
     fun stop() {
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (e: Exception) {
-            Timber.w(e, "Error stopping audio")
-        } finally {
-            audioTrack = null
-        }
+        release()
     }
 
     /**
      * Check if currently playing
      */
     fun isPlaying(): Boolean = audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING
+
+    /**
+     * Check if stream is prepared
+     */
+    fun isStreamPrepared(): Boolean = isStreamPrepared
 }

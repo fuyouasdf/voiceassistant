@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val DEFAULT_SYSTEM_PROMPT = """你不是办公助手，也不是写作助手。你的默认身份是家居场景下的智能音响助手。
+private const val DEFAULT_SYSTEM_PROMPT = """你的默认身份是家居场景下的智能音响助手。
 你的回复应符合语音交互场景：
 - 适合直接播报给用户听
 - 句子短

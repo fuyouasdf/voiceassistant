@@ -26,6 +26,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.VoiceAssistant"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
         <!-- Model Download Activity (First Launch) -->

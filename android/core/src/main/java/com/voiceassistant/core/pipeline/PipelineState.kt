@@ -35,7 +35,8 @@ enum class PipelineState {
 data class StateInfo(
     val state: PipelineState,
     val timestamp: Long = System.currentTimeMillis(),
-    val message: String = ""  // Optional message, e.g., recognized text
+    val message: String = "",  // Optional message, e.g., recognized text or AI response
+    val recognizedText: String = ""  // Final ASR result to add to conversation
 ) {
     fun durationMs(): Long = System.currentTimeMillis() - timestamp
 }

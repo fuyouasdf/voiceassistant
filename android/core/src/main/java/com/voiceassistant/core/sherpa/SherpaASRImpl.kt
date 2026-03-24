@@ -11,7 +11,6 @@ import timber.log.Timber
 class SherpaASRImpl(private val context: Context) : SherpaASR {
 
     private var recognizer: OnlineRecognizer? = null
-    private val partialResultFilter = PartialResultFilter()
 
     override fun initialize(modelPath: String, provider: String): Boolean {
         return try {
@@ -118,16 +117,19 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
 
         Timber.d("ASR streaming recognition: ${audio.size} samples")
 
-        return try {
+        try {
             val stream = r.createStream()
+            // 重置 stream 状态，确保新的识别从干净状态开始
+            r.reset(stream)
+
             val interval = 0.1  // 100ms per chunk
             val bufferSize = (interval * 16000).toInt()
             var offset = 0
             var isEndpointReached = false
             var finalText = ""
-            partialResultFilter.reset()
 
-            while (offset < audio.size && !isEndpointReached) {
+            // 先处理完所有音频（不检查 endpoint，避免过早退出）
+            while (offset < audio.size) {
                 val end = minOf(offset + bufferSize, audio.size)
                 val chunk = audio.copyOfRange(offset, end)
 
@@ -137,33 +139,35 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
                     r.decode(stream)
                 }
 
-                // Get partial result
-                val partialResult = r.getResult(stream)
-                val partialText = partialResult.text ?: ""
-                // 使用过滤器只在有新增文字时触发回调
-                if (partialResultFilter.shouldNotify(partialText)) {
+                // 获取中间结果并回调，实现流式显示
+                val partialText = r.getResult(stream).text ?: ""
+                Timber.d("ASR partial: '$partialText'")
+                if (partialText.isNotEmpty()) {
                     listener.onPartialResult(partialText)
-                }
-
-                // Check for endpoint
-                isEndpointReached = r.isEndpoint(stream)
-                if (isEndpointReached) {
-                    // Add tail padding for better recognition
-                    val tailPaddings = FloatArray((0.8 * 16000).toInt())
-                    stream.acceptWaveform(tailPaddings, sampleRate = 16000)
-                    while (r.isReady(stream)) {
-                        r.decode(stream)
-                    }
-
-                    finalText = r.getResult(stream).text ?: ""
-                    listener.onFinalResult(finalText)
-                    listener.onEndpointDetected()
-                    r.reset(stream)
                 }
 
                 offset = end
             }
 
+            // 统一在结束后检查 endpoint
+            isEndpointReached = r.isEndpoint(stream)
+            if (isEndpointReached) {
+                // 添加尾部填充以获得更好的识别效果
+                val tailPaddings = FloatArray((0.8 * 16000).toInt())
+                stream.acceptWaveform(tailPaddings, sampleRate = 16000)
+                while (r.isReady(stream)) {
+                    r.decode(stream)
+                }
+            }
+
+            // 获取最终结果
+            finalText = r.getResult(stream).text ?: ""
+            if (finalText.isNotEmpty()) {
+                listener.onFinalResult(finalText)
+            }
+
+            // 识别完成后重置 stream 状态，为下一次识别做准备
+            r.reset(stream)
             stream.release()
         } catch (e: Exception) {
             Timber.e(e, "ASR streaming recognition error")

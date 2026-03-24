@@ -28,4 +28,10 @@ interface SherpaTTS {
      * Release resources
      */
     fun release()
+
+    /**
+     * Get the sample rate of the TTS engine output
+     * @return Sample rate in Hz
+     */
+    fun getSampleRate(): Int
 }

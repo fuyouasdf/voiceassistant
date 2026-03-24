@@ -11,7 +11,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -201,23 +204,63 @@ class VoicePipeline(
 
         scope.launch {
             try {
-                // Initialize ASR (the heavy one that takes time)
-                if (!asrManager.isLoaded()) {
-                    _state.value = _state.value.copy(message = "正在加载语音识别...")
-                    asrManager.ensureInitialized()
+                // Initialize ASR and TTS in parallel for faster startup
+                val asrDeferred = async {
+                    if (!asrManager.isLoaded()) {
+                        _state.value = _state.value.copy(message = "正在加载语音识别...")
+                        asrManager.ensureInitialized()
+                    }
                 }
 
-                // Initialize TTS
-                if (!isTtsLoaded) {
-                    _state.value = _state.value.copy(message = "正在加载语音合成...")
-                    ensureTtsInitialized()
+                val ttsDeferred = async {
+                    if (!isTtsLoaded) {
+                        _state.value = _state.value.copy(message = "正在加载语音合成...")
+                        ensureTtsInitialized()
+                    }
                 }
+
+                // Wait for both to complete
+                asrDeferred.await()
+                ttsDeferred.await()
 
                 Timber.d("Background initialization complete")
                 transitionTo(PipelineState.IDLE, "语音识别已就绪")
+
+                // Test TTS after initialization
+                testTTS()
             } catch (e: Exception) {
                 Timber.e(e, "Background initialization failed")
                 transitionTo(PipelineState.IDLE, "语音识别准备就绪")
+            }
+        }
+    }
+
+    /**
+     * Test TTS synthesis to verify it works correctly
+     */
+    private fun testTTS() {
+        scope.launch {
+            try {
+                // 先进入SPEAKING状态，让用户知道正在测试
+                transitionTo(PipelineState.SPEAKING, "测试语音中...")
+
+                val testText = "已启动"
+                val samples = tts.synthesize(testText)
+
+                if (samples.isNotEmpty()) {
+                    val sampleRate = tts.getSampleRate()
+                    Timber.d("TTS test SUCCESS: synthesized ${samples.size} samples at $sampleRate Hz for '$testText'")
+                    // 播放音频并等待完成
+                    playAudio(samples, sampleRate)
+                    // 播放完成后切换回IDLE
+                    transitionTo(PipelineState.IDLE, "语音识别已就绪")
+                } else {
+                    Timber.e("TTS test FAILED: empty audio output")
+                    transitionTo(PipelineState.IDLE, "语音测试失败")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "TTS test FAILED with exception")
+                transitionTo(PipelineState.IDLE, "语音识别已就绪")
             }
         }
     }
@@ -256,6 +299,27 @@ class VoicePipeline(
                 // 先停止任何正在进行的操作，然后返回IDLE
                 transitionTo(PipelineState.IDLE)
             }
+        }
+    }
+
+    /**
+     * Stop recording and start recognition with collected audio
+     * Called when user releases the push-to-talk button
+     */
+    fun stopRecording() {
+        Timber.d("Manual stop recording triggered")
+        audioCapture.stop()
+
+        // Get collected audio and start recognition
+        val audioData = audioBuffer.flattenToFloatArray()
+        if (audioData.isNotEmpty()) {
+            currentJob?.cancel()
+            currentJob = scope.launch {
+                startRecognition(audioData)
+            }
+        } else {
+            // No audio collected, return to IDLE
+            transitionTo(PipelineState.IDLE, message = "未检测到语音")
         }
     }
 
@@ -356,22 +420,29 @@ class VoicePipeline(
     }
 
     private suspend fun startRecognition(audioData: FloatArray) {
-        transitionTo(PipelineState.RECOGNIZING, message = "正在识别...")
+        transitionTo(PipelineState.RECOGNIZING, message = "")
+        Timber.d("startRecognition: audioData size=${audioData.size}")
 
         try {
-            // 使用流式识别，实时显示部分结果
+            // 使用流式识别，只在停顿时显示最终结果
             var finalText = ""
 
             asrManager.recognizeStreaming(audioData, object : SherpaASR.RecognitionListener {
                 override fun onPartialResult(text: String) {
-                    // 实时更新部分识别结果
-                    Timber.d("ASR partial: '$text'")
-                    _state.value = _state.value.copy(message = "识别中: $text")
+                    Timber.d("onPartialResult: '$text'")
+                    // 直接传完整文本，让 UI 覆盖显示
+                    scope.launch {
+                        _state.value = _state.value.copy(message = text)
+                    }
                 }
 
                 override fun onFinalResult(text: String) {
-                    finalText = text
-                    Timber.d("ASR final: '$text'")
+                    scope.launch {
+                        finalText = text
+                        Timber.d("ASR final: '$text'")
+                        // 设置 recognizedText 用于添加到对话
+                        _state.value = _state.value.copy(recognizedText = text)
+                    }
                 }
 
                 override fun onEndpointDetected() {
@@ -380,7 +451,7 @@ class VoicePipeline(
             })
 
             if (finalText.isNotBlank()) {
-                _state.value = _state.value.copy(message = "你说: $finalText")
+                _state.value = _state.value.copy(message = finalText)
                 processIntent(finalText)
             } else {
                 // 识别为空，返回待机
@@ -425,19 +496,47 @@ class VoicePipeline(
             // Ensure TTS is initialized
             ensureTtsInitialized()
 
-            // Synthesize text to audio
-            val samples = tts.synthesize(text)
+            // Split long text into sentences for faster initial response
+            val sentences = splitIntoSentences(text)
+            val sampleRate = tts.getSampleRate()
 
-            if (samples.isEmpty()) {
-                // TTS failed - fall back to text display
-                Timber.w("TTS synthesis returned empty, falling back to text display")
-                transitionTo(PipelineState.IDLE, message = text)
-            } else {
-                // Play synthesized audio and wait for completion
-                playAudio(samples)
+            Timber.d("Speaking: ${sentences.size} sentences")
 
-                transitionTo(PipelineState.IDLE, message = "")
+            // Synthesize all sentences in parallel using coroutineScope
+            val synthesizedAudios: List<FloatArray> = coroutineScope {
+                val deferredList = sentences.map { sentence ->
+                    async(Dispatchers.Default) {
+                        if (sentence.isBlank()) {
+                            FloatArray(0)
+                        } else {
+                            try {
+                                tts.synthesize(sentence.trim())
+                            } catch (e: Exception) {
+                                Timber.e(e, "Error synthesizing: $sentence")
+                                FloatArray(0)
+                            }
+                        }
+                    }
+                }
+                deferredList.awaitAll().filter { it.isNotEmpty() }
             }
+
+            // Play all synthesized audio sequentially
+            for ((index, samples) in synthesizedAudios.withIndex()) {
+                // Check if interrupted
+                if (_state.value.state != PipelineState.SPEAKING) {
+                    Timber.d("Speaking interrupted at audio $index")
+                    break
+                }
+
+                try {
+                    playAudio(samples, sampleRate)
+                } catch (e: Exception) {
+                    Timber.e(e, "Error playing audio $index")
+                }
+            }
+
+            transitionTo(PipelineState.IDLE, message = "")
 
             if (isCoreInitialized) {
                 startKWSListening()
@@ -452,11 +551,49 @@ class VoicePipeline(
     }
 
     /**
+     * Split text into sentences for faster TTS response
+     */
+    private fun splitIntoSentences(text: String): List<String> {
+        // Split by common sentence delimiters
+        val sentences = mutableListOf<String>()
+        var current = StringBuilder()
+
+        for (char in text) {
+            current.append(char)
+            if (char in "。！？；") {
+                sentences.add(current.toString())
+                current = StringBuilder()
+            }
+        }
+
+        // Add remaining text
+        if (current.isNotBlank()) {
+            sentences.add(current.toString())
+        }
+
+        // Merge very short sentences (less than 10 chars) with the next one
+        val merged = mutableListOf<String>()
+        val buffer = StringBuilder()
+        for (sentence in sentences) {
+            buffer.append(sentence)
+            if (buffer.length >= 10 || sentence.endsWith("！") || sentence.endsWith("？")) {
+                merged.add(buffer.toString())
+                buffer.clear()
+            }
+        }
+        if (buffer.isNotBlank()) {
+            merged.add(buffer.toString())
+        }
+
+        return merged.ifEmpty { listOf(text) }
+    }
+
+    /**
      * Play audio using AudioPlayer and suspend until completion
      */
-    private suspend fun playAudio(samples: FloatArray) = suspendCancellableCoroutine { cont ->
+    private suspend fun playAudio(samples: FloatArray, sampleRate: Int) = suspendCancellableCoroutine { cont ->
         try {
-            audioPlayer.play(samples) {
+            audioPlayer.play(samples, sampleRate) {
                 if (cont.isActive) {
                     cont.resumeWith(Result.success(Unit))
                 }
@@ -479,7 +616,7 @@ class VoicePipeline(
 
     private fun transitionTo(newState: PipelineState, message: String = "") {
         val oldState = _state.value.state
-        _state.value = StateInfo(newState, message = message)
+        _state.value = StateInfo(newState, message = message, recognizedText = "")
         Timber.d("State transition: $oldState -> $newState")
     }
 

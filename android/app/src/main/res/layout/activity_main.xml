@@ -186,7 +186,10 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp"
                         app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp" />
+                        app:chipStrokeWidth="0dp"
+                        app:chipIcon="@drawable/ic_music"
+                        app:chipIconTint="@color/primary"
+                        app:chipIconVisible="true" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipLight"
@@ -197,7 +200,10 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp"
                         app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp" />
+                        app:chipStrokeWidth="0dp"
+                        app:chipIcon="@drawable/ic_light"
+                        app:chipIconTint="@color/secondary"
+                        app:chipIconVisible="true" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipWeather"
@@ -208,7 +214,10 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp"
                         app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp" />
+                        app:chipStrokeWidth="0dp"
+                        app:chipIcon="@drawable/ic_weather"
+                        app:chipIconTint="@color/info"
+                        app:chipIconVisible="true" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipAlarm"
@@ -219,7 +228,10 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp"
                         app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp" />
+                        app:chipStrokeWidth="0dp"
+                        app:chipIcon="@drawable/ic_alarm"
+                        app:chipIconTint="@color/warning"
+                        app:chipIconVisible="true" />
 
                 </LinearLayout>
             </HorizontalScrollView>

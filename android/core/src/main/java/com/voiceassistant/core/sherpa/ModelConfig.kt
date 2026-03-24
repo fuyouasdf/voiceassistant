@@ -88,7 +88,7 @@ class ModelConfig(private val context: Context) {
         return when (type) {
             ModelType.KWS -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2025-02-28.tar.bz2"
             ModelType.ASR -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.30/sherpa-onnx-v1.12.30-vad-asr-zh_en-paraformer_large.tar.bz2"
-            ModelType.TTS -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-huayan-medium-2025-01-15.tar.bz2"
+            ModelType.TTS -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-huayan-medium.tar.bz2"
         }
     }
     

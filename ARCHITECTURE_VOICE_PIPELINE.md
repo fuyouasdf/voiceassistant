@@ -2,8 +2,8 @@
 
 > 从麦克风输入到语音输出的完整数据流
 
-**版本**: 1.0  
-**日期**: 2026-03-20
+**版本**: 1.3
+**日期**: 2026-03-23
 
 ---
 
@@ -307,7 +307,60 @@ class AudioCapture(
 }
 ```
 
-### 3. 环形音频缓冲区 (CircularAudioBuffer)
+### 3. 音频播放器 (AudioPlayer)
+
+> **重要**: TTS 输出为 FloatArray (22050Hz)，AudioTrack 需使用 PCM 16-bit 格式播放
+
+```kotlin
+class AudioPlayer {
+    private var audioTrack: AudioTrack? = null
+
+    fun play(samples: FloatArray, sampleRate: Int = 22050, onComplete: () -> Unit) {
+        val minBuffer = AudioTrack.getMinBufferSize(
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT  // 使用 16-bit 而非 FLOAT
+        )
+
+        audioTrack = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(minBuffer * 2)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+
+        audioTrack?.play()
+
+        Thread {
+            // Float (-1.0 ~ 1.0) → Short (-32768 ~ 32767)
+            val shortSamples = ShortArray(samples.size) { i ->
+                (samples[i] * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort()
+            }
+            audioTrack?.write(shortSamples, 0, shortSamples.size)
+
+            audioTrack?.stop()
+            audioTrack?.release()
+            audioTrack = null
+            onComplete()
+        }.start()
+    }
+}
+```
+
+### 4. 环形音频缓冲区 (CircularAudioBuffer)
 
 ```kotlin
 class CircularAudioBuffer(size: Int) {
@@ -419,7 +472,179 @@ data class PreprocessorConfig(
 )
 ```
 
-### 5. VAD引擎接口
+### 5. ASR 模块
+
+#### 5.1 接口定义 (SherpaASR.kt)
+
+```kotlin
+interface SherpaASR {
+    interface RecognitionListener {
+        fun onPartialResult(text: String)      // 实时中间结果
+        fun onFinalResult(text: String)       // 最终识别结果
+        fun onEndpointDetected()               // 端点检测到（用户停止说话）
+    }
+
+    fun initialize(modelPath: String, provider: String = "cpu"): Boolean
+    suspend fun recognize(audio: FloatArray): String
+    suspend fun recognizeStreaming(audio: FloatArray, listener: RecognitionListener)
+    fun reset()
+    fun release()
+}
+```
+
+#### 5.2 ASRManager 生命周期管理
+
+```kotlin
+class ASRManager(
+    private val asr: SherpaASR,
+    private val modelPath: String
+) {
+    private var isLoaded = false
+    private val provider: String = "cpu"
+
+    suspend fun ensureInitialized() {
+        if (isLoaded) return
+        withContext(Dispatchers.IO) {
+            asr.initialize(modelPath, provider)
+            isLoaded = true
+        }
+    }
+
+    suspend fun recognize(audioData: FloatArray): String {
+        ensureInitialized()
+        return withContext(Dispatchers.Default) {
+            asr.recognize(audioData)
+        }
+    }
+
+    suspend fun recognizeStreaming(
+        audioData: FloatArray,
+        listener: SherpaASR.RecognitionListener
+    ) {
+        ensureInitialized()
+        withContext(Dispatchers.Default) {
+            asr.recognizeStreaming(audioData, listener)
+        }
+    }
+}
+```
+
+#### 5.3 流式识别实现 (SherpaASRImpl.kt)
+
+使用 **Sherpa-ONNX OnlineRecognizer** 进行流式识别，模型为 `zipformer2`：
+
+```kotlin
+class SherpaASRImpl(private val context: Context) : SherpaASR {
+
+    private var recognizer: OnlineRecognizer? = null
+
+    override fun initialize(modelPath: String, provider: String): Boolean {
+        val modelDir = modelPath.substringAfterLast("/")
+
+        val config = OnlineRecognizerConfig(
+            featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80),
+            modelConfig = OnlineModelConfig(
+                transducer = OnlineTransducerModelConfig(
+                    encoder = "$modelDir/encoder.int8.onnx",
+                    decoder = "$modelDir/decoder.onnx",
+                    joiner = "$modelDir/joiner.int8.onnx"
+                ),
+                tokens = "$modelDir/tokens.txt",
+                numThreads = 4,
+                provider = provider,
+                modelType = "zipformer2"
+            ),
+            endpointConfig = EndpointConfig(
+                rule1 = EndpointRule(false, 4.0f, 0.0f),   // 非语音连续超时
+                rule2 = EndpointRule(true, 2.5f, 0.0f),   // 语音段落后静音
+                rule3 = EndpointRule(false, 0.0f, 30.0f)  // 最大30秒
+            ),
+            enableEndpoint = true,
+            decodingMethod = "greedy_search"
+        )
+
+        recognizer = OnlineRecognizer(assetManager = context.assets, config = config)
+        return true
+    }
+
+    override suspend fun recognizeStreaming(
+        audio: FloatArray,
+        listener: SherpaASR.RecognitionListener
+    ) {
+        val r = recognizer ?: return
+        val stream = r.createStream()
+        r.reset(stream)
+
+        val bufferSize = (0.1 * 16000).toInt() // 100ms chunk
+
+        // 1. 处理所有音频数据
+        var offset = 0
+        while (offset < audio.size) {
+            val end = minOf(offset + bufferSize, audio.size)
+            val chunk = audio.copyOfRange(offset, end)
+            stream.acceptWaveform(chunk, sampleRate = 16000)
+            while (r.isReady(stream)) { r.decode(stream) }
+            offset = end
+        }
+
+        // 2. 检查endpoint并添加尾部填充
+        if (r.isEndpoint(stream)) {
+            val tailPaddings = FloatArray((0.8 * 16000).toInt())
+            stream.acceptWaveform(tailPaddings, sampleRate = 16000)
+            while (r.isReady(stream)) { r.decode(stream) }
+        }
+
+        // 3. 获取最终结果
+        val text = r.getResult(stream).text ?: ""
+        if (text.isNotEmpty()) listener.onFinalResult(text)
+
+        // 4. 清理
+        r.reset(stream)
+        stream.release()
+    }
+}
+```
+
+#### 5.4 部分结果过滤器 (PartialResultFilter)
+
+用于过滤重复的中间识别结果，避免UI每字一行更新：
+
+```kotlin
+class PartialResultFilter {
+    private var lastText = ""
+
+    fun shouldNotify(newText: String): Boolean {
+        // 只有新增文字时才通知
+        if (newText.isNotEmpty() && newText.length > lastText.length) {
+            lastText = newText
+            return true
+        }
+        return false
+    }
+
+    fun reset() { lastText = "" }
+}
+```
+
+#### 5.5 模型配置 (ModelConfig.kt)
+
+从 `assets/models/model_config.json` 加载模型配置：
+
+```kotlin
+class ModelConfig(private val context: Context) {
+    fun getModelDir(type: ModelType): File
+    fun getModelFile(type: ModelType, fileKey: String): String
+    fun isModelReady(type: ModelType): Boolean
+}
+
+enum class ModelType { KWS, ASR, TTS }
+
+// ASR 模型信息
+// 名称: sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30
+// 下载: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.30/...
+```
+
+### 7. VAD引擎接口
 
 ```kotlin
 interface VADEngine {
@@ -559,8 +784,15 @@ class EnergyVADEngine(
 │ TTS合成         │
 │ (文字→音频)     │
 └────────┬────────┘
-         │ FloatArray
+         │ FloatArray (16000Hz, Float samples)
          ▼
+┌─────────────────────────────────────┐
+│ AudioPlayer                         │
+│ · PCM 16-bit 输出 (非 FLOAT)        │
+│ · Float → Short 转换                │
+│ · SherpaTTS sample rate: 16000 Hz   │
+└─────────────────┬───────────────────┘
+                  ▼
 ┌─────────────────┐
 │ AudioTrack      │
 │ (播放)          │
@@ -796,3 +1028,27 @@ tts:
 2. **集成 Sherpa-ONNX 引擎**
 3. **实现状态机单元测试**
 4. **性能基准测试**
+
+---
+
+## 附录：推荐模型
+
+> 基于 [sherpa-onnx 预训练模型](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/index.html)
+
+### 模型组合
+
+| 组件 | 模型 | 语言 | 备注 |
+|------|------|------|------|
+| **ASR** | `sherpa-onnx-streaming-paraformer-bilingual-zh-en` | 中英双语 | 流式 Paraformer |
+| **TTS** | `vits-piper-zh_CN-huayan-medium` | 中文 | 位于 `assets/vits-piper-zh_CN-huayan-medium/` |
+| **VAD** | `silero-vad` | 通用 | Silero VAD |
+| **KWS** | `sherpa-onnx-streaming-zipformer-en-20m` | 英文 | 20M 参数轻量模型 |
+
+### 下载链接
+
+| 组件 | 地址 |
+|------|------|
+| ASR | https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models |
+| VAD | https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx |
+| TTS | https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models |
+| KWS | https://github.com/k2-fsa/sherpa-onnx/releases/tag/kws-models |

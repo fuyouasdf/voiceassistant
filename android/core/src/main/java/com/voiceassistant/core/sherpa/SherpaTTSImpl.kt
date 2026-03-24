@@ -8,6 +8,7 @@ import java.io.File
 class SherpaTTSImpl(private val context: Context) : SherpaTTS {
 
     private var tts: OfflineTts? = null
+    private var actualSampleRate: Int = 22050 // Default, will be updated on init
 
     override fun initialize(modelPath: String): Boolean {
         return try {
@@ -37,8 +38,9 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
             )
 
             tts = OfflineTts(assetManager = null, config = config)
+            actualSampleRate = tts?.sampleRate() ?: 22050
 
-            Timber.d("TTS initialized with model: $modelPath")
+            Timber.d("TTS initialized with model: $modelPath, sample rate: $actualSampleRate Hz")
             true
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize TTS")
@@ -53,7 +55,7 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
             val audio = t.generate(text, sid = 0, speed = 1.0f)
             val samples = audio.samples
 
-            Timber.d("TTS synthesized: ${text.length} chars -> ${samples.size} samples")
+            Timber.d("TTS synthesized: ${text.length} chars -> ${samples.size} samples at ${audio.sampleRate} Hz")
             samples
         } catch (e: Exception) {
             Timber.e(e, "TTS synthesis error")
@@ -68,6 +70,8 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
     override fun release() {
         tts = null
     }
+
+    override fun getSampleRate(): Int = actualSampleRate
 
     private fun copyModelsFromAssets(assetPath: String): File {
         val destDir = File(context.filesDir, assetPath)

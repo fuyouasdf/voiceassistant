@@ -81,6 +81,8 @@ class MainActivity : AppCompatActivity() {
     // Animators
     private var ringAnimator: ValueAnimator? = null
     private var asrPulseAnimator: ValueAnimator? = null
+    private var typewriterAnimator: ValueAnimator? = null
+    private var floatingAnimator: ValueAnimator? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -145,6 +147,31 @@ class MainActivity : AppCompatActivity() {
         chipLight = findViewById(R.id.chipLight)
         chipWeather = findViewById(R.id.chipWeather)
         chipAlarm = findViewById(R.id.chipAlarm)
+
+        // Start floating animation for empty state hint
+        startFloatingAnimation()
+    }
+
+    // ==================== Empty State Animation ====================
+
+    private fun startFloatingAnimation() {
+        floatingAnimator?.cancel()
+        // Apply initial position
+        tvEmptyHint.translationY = 0f
+        floatingAnimator = ValueAnimator.ofFloat(0f, -10f, 0f).apply {
+            duration = 2000
+            repeatCount = ValueAnimator.INFINITE
+            addUpdateListener { animator ->
+                if (isFinishing || isDestroyed) return@addUpdateListener
+                tvEmptyHint.translationY = animator.animatedValue as Float
+            }
+            start()
+        }
+    }
+
+    private fun stopFloatingAnimation() {
+        floatingAnimator?.cancel()
+        floatingAnimator = null
     }
 
     private fun setupListeners() {
@@ -220,13 +247,20 @@ class MainActivity : AppCompatActivity() {
         waveformContainer.visibility = View.INVISIBLE
         activeRing.visibility = View.INVISIBLE
         stopWaveAnimation()
-        hideAsrCard()
+        // 不要在这里 hideAsrCard，让状态机控制
+
+        // 通知 Pipeline 停止录音并开始识别
+        try {
+            voicePipeline.stopRecording()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to stop recording")
+        }
     }
 
     private fun observeVoicePipeline() {
         lifecycleScope.launch {
             voicePipeline.state.collectLatest { stateInfo ->
-                updateUIFromState(stateInfo.state, stateInfo.message)
+                updateUIFromState(stateInfo.state, stateInfo.message, stateInfo.recognizedText)
             }
         }
     }
@@ -251,7 +285,7 @@ class MainActivity : AppCompatActivity() {
         stopAllAnimations()
     }
 
-    private fun updateUIFromState(state: PipelineState, message: String?) {
+    private fun updateUIFromState(state: PipelineState, message: String?, recognizedText: String = "") {
         runOnUiThread {
             try {
                 when (state) {
@@ -280,17 +314,24 @@ class MainActivity : AppCompatActivity() {
                         startWaveAnimation()
                         showAsrCard()
                         startAsrPulseAnimation()
+                        tvAsrResult.text = "" // 清空之前的文本
                     }
                     PipelineState.RECOGNIZING -> {
                         tvInputState.text = "识别中..."
                         btnInterrupt.visibility = View.INVISIBLE
-                        message?.let { updateAsrText(it, isFinal = true) }
+                        // 增量追加到 ASR Card
+                        message?.let { updateAsrText(it, isFinal = false) }
                     }
                     PipelineState.THINKING -> {
                         tvInputState.text = "思考中..."
                         btnInterrupt.visibility = View.VISIBLE
                         stopAsrPulseAnimation()
                         hideAsrCard()
+                        // 添加用户识别的最终文本到对话
+                        if (recognizedText.isNotBlank()) {
+                            addMessage(recognizedText, true)
+                            lastRecognizedText = recognizedText
+                        }
                     }
                     PipelineState.SPEAKING -> {
                         tvInputState.text = "播报中..."
@@ -320,15 +361,13 @@ class MainActivity : AppCompatActivity() {
                 message?.let {
                     when (state) {
                         PipelineState.RECORDING -> {
+                            // 流式显示中间结果到 ASR Card
                             if (it.isNotBlank()) {
                                 updateAsrText(it, isFinal = false)
                             }
                         }
                         PipelineState.RECOGNIZING -> {
-                            if (it.isNotBlank() && it != lastRecognizedText) {
-                                addMessage(it, true)
-                                lastRecognizedText = it
-                            }
+                            // 不在这里添加消息，等 final result 后在对话中显示
                         }
                         PipelineState.SPEAKING -> {
                             addMessage(it, false)
@@ -357,10 +396,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateAsrText(text: String, isFinal: Boolean) {
-        tvAsrResult.text = text
         if (isFinal) {
+            // 最终结果：直接显示
+            typewriterAnimator?.cancel()
+            tvAsrResult.text = text
             stopAsrPulseAnimation()
+        } else {
+            // 中间结果：直接覆盖显示（不追加）
+            typewriterAnimator?.cancel()
+            tvAsrResult.text = text
         }
+    }
+
+    private fun showTypewriterText(fullText: String) {
+        typewriterAnimator?.cancel()
+        var currentIndex = 0
+        typewriterAnimator = ValueAnimator.ofInt(0, fullText.length).apply {
+            duration = 300
+            addUpdateListener { animator ->
+                if (isFinishing || isDestroyed) return@addUpdateListener
+                currentIndex = animator.animatedValue as Int
+                tvAsrResult.text = fullText.substring(0, currentIndex)
+            }
+            start()
+        }
+    }
+
+    private fun stopTypewriterAnimation() {
+        typewriterAnimator?.cancel()
+        typewriterAnimator = null
     }
 
     private fun startAsrPulseAnimation() {
@@ -406,6 +470,10 @@ class MainActivity : AppCompatActivity() {
         ringAnimator = null
         asrPulseAnimator?.cancel()
         asrPulseAnimator = null
+        typewriterAnimator?.cancel()
+        typewriterAnimator = null
+        floatingAnimator?.cancel()
+        floatingAnimator = null
     }
 
     // ==================== Wave Animation ====================
@@ -426,9 +494,43 @@ class MainActivity : AppCompatActivity() {
     // ==================== Message Handling ====================
 
     private fun addMessage(text: String, isUser: Boolean) {
-        // Hide empty hint
+        // Hide empty hint and stop floating animation
+        stopFloatingAnimation()
         tvEmptyHint.visibility = View.GONE
         conversationScroll.visibility = View.VISIBLE
+
+        // Get current time for timestamp
+        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val timestamp = timeFormat.format(java.util.Date())
+
+        // Create message container with timestamp
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 8)
+
+            if (isUser) {
+                gravity = android.view.Gravity.END
+            } else {
+                gravity = android.view.Gravity.START
+            }
+        }
+
+        // Add timestamp (small and subtle)
+        val timestampView = TextView(this).apply {
+            this.text = timestamp
+            this.textSize = 10f
+            setTextColor(ContextCompat.getColor(context, R.color.text_tertiary))
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            if (isUser) {
+                params.setMargins(0, 0, 16, 4)
+            } else {
+                params.setMargins(16, 0, 0, 4)
+            }
+            layoutParams = params
+        }
 
         // Create message view
         val messageView = TextView(this).apply {
@@ -438,10 +540,8 @@ class MainActivity : AppCompatActivity() {
 
             if (isUser) {
                 setTextColor(ContextCompat.getColor(context, R.color.text_primary))
-                setBackgroundResource(R.color.surface)
             } else {
                 setTextColor(ContextCompat.getColor(context, R.color.on_primary))
-                setBackgroundResource(R.color.primary)
             }
 
             // Rounded corners
@@ -450,34 +550,37 @@ class MainActivity : AppCompatActivity() {
                 if (isUser) R.drawable.bg_message_user else R.drawable.bg_message_ai,
                 null
             )
+
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                if (isUser) marginStart = 64 else marginEnd = 64
+            }
         }
 
-        // Add to container
-        val container = LinearLayout(this).apply {
+        // Add timestamp and message to container
+        container.addView(timestampView)
+        container.addView(messageView)
+
+        // Create outer container for alignment
+        val outerContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 8, 0, 8)
+            setPadding(0, 0, 0, 0)
 
             if (isUser) {
                 gravity = android.view.Gravity.END
                 addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
             }
 
-            addView(messageView.apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    if (isUser) marginStart = 64 else marginEnd = 64
-                }
-            })
+            addView(container)
 
             if (!isUser) {
-                gravity = android.view.Gravity.START
                 addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
             }
         }
 
-        conversationContainer.addView(container)
+        conversationContainer.addView(outerContainer)
 
         // Scroll to bottom
         conversationScroll.post {
