@@ -32,6 +32,14 @@ class VoiceAssistantApp : Application() {
         configHolder.settingsRepository = settingsRepository
         configHolder.reload()
 
+        // Start background service
+        val intent = Intent(this, VoiceAssistantService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+
         Timber.d("VoiceAssistantApp started, config loaded: navidrome=${configHolder.navidromeUrl}, llm=${configHolder.llmBaseUrl}")
     }
 }

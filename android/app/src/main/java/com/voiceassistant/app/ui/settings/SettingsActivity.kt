@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import com.voiceassistant.app.R
 import com.voiceassistant.app.di.ConfigHolder
@@ -45,6 +46,7 @@ class SettingsActivity : AppCompatActivity() {
     // Voice Settings
     private lateinit var sliderWakeSensitivity: Slider
     private lateinit var tvWakeSensitivity: TextView
+    private lateinit var switchTtsEnabled: SwitchMaterial
     private lateinit var sliderTtsSpeed: Slider
     private lateinit var tvTtsSpeed: TextView
 
@@ -135,6 +137,7 @@ class SettingsActivity : AppCompatActivity() {
         // Voice Settings
         sliderWakeSensitivity = findViewById(R.id.sliderWakeSensitivity)
         tvWakeSensitivity = findViewById(R.id.tvWakeSensitivity)
+        switchTtsEnabled = findViewById(R.id.switchTtsEnabled)
         sliderTtsSpeed = findViewById(R.id.sliderTtsSpeed)
         tvTtsSpeed = findViewById(R.id.tvTtsSpeed)
 
@@ -196,6 +199,8 @@ class SettingsActivity : AppCompatActivity() {
             val wakeSensitivity = settingsRepository.getWakeSensitivity()
             sliderWakeSensitivity.value = wakeSensitivity
             tvWakeSensitivity.text = String.format("%.1f", wakeSensitivity)
+
+            switchTtsEnabled.isChecked = settingsRepository.getTtsEnabled()
 
             val ttsSpeed = settingsRepository.getTtsSpeed()
             sliderTtsSpeed.value = ttsSpeed
@@ -289,6 +294,7 @@ class SettingsActivity : AppCompatActivity() {
                 // Save Voice Settings
                 settingsRepository.setWakeSensitivity(sliderWakeSensitivity.value)
                 settingsRepository.setTtsSpeed(sliderTtsSpeed.value)
+                settingsRepository.setTtsEnabled(switchTtsEnabled.isChecked)
 
                 // Save DLNA settings
                 selectedDevice?.let { device ->

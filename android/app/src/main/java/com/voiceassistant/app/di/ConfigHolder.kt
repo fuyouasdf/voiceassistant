@@ -19,6 +19,7 @@ class ConfigHolder @Inject constructor() {
     var llmBaseUrl: String = "http://192.168.31.244:20034"
     var llmApiKey: String = "sk-lm-gqABXq7E:Gi6jm1G0BCyrVhhHcTEl"
     var llmModel: String = "unsloth/Qwen3.5-35B-A3B-no"
+    var ttsEnabled: Boolean = true
 
     fun reload() {
         settingsRepository?.let { repo ->
@@ -29,6 +30,7 @@ class ConfigHolder @Inject constructor() {
                 llmBaseUrl = repo.getLLMBaseUrl().ifEmpty { "https://api.deepseek.com" }
                 llmApiKey = repo.getLLMApiKey()
                 llmModel = repo.getLLMModel().ifEmpty { "deepseek-chat" }
+                ttsEnabled = repo.getTtsEnabled()
             }
         }
     }

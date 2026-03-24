@@ -252,7 +252,8 @@ object AppModule {
         tts: SherpaTTS,
         intentRouter: IntentRouter,
         audioCapture: AudioCapture,
-        audioPlayer: AudioPlayer
+        audioPlayer: AudioPlayer,
+        configHolder: ConfigHolder
     ): VoicePipeline {
         return VoicePipeline(
             config = PipelineConfig(),
@@ -262,7 +263,8 @@ object AppModule {
             tts = tts,
             intentRouter = intentRouter,
             audioCapture = audioCapture,
-            audioPlayer = audioPlayer
+            audioPlayer = audioPlayer,
+            ttsEnabledProvider = { configHolder.ttsEnabled }
         )
     }
 }

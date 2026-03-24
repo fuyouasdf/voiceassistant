@@ -37,7 +37,8 @@ class VoicePipeline(
     private val tts: SherpaTTS,
     private val intentRouter: IntentRouter,
     private val audioCapture: AudioCapture,
-    private val audioPlayer: AudioPlayer = AudioPlayer()
+    private val audioPlayer: AudioPlayer = AudioPlayer(),
+    private val ttsEnabledProvider: () -> Boolean = { true }
 ) {
     private val _state = MutableStateFlow(StateInfo(PipelineState.IDLE))
     val state: StateFlow<StateInfo> = _state.asStateFlow()
@@ -213,6 +214,10 @@ class VoicePipeline(
                 }
 
                 val ttsDeferred = async {
+                    // Skip TTS initialization if TTS is disabled
+                    if (!ttsEnabledProvider()) {
+                        return@async
+                    }
                     if (!isTtsLoaded) {
                         _state.value = _state.value.copy(message = "正在加载语音合成...")
                         ensureTtsInitialized()
@@ -239,6 +244,11 @@ class VoicePipeline(
      * Test TTS synthesis to verify it works correctly
      */
     private fun testTTS() {
+        // Skip TTS test if TTS is disabled
+        if (!ttsEnabledProvider()) {
+            return
+        }
+
         scope.launch {
             try {
                 // 先进入SPEAKING状态，让用户知道正在测试
@@ -437,11 +447,11 @@ class VoicePipeline(
                 }
 
                 override fun onFinalResult(text: String) {
+                    finalText = text
                     scope.launch {
-                        finalText = text
                         Timber.d("ASR final: '$text'")
-                        // 设置 recognizedText 用于添加到对话
-                        _state.value = _state.value.copy(recognizedText = text)
+                        // 设置 recognizedText 用于添加到对话，同时更新 message 显示最终结果
+                        _state.value = _state.value.copy(recognizedText = text, message = text)
                     }
                 }
 
@@ -470,7 +480,7 @@ class VoicePipeline(
     }
 
     private suspend fun processIntent(text: String) {
-        transitionTo(PipelineState.THINKING, message = "正在处理...")
+        transitionTo(PipelineState.THINKING, message = text)
 
         try {
             val response = intentRouter.handle(text)
@@ -484,6 +494,16 @@ class VoicePipeline(
     private suspend fun speak(text: String) {
         if (text.isBlank()) {
             transitionTo(PipelineState.IDLE)
+            if (isCoreInitialized) {
+                startKWSListening()
+            }
+            return
+        }
+
+        // If TTS is disabled, skip speech synthesis and return to idle
+        if (!ttsEnabledProvider()) {
+            Timber.d("TTS is disabled, skipping speech synthesis")
+            transitionTo(PipelineState.IDLE, message = text)
             if (isCoreInitialized) {
                 startKWSListening()
             }

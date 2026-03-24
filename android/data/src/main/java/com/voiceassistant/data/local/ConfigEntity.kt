@@ -32,4 +32,5 @@ object ConfigKeys {
     
     const val WAKE_SENSITIVITY = "wake_sensitivity"
     const val TTS_SPEED = "tts_speed"
+    const val TTS_ENABLED = "tts_enabled"
 }

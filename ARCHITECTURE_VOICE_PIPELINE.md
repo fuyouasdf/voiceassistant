@@ -2,8 +2,8 @@
 
 > 从麦克风输入到语音输出的完整数据流
 
-**版本**: 1.3
-**日期**: 2026-03-23
+**版本**: 1.4
+**日期**: 2026-03-24
 
 ---
 
@@ -48,13 +48,25 @@
 
 ```
                     ┌─────────────┐
-         ┌─────────→│   IDLE      │←────────┐
-         │          │  (待机)     │         │
-         │          └──────┬──────┘         │
-         │                 │ 检测到唤醒词    │
+         ┌─────────→│ INITIALIZING│←───────┐
+         │          │  (初始化中) │        │
+         │          └──────┬──────┘        │
+         │                 │ 初始化完成     │
          │                 ↓                │
          │          ┌─────────────┐         │
-         │    ┌────→│  LISTENING  │         │
+         │    ┌────→│   IDLE     │─────────┤
+         │    │     │  (待机)    │         │
+         │    │     └──────┬──────┘         │
+         │    │            │ 检测到唤醒词    │
+         │    │            ↓                │
+         │    │     ┌─────────────┐         │
+         │    │     │WAKEWORD_    │         │
+         │    │     │DETECTED     │         │
+         │    │     └──────┬──────┘         │
+         │    │            │ 反馈完成       │
+         │    │            ↓                │
+         │    │     ┌─────────────┐         │
+         │    ├────→│  LISTENING  │         │
          │    │     │  (聆听中)   │         │
          │    │     └──────┬──────┘         │
          │    │            │ VAD检测到语音   │
@@ -89,7 +101,9 @@
 
 | 状态 | 说明 | 可转移 |
 |------|------|--------|
+| `INITIALIZING` | 正在初始化模型 | `IDLE` |
 | `IDLE` | 待机，KWS持续检测 | `LISTENING` |
+| `WAKEWORD_DETECTED` | 唤醒词检测到，显示反馈 | `LISTENING` |
 | `LISTENING` | 唤醒成功，等待语音 | `RECORDING`, `IDLE`(超时) |
 | `RECORDING` | 正在录音 | `RECOGNIZING`, `IDLE`(取消) |
 | `RECOGNIZING` | ASR处理中 | `THINKING` |
@@ -110,7 +124,8 @@ class VoicePipeline(
     private val asr: ASREngine,
     private val tts: TTSEngine,
     private val intentRouter: IntentRouter,
-    private val audioCapture: AudioCapture
+    private val audioCapture: AudioCapture,
+    private val ttsEnabledProvider: () -> Boolean = { true }  // TTS 开关
 ) {
     private val _state = MutableStateFlow(PipelineState.IDLE)
     val state: StateFlow<PipelineState> = _state.asStateFlow()
@@ -228,10 +243,17 @@ class VoicePipeline(
     }
     
     private suspend fun speak(text: String) {
+        // TTS 开关：关闭时跳过语音合成，直接显示文字
+        if (!ttsEnabledProvider()) {
+            _state.value = PipelineState.IDLE
+            startKWSListening()
+            return
+        }
+
         _state.value = PipelineState.SPEAKING
-        
+
         val audio = tts.synthesize(text)
-        
+
         AudioPlayer.play(audio) {
             // 播放完成回调
             _state.value = PipelineState.IDLE

@@ -40,7 +40,7 @@ class AudioCapture(
             val minBuffer = AudioRecord.getMinBufferSize(
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
+                AudioFormat.ENCODING_PCM_FLOAT
             )
 
             audioRecord = createAudioRecord(minBuffer)
@@ -62,18 +62,14 @@ class AudioCapture(
             }
 
             recordingJob = scope.launch {
-                val buffer = ShortArray(bufferSize)
+                val buffer = FloatArray(bufferSize)
 
                 while (isActive && isRecording) {
                     try {
-                        val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
+                        val read = audioRecord?.read(buffer, 0, bufferSize, AudioRecord.READ_BLOCKING) ?: 0
 
                         if (read > 0) {
-                            // Convert ShortArray to FloatArray
-                            val floatBuffer = FloatArray(read) { i ->
-                                buffer[i] / 32768.0f
-                            }
-                            onAudioChunk(floatBuffer)
+                            onAudioChunk(buffer.copyOf(read))
                         } else if (read < 0) {
                             Timber.w("AudioRecord read error: $read")
                             break
@@ -129,7 +125,7 @@ class AudioCapture(
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setSampleRate(sampleRate)
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
                         .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
                         .build()
                 )

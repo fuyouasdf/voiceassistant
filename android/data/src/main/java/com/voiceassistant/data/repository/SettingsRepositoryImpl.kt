@@ -67,6 +67,9 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun getTtsSpeed(): Float = getString(ConfigKeys.TTS_SPEED, "1.0").toFloatOrNull() ?: 1.0f
     override suspend fun setTtsSpeed(speed: Float) = setString(ConfigKeys.TTS_SPEED, speed.toString())
+
+    override suspend fun getTtsEnabled(): Boolean = getString(ConfigKeys.TTS_ENABLED, "true").toBooleanStrictOrNull() ?: true
+    override suspend fun setTtsEnabled(enabled: Boolean) = setString(ConfigKeys.TTS_ENABLED, enabled.toString())
 }
 
 interface SettingsRepository {
@@ -105,4 +108,6 @@ interface SettingsRepository {
     suspend fun setWakeSensitivity(sensitivity: Float)
     suspend fun getTtsSpeed(): Float
     suspend fun setTtsSpeed(speed: Float)
+    suspend fun getTtsEnabled(): Boolean
+    suspend fun setTtsEnabled(enabled: Boolean)
 }

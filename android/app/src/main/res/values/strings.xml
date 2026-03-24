@@ -64,6 +64,7 @@
 
     <string name="settings_wake_sensitivity">唤醒灵敏度</string>
     <string name="settings_tts_speed">TTS 语速</string>
+    <string name="settings_tts_enabled">启用语音播报</string>
 
     <string name="settings_dlna_device_name">已选设备</string>
     <string name="settings_dlna_device_ip">设备地址</string>
