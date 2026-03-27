@@ -13,9 +13,6 @@ class ConfigHolder @Inject constructor() {
     var settingsRepository: SettingsRepository? = null
 
     // Cached values updated on app start
-    var navidromeUrl: String = ""
-    var navidromeUsername: String = ""
-    var navidromePassword: String = ""
     var jellyfinUrl: String = ""
     var jellyfinApiKey: String = ""
     var llmBaseUrl: String = "http://192.168.31.244:20034"
@@ -26,9 +23,6 @@ class ConfigHolder @Inject constructor() {
     fun reload() {
         settingsRepository?.let { repo ->
             runBlocking {
-                navidromeUrl = repo.getNavidromeUrl()
-                navidromeUsername = repo.getNavidromeUsername()
-                navidromePassword = repo.getNavidromePassword()
                 jellyfinUrl = repo.getJellyfinUrl()
                 jellyfinApiKey = repo.getJellyfinApiKey()
                 llmBaseUrl = repo.getLLMBaseUrl().ifEmpty { "https://api.deepseek.com" }

@@ -19,7 +19,7 @@ class HandleMusicUseCase @Inject constructor(
 ) {
 
     suspend fun execute(intent: Intent): String {
-        val repo = musicRepository ?: return "音乐服务未配置，请在设置中配置 Navidrome"
+        val repo = musicRepository ?: return "音乐服务未配置，请在设置中配置 Jellyfin"
 
         return when (intent.action) {
             "play" -> handlePlay(intent, repo)

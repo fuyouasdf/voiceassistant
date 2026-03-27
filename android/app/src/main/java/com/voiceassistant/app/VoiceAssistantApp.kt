@@ -40,6 +40,6 @@ class VoiceAssistantApp : Application() {
             startService(intent)
         }
 
-        Timber.d("VoiceAssistantApp started, config loaded: navidrome=${configHolder.navidromeUrl}, llm=${configHolder.llmBaseUrl}")
+        Timber.d("VoiceAssistantApp started, config loaded: jellyfin=${configHolder.jellyfinUrl}, llm=${configHolder.llmBaseUrl}")
     }
 }

@@ -31,7 +31,8 @@ data class MusicUiState(
     val currentSong: MusicItem? = null,
     val isPlaying: Boolean = false,
     val error: String? = null,
-    val currentCategory: MusicCategory = MusicCategory.SONGS
+    val currentCategory: MusicCategory = MusicCategory.ALBUMS,
+    val needsJellyfinConfig: Boolean = false
 )
 
 enum class MusicCategory {
@@ -77,12 +78,14 @@ class MusicViewModel @Inject constructor(
      * 初始化 Jellyfin 连接
      */
     fun initJellyfin() {
-        // ApiClient 已经在 AppModule 中配置好了
-        // 如果需要重新配置，可以在这里更新
+        Timber.d("initJellyfin: jellyfinUrl=${configHolder.jellyfinUrl}, apiKey=${if (configHolder.jellyfinApiKey.isNotEmpty()) "已设置" else "未设置"}")
         viewModelScope.launch {
             val result = jellyfinClient.testConnection()
+            result.onSuccess {
+                Timber.d("Jellyfin连接成功")
+            }
             result.onFailure { e ->
-                Timber.e(e, "Jellyfin connection failed")
+                Timber.e(e, "Jellyfin连接失败")
                 _uiState.update { it.copy(error = "连接失败: ${e.message}") }
             }
         }
@@ -92,16 +95,27 @@ class MusicViewModel @Inject constructor(
      * 加载歌曲列表
      */
     fun loadSongs() {
+        Timber.d("loadSongs: 开始加载歌曲")
+        // 检查 Jellyfin 是否已配置
+        if (configHolder.jellyfinUrl.isEmpty() || configHolder.jellyfinApiKey.isEmpty()) {
+            Timber.w("Jellyfin未配置: url=${configHolder.jellyfinUrl}, apiKey=${configHolder.jellyfinApiKey}")
+            _uiState.update { it.copy(needsJellyfinConfig = true, isLoading = false) }
+            return
+        }
+
         initJellyfin()
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, currentCategory = MusicCategory.SONGS) }
+            Timber.d("loadSongs: 正在请求歌曲列表...")
 
             try {
-                val songs = jellyfinClient.searchSongs("", 50)
+                // 使用 getItems 获取所有歌曲，而不是 searchSongs（后者需要搜索词）
+                val songs = jellyfinClient.getAllSongs()
+                Timber.d("loadSongs: 获取到${songs.size}首歌曲")
                 _uiState.update { it.copy(songs = songs, isLoading = false) }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load songs")
+                Timber.e(e, "loadSongs: 加载歌曲失败")
                 _uiState.update { it.copy(isLoading = false, error = "加载歌曲失败: ${e.message}") }
             }
         }
@@ -111,14 +125,26 @@ class MusicViewModel @Inject constructor(
      * 加载专辑列表
      */
     fun loadAlbums(parentId: String? = null) {
+        Timber.d("loadAlbums: parentId=$parentId, 开始加载专辑")
+        // 检查 Jellyfin 是否已配置
+        if (configHolder.jellyfinUrl.isEmpty() || configHolder.jellyfinApiKey.isEmpty()) {
+            Timber.w("Jellyfin未配置: url=${configHolder.jellyfinUrl}, apiKey=${configHolder.jellyfinApiKey}")
+            _uiState.update { it.copy(needsJellyfinConfig = true, isLoading = false) }
+            return
+        }
+
+        initJellyfin()
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, currentCategory = MusicCategory.ALBUMS) }
+            Timber.d("loadAlbums: 正在请求专辑列表...")
 
             try {
                 val albums = jellyfinClient.getAlbums(parentId)
+                Timber.d("loadAlbums: 获取到${albums.size}张专辑")
                 _uiState.update { it.copy(albums = albums, isLoading = false) }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load albums")
+                Timber.e(e, "loadAlbums: 加载专辑失败")
                 _uiState.update { it.copy(isLoading = false, error = "加载专辑失败: ${e.message}") }
             }
         }
@@ -137,6 +163,23 @@ class MusicViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load artists")
                 _uiState.update { it.copy(isLoading = false, error = "加载艺术家失败: ${e.message}") }
+            }
+        }
+    }
+
+    /**
+     * 加载专辑下的歌曲
+     */
+    fun loadAlbumSongs(albumId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, currentCategory = MusicCategory.SONGS) }
+
+            try {
+                val songs = jellyfinClient.getItems(albumId)
+                _uiState.update { it.copy(songs = songs, isLoading = false) }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load album songs")
+                _uiState.update { it.copy(isLoading = false, error = "加载专辑歌曲失败: ${e.message}") }
             }
         }
     }

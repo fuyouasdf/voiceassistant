@@ -47,12 +47,10 @@
     <string name="settings_category_voice">语音设置</string>
     <string name="settings_category_dlna">DLNA 投屏</string>
 
-    <string name="settings_navidrome_url">Navidrome 地址</string>
-    <string name="settings_navidrome_url_hint">http://192.168.1.100:4533</string>
-    <string name="settings_navidrome_username">用户名</string>
-    <string name="settings_navidrome_username_hint">请输入用户名</string>
-    <string name="settings_navidrome_password">密码</string>
-    <string name="settings_navidrome_password_hint">请输入密码</string>
+    <string name="settings_jellyfin_url">Jellyfin 地址</string>
+    <string name="settings_jellyfin_url_hint">http://192.168.1.100:8096</string>
+    <string name="settings_jellyfin_api_key">API Key</string>
+    <string name="settings_jellyfin_api_key_hint">请输入 Jellyfin API Key</string>
 
     <string name="settings_llm_url">LLM API 地址</string>
     <string name="settings_llm_url_hint">https://api.deepseek.com</string>

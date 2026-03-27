@@ -20,28 +20,18 @@ private const val DEFAULT_SYSTEM_PROMPT = """你的默认身份是家居场景�
 class SettingsRepositoryImpl @Inject constructor(
     private val configDao: ConfigDao
 ) : SettingsRepository {
-    
+
     override suspend fun getString(key: String, default: String): String {
         return configDao.get(key)?.value ?: default
     }
-    
+
     override suspend fun setString(key: String, value: String) {
         configDao.set(ConfigEntity(key = key, value = value))
     }
-    
+
     override fun getStringFlow(key: String, default: String): Flow<String> {
         return configDao.getFlow(key).map { it?.value ?: default }
     }
-    
-    // Navidrome
-    override suspend fun getNavidromeUrl(): String = getString(ConfigKeys.NAVIDROME_URL, "")
-    override suspend fun setNavidromeUrl(url: String) = setString(ConfigKeys.NAVIDROME_URL, url)
-    
-    override suspend fun getNavidromeUsername(): String = getString(ConfigKeys.NAVIDROME_USERNAME, "")
-    override suspend fun setNavidromeUsername(username: String) = setString(ConfigKeys.NAVIDROME_USERNAME, username)
-    
-    override suspend fun getNavidromePassword(): String = getString(ConfigKeys.NAVIDROME_PASSWORD, "")
-    override suspend fun setNavidromePassword(password: String) = setString(ConfigKeys.NAVIDROME_PASSWORD, password)
 
     // Jellyfin
     override suspend fun getJellyfinUrl(): String = getString(ConfigKeys.JELLYFIN_URL, "")
@@ -56,7 +46,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setDLNADeviceName(name: String) = setString(ConfigKeys.DLNA_DEVICE_NAME, name)
     override suspend fun getDLNADeviceUuid(): String = getString(ConfigKeys.DLNA_DEVICE_UUID, "")
     override suspend fun setDLNADeviceUuid(uuid: String) = setString(ConfigKeys.DLNA_DEVICE_UUID, uuid)
-    
+
     // LLM
     override suspend fun getLLMBaseUrl(): String = getString(ConfigKeys.LLM_BASE_URL, "http://192.168.31.244:20034")
     override suspend fun setLLMBaseUrl(url: String) = setString(ConfigKeys.LLM_BASE_URL, url)
@@ -82,14 +72,6 @@ interface SettingsRepository {
     suspend fun getString(key: String, default: String = ""): String
     suspend fun setString(key: String, value: String)
     fun getStringFlow(key: String, default: String = ""): Flow<String>
-    
-    // Navidrome
-    suspend fun getNavidromeUrl(): String
-    suspend fun setNavidromeUrl(url: String)
-    suspend fun getNavidromeUsername(): String
-    suspend fun setNavidromeUsername(username: String)
-    suspend fun getNavidromePassword(): String
-    suspend fun setNavidromePassword(password: String)
 
     // Jellyfin
     suspend fun getJellyfinUrl(): String
@@ -104,7 +86,7 @@ interface SettingsRepository {
     suspend fun setDLNADeviceName(name: String)
     suspend fun getDLNADeviceUuid(): String
     suspend fun setDLNADeviceUuid(uuid: String)
-    
+
     // LLM
     suspend fun getLLMBaseUrl(): String
     suspend fun setLLMBaseUrl(url: String)

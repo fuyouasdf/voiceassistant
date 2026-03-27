@@ -23,6 +23,7 @@ import com.google.android.material.chip.Chip
 import com.voiceassistant.app.R
 import com.voiceassistant.app.service.VoiceAssistantService
 import com.voiceassistant.app.ui.settings.SettingsActivity
+import com.voiceassistant.app.ui.music.MusicActivity
 import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
 import dagger.hilt.android.AndroidEntryPoint
@@ -204,7 +205,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick actions
-        chipMusic.setOnClickListener { triggerQuickAction("播放音乐") }
+        chipMusic.setOnClickListener {
+            startActivity(Intent(this, MusicActivity::class.java))
+        }
         chipLight.setOnClickListener { triggerQuickAction("开灯") }
         chipWeather.setOnClickListener { triggerQuickAction("今天天气怎么样") }
         chipAlarm.setOnClickListener { triggerQuickAction("设一个明天早上7点的闹钟") }

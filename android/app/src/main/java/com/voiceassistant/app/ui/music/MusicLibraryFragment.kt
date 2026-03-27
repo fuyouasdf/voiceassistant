@@ -8,7 +8,9 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.voiceassistant.app.databinding.FragmentMusicLibraryBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
@@ -25,6 +27,9 @@ class MusicLibraryFragment : Fragment() {
 
     private val viewModel: MusicViewModel by activityViewModels()
     private lateinit var songAdapter: SongAdapter
+    private lateinit var albumAdapter: AlbumAdapter
+
+    private var currentCategory: MusicCategory = MusicCategory.ALBUMS
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -38,12 +43,16 @@ class MusicLibraryFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        setupAdapters()
         setupRecyclerView()
         setupChips()
         observeState()
+
+        // 默认加载专辑
+        viewModel.loadAlbums()
     }
 
-    private fun setupRecyclerView() {
+    private fun setupAdapters() {
         songAdapter = SongAdapter(
             onSongClick = { song ->
                 viewModel.playSong(song)
@@ -53,18 +62,42 @@ class MusicLibraryFragment : Fragment() {
             }
         )
 
-        binding.recyclerView.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = songAdapter
-        }
+        albumAdapter = AlbumAdapter(
+            onAlbumClick = { album ->
+                // 点击专辑加载该专辑下的歌曲
+                viewModel.loadAlbumSongs(album.id)
+            }
+        )
+    }
+
+    private fun setupRecyclerView() {
+        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
     }
 
     private fun setupChips() {
+        // 默认选中专辑
+        binding.chipAlbums.isChecked = true
+
         binding.chipGroupCategory.setOnCheckedStateChangeListener { _, checkedIds ->
             when {
-                checkedIds.contains(binding.chipSongs.id) -> viewModel.loadSongs()
-                checkedIds.contains(binding.chipAlbums.id) -> viewModel.loadAlbums()
-                checkedIds.contains(binding.chipArtists.id) -> viewModel.loadArtists()
+                checkedIds.contains(binding.chipSongs.id) -> {
+                    if (currentCategory != MusicCategory.SONGS) {
+                        currentCategory = MusicCategory.SONGS
+                        viewModel.loadSongs()
+                    }
+                }
+                checkedIds.contains(binding.chipAlbums.id) -> {
+                    if (currentCategory != MusicCategory.ALBUMS) {
+                        currentCategory = MusicCategory.ALBUMS
+                        viewModel.loadAlbums()
+                    }
+                }
+                checkedIds.contains(binding.chipArtists.id) -> {
+                    if (currentCategory != MusicCategory.ARTISTS) {
+                        currentCategory = MusicCategory.ARTISTS
+                        viewModel.loadArtists()
+                    }
+                }
             }
         }
     }
@@ -72,20 +105,10 @@ class MusicLibraryFragment : Fragment() {
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
-                // 显示歌曲列表
-                val songsToShow = if (state.searchResults.isNotEmpty()) {
-                    state.searchResults
-                } else {
-                    state.songs
-                }
-
-                if (songsToShow.isNotEmpty()) {
-                    binding.recyclerView.visibility = View.VISIBLE
-                    binding.tvEmpty.visibility = View.GONE
-                    songAdapter.submitList(songsToShow)
-                } else if (!state.isLoading) {
-                    binding.recyclerView.visibility = View.GONE
-                    binding.tvEmpty.visibility = View.VISIBLE
+                when (state.currentCategory) {
+                    MusicCategory.SONGS -> showSongs(state)
+                    MusicCategory.ALBUMS -> showAlbums(state)
+                    MusicCategory.ARTISTS -> showArtists(state)
                 }
 
                 // 错误处理
@@ -93,6 +116,57 @@ class MusicLibraryFragment : Fragment() {
                     Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private fun showSongs(state: MusicUiState) {
+        // 切换到歌曲列表布局
+        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        binding.recyclerView.adapter = songAdapter
+
+        val songsToShow = if (state.searchResults.isNotEmpty()) {
+            state.searchResults
+        } else {
+            state.songs
+        }
+
+        if (songsToShow.isNotEmpty()) {
+            binding.recyclerView.visibility = View.VISIBLE
+            binding.tvEmpty.visibility = View.GONE
+            songAdapter.submitList(songsToShow)
+        } else if (!state.isLoading) {
+            binding.recyclerView.visibility = View.GONE
+            binding.tvEmpty.visibility = View.VISIBLE
+            binding.tvEmpty.text = "暂无歌曲"
+        }
+    }
+
+    private fun showAlbums(state: MusicUiState) {
+        // 切换到网格布局显示专辑
+        binding.recyclerView.layoutManager = GridLayoutManager(requireContext(), 2)
+        binding.recyclerView.adapter = albumAdapter
+
+        if (state.albums.isNotEmpty()) {
+            binding.recyclerView.visibility = View.VISIBLE
+            binding.tvEmpty.visibility = View.GONE
+            albumAdapter.submitList(state.albums)
+        } else if (!state.isLoading) {
+            binding.recyclerView.visibility = View.GONE
+            binding.tvEmpty.visibility = View.VISIBLE
+            binding.tvEmpty.text = "暂无专辑"
+        }
+    }
+
+    private fun showArtists(state: MusicUiState) {
+        // 暂时使用歌曲列表布局显示艺术家
+        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        binding.recyclerView.adapter = songAdapter
+
+        // 艺术家没有专门的适配器，暂时显示提示
+        if (state.artists.isEmpty() && !state.isLoading) {
+            binding.recyclerView.visibility = View.GONE
+            binding.tvEmpty.visibility = View.VISIBLE
+            binding.tvEmpty.text = "暂无艺术家"
         }
     }
 

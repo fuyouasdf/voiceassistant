@@ -14,10 +14,6 @@ data class ConfigEntity(
 
 // Config keys
 object ConfigKeys {
-    const val NAVIDROME_URL = "navidrome_url"
-    const val NAVIDROME_USERNAME = "navidrome_username"
-    const val NAVIDROME_PASSWORD = "navidrome_password"
-
     const val JELLYFIN_URL = "jellyfin_url"
     const val JELLYFIN_API_KEY = "jellyfin_api_key"
 

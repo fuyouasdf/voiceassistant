@@ -1,9 +1,8 @@
 package com.voiceassistant.domain.model
 
-data class NavidromeConfig(
+data class JellyfinConfig(
     val baseUrl: String,
-    val username: String,
-    val password: String
+    val apiKey: String
 )
 
 data class DLNAConfig(

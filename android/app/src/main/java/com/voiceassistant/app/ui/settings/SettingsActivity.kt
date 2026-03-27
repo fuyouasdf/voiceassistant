@@ -33,9 +33,8 @@ class SettingsActivity : AppCompatActivity() {
     lateinit var configHolder: ConfigHolder
 
     // Music Service
-    private lateinit var etNavidromeUrl: TextInputEditText
-    private lateinit var etNavidromeUsername: TextInputEditText
-    private lateinit var etNavidromePassword: TextInputEditText
+    private lateinit var etJellyfinUrl: TextInputEditText
+    private lateinit var etJellyfinApiKey: TextInputEditText
 
     // AI Service
     private lateinit var etLlmUrl: TextInputEditText
@@ -123,10 +122,9 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        // Music Service
-        etNavidromeUrl = findViewById(R.id.etNavidromeUrl)
-        etNavidromeUsername = findViewById(R.id.etNavidromeUsername)
-        etNavidromePassword = findViewById(R.id.etNavidromePassword)
+        // Music Service - Jellyfin
+        etJellyfinUrl = findViewById(R.id.etJellyfinUrl)
+        etJellyfinApiKey = findViewById(R.id.etJellyfinApiKey)
 
         // AI Service
         etLlmUrl = findViewById(R.id.etLlmUrl)
@@ -184,10 +182,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun loadSettings() {
         lifecycleScope.launch {
-            // Load Music Service settings
-            etNavidromeUrl.setText(settingsRepository.getNavidromeUrl())
-            etNavidromeUsername.setText(settingsRepository.getNavidromeUsername())
-            etNavidromePassword.setText(settingsRepository.getNavidromePassword())
+            // Load Music Service settings - Jellyfin
+            etJellyfinUrl.setText(settingsRepository.getJellyfinUrl())
+            etJellyfinApiKey.setText(settingsRepository.getJellyfinApiKey())
 
             // Load AI Service settings
             etLlmUrl.setText(settingsRepository.getLLMBaseUrl())
@@ -280,10 +277,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun saveSettings() {
         lifecycleScope.launch {
             try {
-                // Save Music Service settings
-                settingsRepository.setNavidromeUrl(etNavidromeUrl.text.toString())
-                settingsRepository.setNavidromeUsername(etNavidromeUsername.text.toString())
-                settingsRepository.setNavidromePassword(etNavidromePassword.text.toString())
+                // Save Music Service settings - Jellyfin
+                settingsRepository.setJellyfinUrl(etJellyfinUrl.text.toString())
+                settingsRepository.setJellyfinApiKey(etJellyfinApiKey.text.toString())
 
                 // Save AI Service settings
                 settingsRepository.setLLMBaseUrl(etLlmUrl.text.toString())

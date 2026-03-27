@@ -92,6 +92,9 @@ dependencies {
     // Timber (Logging)
     implementation("com.jakewharton.timber:timber:${versions["timber"]}")
 
+    // Image Loading
+    implementation("io.coil-kt:coil:${versions["coil"]}")
+
     // Test
     testImplementation("junit:junit:${versions["junit"]}")
     androidTestImplementation("androidx.test.ext:junit:${versions["androidxTestExtJunit"]}")

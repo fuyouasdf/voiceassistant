@@ -1,5 +1,6 @@
 package com.voiceassistant.app.ui.music
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -7,11 +8,13 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.commit
 import androidx.lifecycle.lifecycleScope
-import androidx.viewpager2.widget.ViewPager2
+import coil.load
 import com.google.android.material.tabs.TabLayoutMediator
 import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityMusicBinding
+import com.voiceassistant.app.ui.settings.SettingsActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -35,8 +38,8 @@ class MusicActivity : AppCompatActivity() {
         setupViews()
         observeState()
 
-        // 初始化加载
-        viewModel.loadSongs()
+        // 默认加载专辑列表
+        viewModel.loadAlbums()
     }
 
     private fun setupViews() {
@@ -67,23 +70,34 @@ class MusicActivity : AppCompatActivity() {
             tab.text = tabTitles[position]
         }.attach()
 
-        // 底部播放控制
+        // 播放控制按钮 - 点击也跳转到正在播放页面
         binding.btnPlayPause.setOnClickListener {
             viewModel.togglePlayPause()
+            openNowPlayingFragment()
         }
 
         binding.btnPrev.setOnClickListener {
             viewModel.playPrevious()
+            openNowPlayingFragment()
         }
 
         binding.btnNext.setOnClickListener {
             viewModel.playNext()
+            openNowPlayingFragment()
         }
     }
 
     private fun observeState() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
+                // 检查是否需要配置 Jellyfin
+                if (state.needsJellyfinConfig) {
+                    Toast.makeText(this@MusicActivity, "请先配置 Jellyfin", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(this@MusicActivity, SettingsActivity::class.java))
+                    finish()
+                    return@collectLatest
+                }
+
                 // 加载状态
                 binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
 
@@ -99,6 +113,15 @@ class MusicActivity : AppCompatActivity() {
                         android.R.drawable.ic_media_play
                     }
                     binding.btnPlayPause.setImageResource(playIcon)
+
+                    // 加载封面
+                    state.currentSong.coverUrl?.let { url ->
+                        binding.ivCover.load(url) {
+                            crossfade(true)
+                            placeholder(R.drawable.ic_music)
+                            error(R.drawable.ic_music)
+                        }
+                    } ?: binding.ivCover.setImageResource(R.drawable.ic_music)
                 } else {
                     binding.playerBar.visibility = View.GONE
                 }
@@ -109,6 +132,23 @@ class MusicActivity : AppCompatActivity() {
                     viewModel.clearError()
                 }
             }
+        }
+    }
+
+    /**
+     * 打开正在播放页面
+     */
+    private fun openNowPlayingFragment() {
+        val fragment = NowPlayingFragment()
+        supportFragmentManager.commit {
+            setCustomAnimations(
+                android.R.anim.fade_in,
+                android.R.anim.fade_out,
+                android.R.anim.fade_in,
+                android.R.anim.fade_out
+            )
+            add(android.R.id.content, fragment)
+            addToBackStack(null)
         }
     }
 

@@ -23,7 +23,6 @@ import com.voiceassistant.data.local.ConfigDao
 import com.voiceassistant.data.local.PlaylistDao
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.LLMApi
-import com.voiceassistant.data.remote.NavidromeApi
 import com.voiceassistant.data.repository.LLMRepositoryImpl
 import com.voiceassistant.data.repository.MusicRepositoryImpl
 import com.voiceassistant.data.repository.SettingsRepository
@@ -89,40 +88,6 @@ object AppModule {
         return ConfigHolder()
     }
 
-    @Provides
-    @Singleton
-    fun provideNavidromeApi(configHolder: ConfigHolder): NavidromeApi {
-        // Use dynamic URL from settings via interceptor
-        return Retrofit.Builder()
-            .baseUrl("http://localhost/") // Placeholder, actual URL set in interceptor
-            .addConverterFactory(GsonConverterFactory.create())
-            .client(
-                okhttp3.OkHttpClient.Builder()
-                    .addInterceptor { chain ->
-                        val original = chain.request()
-                        // Get base URL from config holder
-                        val baseUrl = configHolder.navidromeUrl.ifEmpty { "http://192.168.31.206:4533" }
-                        val host = baseUrl.removePrefix("http://").removePrefix("https://")
-                            .substringBefore(":").substringBefore("/")
-
-                        val portStr = baseUrl.substringAfterLast(":")
-                        val port = if (portStr.toIntOrNull() != null) portStr.toInt() else if (baseUrl.startsWith("https")) 443 else 80
-
-                        val newUrl = original.url.newBuilder()
-                            .scheme(if (baseUrl.startsWith("https")) "https" else "http")
-                            .host(host)
-                            .port(port)
-                            .build()
-                        val request = original.newBuilder()
-                            .url(newUrl)
-                            .build()
-                        chain.proceed(request)
-                    }
-                    .build()
-            )
-            .build()
-            .create(NavidromeApi::class.java)
-    }
 
     @Provides
     @Singleton
@@ -174,10 +139,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideMusicRepository(
-        api: NavidromeApi,
-        settingsRepository: SettingsRepository
+        jellyfinClient: JellyfinClient
     ): MusicRepository {
-        return MusicRepositoryImpl(api, settingsRepository)
+        return MusicRepositoryImpl(jellyfinClient)
     }
 
     @Provides
