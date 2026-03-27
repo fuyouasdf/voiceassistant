@@ -102,8 +102,8 @@ sourceCompatibility = JavaVersion.VERSION_17
 │  ┌─────────────────────────────────────────────────────────────────┐        │
 │  │                      Data Sources                                │        │
 │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │        │
-│  │  │SherpaONNX   │ │LLM API      │ │Navidrome    │ │Local DB   │ │        │
-│  │  │(Local)      │ │(Remote)     │ │API          │ │(Room)     │ │        │
+│  │  │SherpaONNX   │ │LLM API      │ │Jellyfin     │ │Local DB   │ │        │
+│  │  │(Local)      │ │(Remote)     │ │REST API     │ │(Room)     │ │        │
 │  │  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │        │
 │  └─────────────────────────────────────────────────────────────────┘        │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -158,8 +158,8 @@ voice-assistant-android/
 │       ├── intent/
 │       │   └── IntentRouter.kt            # 意图路由
 │       └── dlna/
-│           ├── DLNAManager.kt            # DLNA 管理器
-│           └── DLNAController.kt          # DLNA 控制器
+│           ├── DLNAManager.kt             # DLNA 投放管理器 (SSDP 发现)
+│           └── DLNAPlayer.kt             # DLNA 播放器 (PlayerRepository 实现)
 │
 ├── data/                                  # 数据模块
 │   └── src/main/java/com/voiceassistant/data/
@@ -169,7 +169,8 @@ voice-assistant-android/
 │       │   └── ConfigEntity.kt
 │       ├── remote/
 │       │   ├── LLMApi.kt
-│       │   └── NavidromeApi.kt
+│       │   ├── JellyfinClient.kt            # Jellyfin REST API 客户端
+│       │   └── DLNAAuthHelper.kt            # Subsonic 参数认证生成器
 │       └── repository/
 │           ├── Repositories.kt
 │           ├── SettingsRepositoryImpl.kt
@@ -209,6 +210,80 @@ voice-assistant-android/
 │
 └── build.gradle.kts
 ```
+
+---
+
+## Jellyfin 音乐投放
+
+### 架构概述
+使用自实现的 SSDP 发现协议发现 DLNA 设备，通过 Jellyfin REST API 获取音乐流并推送到 DLNA 设备播放。
+
+### 依赖
+```gradle
+// Retrofit (已有)
+implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+```
+// core/build.gradle.kts
+// 无额外依赖，使用原生 Java Socket 实现 SSDP
+```
+
+### Subsonic 认证流程
+不向 DLNA 设备传递 Cookie 或 Authorization header，使用 Subsonic 标准的 URL 参数认证：
+
+```
+http://<navidrome-host>:4533/rest/stream.view
+  ?id=<songId>
+  &u=<username>
+  &t=<md5(password + salt)>
+  &s=<randomSalt>
+  &v=1.16.1
+  &c=voice-assistant
+  &f=json
+```
+
+**认证参数说明**：
+| 参数 | 说明 |
+|------|------|
+| u | 用户名 |
+| s | 随机 salt（每次请求生成） |
+| t | md5(password + salt) |
+| v | API 版本 (1.16.1) |
+| c | 客户端名称 (voice-assistant) |
+
+### 核心组件
+
+#### DLNAManager
+- 使用原生 SSDP 协议发现 DLNA 设备 (M-SEARCH 广播)
+- 通过 HTTP GET 获取设备描述 XML
+- 管理设备列表和连接状态
+
+#### DLNAAuthHelper
+```kotlin
+object DLNAAuthHelper {
+    fun generateStreamUrl(
+        baseUrl: String,
+        songId: String,
+        username: String,
+        password: String
+    ): String {
+        val salt = UUID.randomUUID().toString().take(8)
+        val token = md5(password + salt)
+        return "$baseUrl/rest/stream.view" +
+            "?id=$songId" +
+            "&u=${URLEncoder.encode(username, "UTF-8")}" +
+            "&t=$token" +
+            "&s=$salt" +
+            "&v=1.16.1" +
+            "&c=voice-assistant"
+    }
+}
+```
+
+#### 播放流程
+1. 用户语音点歌 → IntentRouter 路由到 MUSIC 意图
+2. MusicRepository 通过 JellyfinClient 搜索歌曲
+3. 获取歌曲流地址 (Items/{id}/stream)
+4. DLNAPlayer 通过 HTTP 请求推送流媒体 URL 到设备
 
 ---
 

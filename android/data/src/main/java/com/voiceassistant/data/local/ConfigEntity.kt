@@ -17,19 +17,22 @@ object ConfigKeys {
     const val NAVIDROME_URL = "navidrome_url"
     const val NAVIDROME_USERNAME = "navidrome_username"
     const val NAVIDROME_PASSWORD = "navidrome_password"
-    
+
+    const val JELLYFIN_URL = "jellyfin_url"
+    const val JELLYFIN_API_KEY = "jellyfin_api_key"
+
     const val DLNA_DEVICE_IP = "dlna_device_ip"
     const val DLNA_DEVICE_NAME = "dlna_device_name"
     const val DLNA_DEVICE_UUID = "dlna_device_uuid"
-    
+
     const val LLM_BASE_URL = "llm_base_url"
     const val LLM_API_KEY = "llm_api_key"
     const val LLM_MODEL = "llm_model"
     const val LLM_SYSTEM_PROMPT = "llm_system_prompt"
-    
+
     const val OPENCLAW_URL = "openclaw_url"
     const val OPENCLAW_TOKEN = "openclaw_token"
-    
+
     const val WAKE_SENSITIVITY = "wake_sensitivity"
     const val TTS_SPEED = "tts_speed"
     const val TTS_ENABLED = "tts_enabled"

@@ -1,12 +1,13 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.kapt")
+    id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
 }
 
 android {
     namespace = "com.voiceassistant.core"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
@@ -27,6 +28,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -36,36 +38,48 @@ android {
     }
 }
 
+val versions = rootProject.extra["versions"] as Map<String, String>
+
 dependencies {
+    // Core Library Desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     // Kotlin
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${versions["coroutines"]}")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:${versions["coroutines"]}")
 
     // AndroidX
-    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-ktx:${versions["androidxCore"]}")
+
+    // Media3
+    implementation("androidx.media3:media3-common:${versions["media3"]}")
+    implementation("androidx.media3:media3-session:${versions["media3"]}")
+    implementation("androidx.media3:media3-ui:${versions["media3"]}")
+    implementation("androidx.media3:media3-exoplayer:${versions["media3"]}")
 
     // Sherpa-ONNX (AAR module built from sherpa-onnx-aar)
     implementation(project(":sherpa-onnx-aar:sherpa_onnx"))
 
     // Retrofit
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.retrofit2:retrofit:${versions["retrofit"]}")
+    implementation("com.squareup.retrofit2:converter-gson:${versions["retrofit"]}")
+    implementation("com.squareup.okhttp3:okhttp:${versions["okhttp"]}")
 
     // Timber
-    implementation("com.jakewharton.timber:timber:5.0.1")
+    implementation("com.jakewharton.timber:timber:${versions["timber"]}")
 
     // Domain module
     implementation(project(":domain"))
 
-    // Hilt (for @Inject)
-    implementation("com.google.dagger:hilt-android:2.50")
-    kapt("com.google.dagger:hilt-compiler:2.50")
+    // Hilt (using KSP)
+    implementation("com.google.dagger:hilt-android:${versions["hilt"]}")
+    ksp("com.google.dagger:hilt-android-compiler:${versions["hilt"]}")
 
     // Test
-    testImplementation("junit:junit:4.13.2")
+    testImplementation("junit:junit:${versions["junit"]}")
     testImplementation("org.mockito:mockito-core:5.8.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${versions["coroutines"]}")
+    androidTestImplementation("androidx.test.ext:junit:${versions["androidxTestExtJunit"]}")
+    androidTestImplementation("androidx.test.espresso:espresso-core:${versions["androidxTestEspresso"]}")
 }

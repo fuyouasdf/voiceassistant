@@ -42,7 +42,13 @@ class SettingsRepositoryImpl @Inject constructor(
     
     override suspend fun getNavidromePassword(): String = getString(ConfigKeys.NAVIDROME_PASSWORD, "")
     override suspend fun setNavidromePassword(password: String) = setString(ConfigKeys.NAVIDROME_PASSWORD, password)
-    
+
+    // Jellyfin
+    override suspend fun getJellyfinUrl(): String = getString(ConfigKeys.JELLYFIN_URL, "")
+    override suspend fun setJellyfinUrl(url: String) = setString(ConfigKeys.JELLYFIN_URL, url)
+    override suspend fun getJellyfinApiKey(): String = getString(ConfigKeys.JELLYFIN_API_KEY, "")
+    override suspend fun setJellyfinApiKey(key: String) = setString(ConfigKeys.JELLYFIN_API_KEY, key)
+
     // DLNA
     override suspend fun getDLNADeviceIp(): String = getString(ConfigKeys.DLNA_DEVICE_IP, "")
     override suspend fun setDLNADeviceIp(ip: String) = setString(ConfigKeys.DLNA_DEVICE_IP, ip)
@@ -84,7 +90,13 @@ interface SettingsRepository {
     suspend fun setNavidromeUsername(username: String)
     suspend fun getNavidromePassword(): String
     suspend fun setNavidromePassword(password: String)
-    
+
+    // Jellyfin
+    suspend fun getJellyfinUrl(): String
+    suspend fun setJellyfinUrl(url: String)
+    suspend fun getJellyfinApiKey(): String
+    suspend fun setJellyfinApiKey(key: String)
+
     // DLNA
     suspend fun getDLNADeviceIp(): String
     suspend fun setDLNADeviceIp(ip: String)

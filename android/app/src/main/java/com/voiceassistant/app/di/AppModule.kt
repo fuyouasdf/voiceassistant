@@ -20,6 +20,8 @@ import com.voiceassistant.core.sherpa.SherpaVAD
 import com.voiceassistant.core.sherpa.SherpaVADImpl
 import com.voiceassistant.data.local.AppDatabase
 import com.voiceassistant.data.local.ConfigDao
+import com.voiceassistant.data.local.PlaylistDao
+import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.LLMApi
 import com.voiceassistant.data.remote.NavidromeApi
 import com.voiceassistant.data.repository.LLMRepositoryImpl
@@ -49,13 +51,30 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "voice_assistant.db"
-        ).build()
+        )
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .build()
     }
 
     @Provides
     @Singleton
     fun provideConfigDao(database: AppDatabase): ConfigDao {
         return database.configDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaylistDao(database: AppDatabase): PlaylistDao {
+        return database.playlistDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideJellyfinClient(configHolder: ConfigHolder): JellyfinClient {
+        return JellyfinClient(
+            baseUrl = configHolder.jellyfinUrl.ifEmpty { "http://localhost:8096" },
+            apiKey = configHolder.jellyfinApiKey
+        )
     }
 
     @Provides

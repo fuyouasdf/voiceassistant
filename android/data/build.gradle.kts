@@ -1,12 +1,12 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.kapt")
+    id("com.google.devtools.ksp")
 }
 
 android {
     namespace = "com.voiceassistant.data"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
@@ -26,44 +26,50 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
     }
 }
 
+val versions = rootProject.extra["versions"] as Map<String, String>
+
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
+    // Modules
     implementation(project(":core"))
     implementation(project(":domain"))
 
     // Kotlin
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${versions["coroutines"]}")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:${versions["coroutines"]}")
 
     // AndroidX
-    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-ktx:${versions["androidxCore"]}")
 
     // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:${versions["androidxRoom"]}")
+    implementation("androidx.room:room-ktx:${versions["androidxRoom"]}")
+    ksp("androidx.room:room-compiler:${versions["androidxRoom"]}")
 
     // Security
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto:${versions["securityCrypto"]}")
 
     // Retrofit
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.retrofit2:retrofit:${versions["retrofit"]}")
+    implementation("com.squareup.retrofit2:converter-gson:${versions["retrofit"]}")
+    implementation("com.squareup.okhttp3:okhttp:${versions["okhttp"]}")
+    implementation("com.squareup.okhttp3:logging-interceptor:${versions["okhttp"]}")
 
-    // Hilt
-    implementation("com.google.dagger:hilt-android:2.50")
-    kapt("com.google.dagger:hilt-compiler:2.50")
-    kapt("com.google.dagger:hilt-android-compiler:2.50")
+    // Hilt (for @Inject)
+    implementation("com.google.dagger:hilt-android:${versions["hilt"]}")
+    ksp("com.google.dagger:hilt-android-compiler:${versions["hilt"]}")
 
     // Timber
-    implementation("com.jakewharton.timber:timber:5.0.1")
+    implementation("com.jakewharton.timber:timber:${versions["timber"]}")
 
     // Test
-    testImplementation("junit:junit:4.13.2")
+    testImplementation("junit:junit:${versions["junit"]}")
 }

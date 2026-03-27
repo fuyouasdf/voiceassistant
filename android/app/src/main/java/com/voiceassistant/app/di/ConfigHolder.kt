@@ -16,6 +16,8 @@ class ConfigHolder @Inject constructor() {
     var navidromeUrl: String = ""
     var navidromeUsername: String = ""
     var navidromePassword: String = ""
+    var jellyfinUrl: String = ""
+    var jellyfinApiKey: String = ""
     var llmBaseUrl: String = "http://192.168.31.244:20034"
     var llmApiKey: String = "sk-lm-gqABXq7E:Gi6jm1G0BCyrVhhHcTEl"
     var llmModel: String = "unsloth/Qwen3.5-35B-A3B-no"
@@ -27,6 +29,8 @@ class ConfigHolder @Inject constructor() {
                 navidromeUrl = repo.getNavidromeUrl()
                 navidromeUsername = repo.getNavidromeUsername()
                 navidromePassword = repo.getNavidromePassword()
+                jellyfinUrl = repo.getJellyfinUrl()
+                jellyfinApiKey = repo.getJellyfinApiKey()
                 llmBaseUrl = repo.getLLMBaseUrl().ifEmpty { "https://api.deepseek.com" }
                 llmApiKey = repo.getLLMApiKey()
                 llmModel = repo.getLLMModel().ifEmpty { "deepseek-chat" }

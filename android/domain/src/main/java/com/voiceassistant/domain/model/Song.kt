@@ -8,5 +8,7 @@ data class Song(
     val title: String,
     val artist: String?,
     val album: String?,
-    val duration: Int
+    val duration: Int,
+    val url: String? = null,
+    val coverUrl: String? = null
 )

@@ -143,7 +143,7 @@ class VoiceAssistantService : Service() {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
                     "语音助手服务",
-                    NotificationManager.IMPORTANCE_MAX
+                    NotificationManager.IMPORTANCE_HIGH
                 ).apply {
                     description = "保持语音助手后台运行"
                     setShowBadge(true)
