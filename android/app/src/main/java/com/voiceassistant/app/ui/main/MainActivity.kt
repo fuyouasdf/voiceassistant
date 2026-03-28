@@ -71,9 +71,7 @@ class MainActivity : AppCompatActivity() {
 
     // Quick Actions
     private lateinit var chipMusic: Chip
-    private lateinit var chipLight: Chip
     private lateinit var chipWeather: Chip
-    private lateinit var chipAlarm: Chip
     private lateinit var chipJellyfin: Chip
 
     // State
@@ -147,9 +145,7 @@ class MainActivity : AppCompatActivity() {
 
         // Quick actions
         chipMusic = findViewById(R.id.chipMusic)
-        chipLight = findViewById(R.id.chipLight)
         chipWeather = findViewById(R.id.chipWeather)
-        chipAlarm = findViewById(R.id.chipAlarm)
         chipJellyfin = findViewById(R.id.chipJellyfin)
 
         // Start floating animation for empty state hint
@@ -211,9 +207,7 @@ class MainActivity : AppCompatActivity() {
         chipMusic.setOnClickListener {
             startActivity(Intent(this, MusicActivity::class.java))
         }
-        chipLight.setOnClickListener { triggerQuickAction("开灯") }
         chipWeather.setOnClickListener { triggerQuickAction("今天天气怎么样") }
-        chipAlarm.setOnClickListener { triggerQuickAction("设一个明天早上7点的闹钟") }
         chipJellyfin.setOnClickListener {
             startActivity(Intent(this, JellyfinBrowseActivity::class.java))
         }

@@ -192,20 +192,6 @@
                         app:chipIconVisible="true" />
 
                     <com.google.android.material.chip.Chip
-                        android:id="@+id/chipLight"
-                        android:layout_width="wrap_content"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:text="开灯"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp"
-                        app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp"
-                        app:chipIcon="@drawable/ic_light"
-                        app:chipIconTint="@color/secondary"
-                        app:chipIconVisible="true" />
-
-                    <com.google.android.material.chip.Chip
                         android:id="@+id/chipWeather"
                         android:layout_width="wrap_content"
                         android:layout_height="40dp"
@@ -217,20 +203,6 @@
                         app:chipStrokeWidth="0dp"
                         app:chipIcon="@drawable/ic_weather"
                         app:chipIconTint="@color/info"
-                        app:chipIconVisible="true" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipAlarm"
-                        android:layout_width="wrap_content"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:text="设闹钟"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp"
-                        app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp"
-                        app:chipIcon="@drawable/ic_alarm"
-                        app:chipIconTint="@color/warning"
                         app:chipIconVisible="true" />
 
                     <com.google.android.material.chip.Chip
