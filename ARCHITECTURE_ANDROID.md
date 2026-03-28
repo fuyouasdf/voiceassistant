@@ -282,6 +282,33 @@ enum class MusicCategory {
 - 通过 HTTP GET 获取设备描述 XML
 - 管理设备列表和连接状态
 
+### 已知问题与解决方案
+
+#### 1. PlaybackInfo 返回 400 Bad Request
+**原因**：自定义 DeviceProfile 字段与 Jellyfin 服务端不兼容
+
+**解决**：不发送 DeviceProfile，让 Jellyfin 使用默认配置
+```kotlin
+// JellyfinClient.kt - getPlaybackInfo()
+val playbackInfoDto = PlaybackInfoDto(
+    mediaSourceId = mediaSourceId,
+    maxStreamingBitrate = 100000000
+)
+// 不要设置 deviceProfile 字段
+```
+
+#### 2. WMA/ASF 格式无法播放 (ExoPlayer "None of the available extractors" 错误)
+**原因**：ExoPlayer 不支持 asf/wma 容器，需要 Jellyfin 转码
+
+**解决**：使用 `/Audio/{id}/stream` 端点并强制转码参数
+```kotlin
+// 不支持格式使用 Audio 端点 + 强制转码
+val url = "$baseUrl/Audio/$songId/stream?$apiKeyParam&Container=mp4&AudioCodec=aac"
+```
+
+#### 3. mediaSourceId 必须移除 dashes
+Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传递无 dashes 的 ID
+
 ---
 
 ## 核心组件代码

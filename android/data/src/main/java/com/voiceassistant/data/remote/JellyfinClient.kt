@@ -526,26 +526,14 @@ class JellyfinClient(
         val needsTranscode = result.container?.lowercase() in unsupportedContainers
 
         val streamUrl = when {
-            // 如果容器不支持，直接使用转码
+            // 如果容器不支持，使用 /Audio 端点强制转码为 AAC/MP4
             needsTranscode -> {
                 Timber.d("容器 ${result.container} 不被 ExoPlayer 支持，使用转码")
-                // transcodingUrl 为 null 说明服务器不支持此格式转码
-                if (result.transcodingUrl != null) {
-                    val fullUrl = if (result.transcodingUrl.startsWith("http")) {
-                        result.transcodingUrl
-                    } else {
-                        "$baseUrl${result.transcodingUrl}"
-                    }
-                    val separator = if (fullUrl.contains("?")) "&" else "?"
-                    val url = "$fullUrl$separator$apiKeyParam$deviceIdParam"
-                    Timber.d("使用转码URL (from transcodingUrl): $url")
-                    url
-                } else {
-                    // transcodingUrl 为 null，尝试使用 /Videos/{id}/stream 不带 static，让服务器决定是否转码
-                    val url = "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
-                    Timber.d("使用转码URL (stream): $url")
-                    url
-                }
+                // 使用 /Audio/{id}/stream 并强制转码参数
+                // Container=mp4&AudioCodec=aac 强制 Jellyfin 转码为 ExoPlayer 支持的格式
+                val url = "$baseUrl/Audio/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam&Container=mp4&AudioCodec=aac"
+                Timber.d("使用转码URL (Audio stream): $url")
+                url
             }
             result.playMethod == PlayMethodType.DIRECT_PLAY -> {
                 // jellyfin-android 使用: /Videos/{itemId}/stream?static=true&playSessionId=...&mediaSourceId=...&deviceId=...

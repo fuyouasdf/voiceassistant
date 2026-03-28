@@ -129,6 +129,15 @@ IDLE → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → I
 ### 3. TTS 合成速度
 vits-melo-tts-zh_en 模型过大(163MB)，合成慢。花燕模型(vits-piper-zh_CN-huayan-medium, 60MB)是更好的选择。
 
+### 4. Jellyfin 播放问题
+**PlaybackInfo 400 错误**：不要发送 DeviceProfile，让 Jellyfin 使用默认配置。
+
+**WMA/ASF 无法播放**：ExoPlayer 不支持 asf 容器，需使用 `/Audio/{id}/stream?Container=mp4&AudioCodec=aac` 强制转码。
+
+**mediaSourceId 必须去 dashes**：Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源。
+
+**相关文件**: `android/data/src/main/java/com/voiceassistant/data/remote/JellyfinClient.kt`
+
 ---
 
 ## 文档链接
