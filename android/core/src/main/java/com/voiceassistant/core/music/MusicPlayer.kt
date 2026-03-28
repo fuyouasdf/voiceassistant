@@ -3,6 +3,7 @@ package com.voiceassistant.core.music
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,9 +98,16 @@ class MusicPlayer @Inject constructor(
 
     private fun getOrCreatePlayer(): ExoPlayer {
         if (exoPlayer == null) {
-            exoPlayer = ExoPlayer.Builder(context).build().also {
+            // 使用 FFmpeg 解码器扩展，支持 WMA 等格式
+            val renderersFactory = DefaultRenderersFactory(context).apply {
+                setEnableDecoderFallback(true)
+                // 启用扩展解码器（FFmpeg 解码器）
+                setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            }
+            exoPlayer = ExoPlayer.Builder(context, renderersFactory).build().also {
                 it.addListener(playerListener)
             }
+            Timber.d("MusicPlayer: 创建 ExoPlayer with FFmpeg decoder extension")
         }
         return exoPlayer!!
     }

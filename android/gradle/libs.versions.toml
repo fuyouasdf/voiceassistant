@@ -49,6 +49,10 @@ leakcanary = "2.14"
 androidx-media = "1.7.1"
 androidx-mediarouter = "1.8.1"
 
+# Jellyfin SDK
+jellyfin-sdk = "1.7.1"
+androidx-media3 = "1.8.0"
+
 # Image
 coil = "2.6.0"
 
@@ -119,6 +123,10 @@ leakcanary = { group = "com.squareup.leakcanary", name = "leakcanary-android", v
 # Media
 androidx-media = { group = "androidx.media", name = "media", version.ref = "androidx-media" }
 androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "androidx-mediarouter" }
+
+# Jellyfin SDK
+jellyfin-sdk = { group = "org.jellyfin.sdk", name = "jellyfin-core", version.ref = "jellyfin-sdk" }
+androidx-media3 = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "androidx-media3" }
 
 # Image
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }

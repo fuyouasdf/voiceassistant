@@ -15,6 +15,12 @@ dependencyResolutionManagement {
         maven { url = uri("https://clojars.org/repo") }
         maven { url = uri("https://s01.oss.sonatype.org/content/repositories/releases/") }
         maven { url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/") }
+        maven {
+            url = uri("https://jitpack.io")
+            content {
+                includeGroup("com.github.jellyfin")
+            }
+        }
     }
 }
 

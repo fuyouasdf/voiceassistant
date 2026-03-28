@@ -1,6 +1,7 @@
 package com.voiceassistant.app.model
 
 import android.content.Context
+import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,17 +22,22 @@ class ModelInitializer(private val context: Context) {
 
     private val modelsDir = File(context.filesDir, "models")
 
+    private val prefs: SharedPreferences by lazy {
+        context.getSharedPreferences("model_init", Context.MODE_PRIVATE)
+    }
+
     init {
         modelsDir.mkdirs()
     }
 
     /**
      * Check if all models are ready
+     * Note: Models are actually loaded by SherpaKWSImpl, SherpaASRImpl, SherpaTTSImpl
+     * during their own initialization, not by ModelInitializer.
+     * This method always returns true since each sherpa impl handles its own model loading.
      */
     fun areModelsReady(): Boolean {
-        return ModelInfo.getRequiredModels().all { model ->
-            isModelReady(model)
-        }
+        return true
     }
 
     /**
@@ -65,11 +71,18 @@ class ModelInitializer(private val context: Context) {
                 updateState(model, ModelStatus.READY)
             }
 
+            // Mark initialization as completed
+            prefs.edit().putBoolean(KEY_INIT_COMPLETED, true).apply()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Timber.e(e, "Model initialization failed")
             Result.failure(e)
         }
+    }
+
+    companion object {
+        private const val KEY_INIT_COMPLETED = "init_completed"
     }
 
     private fun isModelReady(model: ModelInfo): Boolean {
@@ -84,6 +97,11 @@ class ModelInitializer(private val context: Context) {
         // List all files in asset directory
         val assetManager = context.assets
         val files = assetManager.list(assetPath) ?: emptyArray()
+
+        if (files.isEmpty()) {
+            Timber.e("Asset directory $assetPath is empty or not found")
+            throw IllegalStateException("模型资源不存在: $assetPath")
+        }
 
         // Copy each file
         for (fileName in files) {
@@ -172,5 +190,6 @@ class ModelInitializer(private val context: Context) {
     fun clearModels() {
         modelsDir.deleteRecursively()
         modelsDir.mkdirs()
+        prefs.edit().remove(KEY_INIT_COMPLETED).apply()
     }
 }

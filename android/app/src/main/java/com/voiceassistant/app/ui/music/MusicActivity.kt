@@ -43,8 +43,12 @@ class MusicActivity : AppCompatActivity() {
     }
 
     private fun setupViews() {
-        // 返回按钮
-        binding.btnBack.setOnClickListener { finish() }
+        // 返回按钮 - 返回上一级，不要直接退出
+        binding.btnBack.setOnClickListener {
+            if (!viewModel.navigateBack()) {
+                finish()
+            }
+        }
 
         // 创建播放列表
         binding.btnAddPlaylist.setOnClickListener {

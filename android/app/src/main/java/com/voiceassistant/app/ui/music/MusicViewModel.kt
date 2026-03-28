@@ -34,7 +34,8 @@ data class MusicUiState(
     val isPlaying: Boolean = false,
     val error: String? = null,
     val currentCategory: MusicCategory = MusicCategory.ALBUMS,
-    val needsJellyfinConfig: Boolean = false
+    val needsJellyfinConfig: Boolean = false,
+    val navigationStack: List<MusicCategory> = listOf(MusicCategory.ALBUMS) // 导航历史栈
 )
 
 enum class MusicCategory {
@@ -174,7 +175,14 @@ class MusicViewModel @Inject constructor(
      */
     fun loadAlbumSongs(albumId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, currentCategory = MusicCategory.FOLDER) }
+            // 先保存当前分类到导航栈，再进入文件夹
+            _uiState.update { state ->
+                state.copy(
+                    isLoading = true,
+                    currentCategory = MusicCategory.FOLDER,
+                    navigationStack = state.navigationStack + state.currentCategory
+                )
+            }
 
             try {
                 // 使用 getFolderItems 获取所有类型的项目
@@ -215,6 +223,47 @@ class MusicViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, error = "加载失败: ${e.message}") }
             }
         }
+    }
+
+    /**
+     * 返回上一级导航
+     * @return true 如果成功返回，false 如果已经在最顶层
+     */
+    fun navigateBack(): Boolean {
+        val currentStack = _uiState.value.navigationStack
+        if (currentStack.size <= 1) {
+            // 已经在最顶层，不能再返回
+            return false
+        }
+
+        val previousCategory = currentStack.last()
+        val newStack = currentStack.dropLast(1)
+
+        // 根据之前的分类加载对应的数据
+        when (previousCategory) {
+            MusicCategory.ALBUMS -> loadAlbums()
+            MusicCategory.ARTISTS -> loadArtists()
+            MusicCategory.SONGS -> loadSongs()
+            MusicCategory.FOLDER -> {
+                // 如果之前也是 FOLDER，递归找到更早的
+                if (newStack.size > 1) {
+                    _uiState.update { it.copy(navigationStack = newStack) }
+                    return navigateBack()
+                } else {
+                    loadAlbums()
+                }
+            }
+        }
+
+        _uiState.update { it.copy(navigationStack = newStack) }
+        return true
+    }
+
+    /**
+     * 检查是否可以返回
+     */
+    fun canNavigateBack(): Boolean {
+        return _uiState.value.navigationStack.size > 1
     }
 
     /**
@@ -259,24 +308,7 @@ class MusicViewModel @Inject constructor(
             )
 
             // 如果正在播放同一首歌列表，则切换播放/暂停
-            val currentPlaylist = _uiState.value.songs.map { s ->
-                MusicItem(
-                    id = s.id,
-                    title = s.title,
-                    artist = s.artist,
-                    album = s.album,
-                    duration = s.duration,
-                    streamUrl = "", // 需要异步获取
-                    coverUrl = jellyfinClient.getCoverUrl(s.id)
-                )
-            }
-
-            val currentIndex = currentPlaylist.indexOfFirst { it.id == item.id }
-            if (currentIndex >= 0) {
-                musicPlayer.playPlaylist(currentPlaylist, currentIndex)
-            } else {
-                musicPlayer.play(item)
-            }
+            musicPlayer.play(item)
         }
     }
 

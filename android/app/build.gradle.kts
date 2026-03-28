@@ -95,6 +95,9 @@ dependencies {
     // Image Loading
     implementation("io.coil-kt:coil:${versions["coil"]}")
 
+    // Media3 ExoPlayer
+    implementation("androidx.media3:media3-exoplayer:${versions["androidx-media3"]}")
+
     // Test
     testImplementation("junit:junit:${versions["junit"]}")
     androidTestImplementation("androidx.test.ext:junit:${versions["androidxTestExtJunit"]}")

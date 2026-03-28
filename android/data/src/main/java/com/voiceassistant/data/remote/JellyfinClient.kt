@@ -9,7 +9,9 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 import timber.log.Timber
@@ -18,7 +20,11 @@ import java.util.concurrent.TimeUnit
 /**
  * Jellyfin 客户端 - 使用 Retrofit 直接调用 REST API
  */
-class JellyfinClient(private val baseUrl: String, private val apiKey: String) {
+class JellyfinClient(
+    private val baseUrl: String,
+    private val apiKey: String,
+    private val deviceId: String = "voice-assistant-android"
+) {
 
     private val gson = Gson()
     private var cachedUserId: String? = null
@@ -430,11 +436,31 @@ class JellyfinClient(private val baseUrl: String, private val apiKey: String) {
     suspend fun getPlaybackInfo(itemId: String): PlaybackResult? = withContext(Dispatchers.IO) {
         Timber.d("getPlaybackInfo: itemId=$itemId")
         try {
-            val response = api.getPlaybackInfo(itemId)
+            // 必须移除 dashes 以便服务器能找到正确的媒体源
+            // 参考: https://github.com/jellyfin/jellyfin/blob/9a35fd673203cfaf0098138b2768750f4818b3ab/Jellyfin.Api/Helpers/MediaInfoHelper.cs#L196-L201
+            val mediaSourceId = itemId.replace("-", "")
+            // 不发送 DeviceProfile，让 Jellyfin 使用默认配置
+            // 自定义 DeviceProfile 容易因字段不匹配导致 400 错误
+            val playbackInfoDto = PlaybackInfoDto(
+                mediaSourceId = mediaSourceId,
+                maxStreamingBitrate = 100000000 // 100 Mbps
+            )
+            val response = api.getPlaybackInfo(itemId, playbackInfoDto)
             Timber.d("getPlaybackInfo响应: isSuccessful=${response.isSuccessful}, code=${response.code()}")
+            // 打印完整响应体以便调试
+            if (!response.isSuccessful) {
+                Timber.e("getPlaybackInfo失败: ${response.code()}, errorBody=${response.errorBody()?.string()}")
+            } else {
+                val bodyStr = gson.toJson(response.body())
+                Timber.d("getPlaybackInfo响应体: $bodyStr")
+            }
 
             if (response.isSuccessful) {
-                val mediaSources = response.body()?.mediaSources
+                val body = response.body()
+                val playSessionId = body?.playSessionId
+                Timber.d("playSessionId: $playSessionId")
+
+                val mediaSources = body?.mediaSources
                 val sourceInfo = mediaSources?.firstOrNull() ?: run {
                     Timber.e("没有媒体源信息")
                     return@withContext null
@@ -451,6 +477,8 @@ class JellyfinClient(private val baseUrl: String, private val apiKey: String) {
 
                 PlaybackResult(
                     itemId = itemId,
+                    mediaSourceId = sourceInfo.id,
+                    playSessionId = playSessionId,
                     path = sourceInfo.path,
                     container = sourceInfo.container,
                     supportsDirectPlay = sourceInfo.supportsDirectPlay ?: false,
@@ -471,6 +499,7 @@ class JellyfinClient(private val baseUrl: String, private val apiKey: String) {
 
     /**
      * 获取流媒体 URL
+     * 参考 jellyfin-android: VideosApi.getVideoStreamUrl() 和 getVideoStreamByContainerUrl()
      */
     suspend fun getStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         Timber.d("getStreamUrl: songId=$songId")
@@ -479,48 +508,86 @@ class JellyfinClient(private val baseUrl: String, private val apiKey: String) {
             return@withContext ""
         }
 
-        val streamUrl = when (result.playMethod) {
-            PlayMethodType.DIRECT_PLAY -> {
-                val path = result.path
-                if (!path.isNullOrEmpty()) {
-                    Timber.d("使用DIRECT_PLAY path: $path")
-                    path
-                } else {
-                    val container = result.container
-                    val url = if (!container.isNullOrEmpty()) {
-                        "$baseUrl/Audio/$songId/stream.$container?api_key=$apiKey"
+        // 重要：mediaSourceId 必须移除 dashes 才能让服务器找到正确的媒体源
+        // 参考: https://github.com/jellyfin/jellyfin/blob/9a35fd673203cfaf0098138b2768750f4818b3ab/Jellyfin.Api/Helpers/MediaInfoHelper.cs#L196-L201
+        val mediaSourceId = (result.mediaSourceId ?: songId).replace("-", "")
+        val playSessionId = result.playSessionId ?: ""
+        val apiKeyParam = "api_key=$apiKey"
+        val playSessionParam = if (playSessionId.isNotEmpty()) "&PlaySessionId=$playSessionId" else ""
+        val mediaSourceIdParam = "&MediaSourceId=$mediaSourceId"
+        val deviceIdParam = "&DeviceId=$deviceId"
+
+        Timber.d("getStreamUrl: playMethod=${result.playMethod}, mediaSourceId=$mediaSourceId (original=${result.mediaSourceId}), path=${result.path}, container=${result.container}, transcodingUrl=${result.transcodingUrl}")
+
+        // ExoPlayer 不支持 asf/wma 容器，需要转码
+        // ExoPlayer 支持: mp3, aac, flac, ogg, wav, opus, mp4, mkv, webm, ts 等
+        // 不支持: asf (wma), wmv, avi, divx
+        val unsupportedContainers = listOf("asf", "wmv", "avi", "divx")
+        val needsTranscode = result.container?.lowercase() in unsupportedContainers
+
+        val streamUrl = when {
+            // 如果容器不支持，直接使用转码
+            needsTranscode -> {
+                Timber.d("容器 ${result.container} 不被 ExoPlayer 支持，使用转码")
+                // transcodingUrl 为 null 说明服务器不支持此格式转码
+                if (result.transcodingUrl != null) {
+                    val fullUrl = if (result.transcodingUrl.startsWith("http")) {
+                        result.transcodingUrl
                     } else {
-                        "$baseUrl/Audio/$songId/stream?api_key=$apiKey"
+                        "$baseUrl${result.transcodingUrl}"
                     }
-                    Timber.d("使用DIRECT_PLAY生成URL: $url")
+                    val separator = if (fullUrl.contains("?")) "&" else "?"
+                    val url = "$fullUrl$separator$apiKeyParam$deviceIdParam"
+                    Timber.d("使用转码URL (from transcodingUrl): $url")
+                    url
+                } else {
+                    // transcodingUrl 为 null，尝试使用 /Videos/{id}/stream 不带 static，让服务器决定是否转码
+                    val url = "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
+                    Timber.d("使用转码URL (stream): $url")
                     url
                 }
             }
-            PlayMethodType.DIRECT_STREAM -> {
+            result.playMethod == PlayMethodType.DIRECT_PLAY -> {
+                // jellyfin-android 使用: /Videos/{itemId}/stream?static=true&playSessionId=...&mediaSourceId=...&deviceId=...
+                // 即使 path 是 HTTP URL，也通过 /Videos/{id}/stream 获取以获取正确的流
+                val url = "$baseUrl/Videos/$songId/stream?static=true&$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
+                Timber.d("使用DIRECT_PLAY生成URL: $url")
+                url
+            }
+            result.playMethod == PlayMethodType.DIRECT_STREAM -> {
+                // 使用 /Videos/{itemId}/stream.{container} 格式
                 val container = result.container
                 val url = if (!container.isNullOrEmpty()) {
-                    "$baseUrl/Audio/$songId/stream.$container?api_key=$apiKey"
+                    "$baseUrl/Videos/$songId/stream.$container?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 } else {
-                    "$baseUrl/Audio/$songId/stream?api_key=$apiKey"
+                    "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 }
                 Timber.d("使用DIRECT_STREAM URL: $url")
                 url
             }
-            PlayMethodType.TRANSCODE -> {
+            else -> {
+                // TRANSCODE - 使用服务器返回的 transcodingUrl
                 val transcodingUrl = result.transcodingUrl
                 val url = if (!transcodingUrl.isNullOrEmpty()) {
-                    if (transcodingUrl.startsWith("http")) {
-                        "$transcodingUrl&api_key=$apiKey"
+                    val fullUrl = if (transcodingUrl.startsWith("http")) {
+                        transcodingUrl
                     } else {
-                        "$baseUrl$transcodingUrl&api_key=$apiKey"
+                        "$baseUrl$transcodingUrl"
+                    }
+                    // transcodingUrl 通常已包含必要的参数
+                    if (fullUrl.contains("?")) {
+                        "$fullUrl&$apiKeyParam$deviceIdParam"
+                    } else {
+                        "$fullUrl?$apiKeyParam$deviceIdParam"
                     }
                 } else {
-                    "$baseUrl/Audio/$songId/stream?api_key=$apiKey"
+                    "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 }
                 Timber.d("使用TRANSCODE URL: $url")
                 url
             }
         }
+        Timber.d("getStreamUrl 最终streamUrl: $streamUrl")
         streamUrl
     }
 
@@ -604,6 +671,8 @@ data class JellyfinArtist(
 
 data class PlaybackResult(
     val itemId: String,
+    val mediaSourceId: String?,
+    val playSessionId: String?,
     val path: String?,
     val container: String?,
     val supportsDirectPlay: Boolean,
@@ -643,9 +712,10 @@ interface JellyfinApi {
         @Query("limit") limit: Int = 20
     ): Response<SearchHintsResponse>
 
-    @GET("Items/{itemId}/PlaybackInfo")
+    @POST("Items/{itemId}/PlaybackInfo")
     suspend fun getPlaybackInfo(
-        @Path("itemId") itemId: String
+        @Path("itemId") itemId: String,
+        @Body playbackInfoDto: PlaybackInfoDto
     ): Response<PlaybackInfoResponse>
 }
 
@@ -697,10 +767,42 @@ data class SearchHintDto(
 )
 
 data class PlaybackInfoResponse(
-    @SerializedName("MediaSources") val mediaSources: List<MediaSourceDto>? = null
+    @SerializedName("MediaSources") val mediaSources: List<MediaSourceDto>? = null,
+    @SerializedName("PlaySessionId") val playSessionId: String? = null
+)
+
+data class PlaybackInfoDto(
+    @SerializedName("MediaSourceId") val mediaSourceId: String? = null,
+    @SerializedName("DeviceProfile") val deviceProfile: DeviceProfileDto? = null,
+    @SerializedName("MaxStreamingBitrate") val maxStreamingBitrate: Int? = null,
+    @SerializedName("StartTimeTicks") val startTimeTicks: Long? = null,
+    @SerializedName("AudioStreamIndex") val audioStreamIndex: Int? = null,
+    @SerializedName("SubtitleStreamIndex") val subtitleStreamIndex: Int? = null,
+    @SerializedName("AutoOpenLiveStream") val autoOpenLiveStream: Boolean = true
+)
+
+data class DeviceProfileDto(
+    @SerializedName("Name") val name: String = "ExoPlayer",
+    @SerializedName("MaxStreamingBitrate") val maxStreamingBitrate: Int = 100000000,
+    @SerializedName("DirectPlayProfiles") val directPlayProfiles: List<DirectPlayProfileDto>? = null,
+    @SerializedName("TranscodingProfiles") val transcodingProfiles: List<TranscodingProfileDto>? = null,
+    @SerializedName("MusicStreamingTranscodingBitrate") val musicStreamingTranscodingBitrate: Int? = null
+)
+
+data class DirectPlayProfileDto(
+    @SerializedName("Container") val container: String? = null,
+    @SerializedName("AudioCodec") val audioCodec: String? = null,
+    @SerializedName("Type") val type: String = "Video"
+)
+
+data class TranscodingProfileDto(
+    @SerializedName("Container") val container: String = "mp4",
+    @SerializedName("AudioCodec") val audioCodec: String = "aac",
+    @SerializedName("Type") val type: String = "Audio"
 )
 
 data class MediaSourceDto(
+    @SerializedName("Id") val id: String? = null,
     @SerializedName("Path") val path: String? = null,
     @SerializedName("Container") val container: String? = null,
     @SerializedName("SupportsDirectPlay") val supportsDirectPlay: Boolean? = null,
