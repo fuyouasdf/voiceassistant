@@ -35,7 +35,11 @@ data class MusicUiState(
     val error: String? = null,
     val currentCategory: MusicCategory = MusicCategory.ALBUMS,
     val needsJellyfinConfig: Boolean = false,
-    val navigationStack: List<MusicCategory> = listOf(MusicCategory.ALBUMS) // 导航历史栈
+    val navigationStack: List<MusicCategory> = listOf(MusicCategory.ALBUMS), // 导航历史栈
+    // 播放列表详情
+    val currentPlaylist: PlaylistEntity? = null,
+    val currentPlaylistSongs: List<JellyfinSong> = emptyList(),
+    val isLoadingPlaylistDetail: Boolean = false
 )
 
 enum class MusicCategory {
@@ -57,6 +61,24 @@ class MusicViewModel @Inject constructor(
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
 
     init {
+        // 设置 seek 回调：当 ExoPlayer 的 range seek 不支持时，通过重新加载流来实现 seek
+        musicPlayer.setSeekCallback(object : MusicPlayer.SeekCallback {
+            override suspend fun onSeekToGetStreamUrl(item: MusicItem, positionMs: Long): String? {
+                return try {
+                    val url = jellyfinClient.getStreamUrlWithStartTime(
+                        songId = item.id,
+                        startTimeMs = positionMs,
+                        playSessionId = item.playbackSessionId,
+                        mediaSourceId = item.mediaSourceId
+                    )
+                    if (url.isNotEmpty()) url else null
+                } catch (e: Exception) {
+                    Timber.e(e, "getStreamUrlWithStartTime failed")
+                    null
+                }
+            }
+        })
+
         // 监听播放状态
         viewModelScope.launch {
             musicPlayer.state.collect { playerState ->
@@ -175,12 +197,14 @@ class MusicViewModel @Inject constructor(
      */
     fun loadAlbumSongs(albumId: String) {
         viewModelScope.launch {
-            // 先保存当前分类到导航栈，再进入文件夹
+            // 保存当前状态到导航栈，然后进入新的 FOLDER 状态
+            // 注意：navigationStack 只保存"之前的"状态，不保存当前位置
+            val currentNavState = _uiState.value.currentCategory
             _uiState.update { state ->
                 state.copy(
                     isLoading = true,
                     currentCategory = MusicCategory.FOLDER,
-                    navigationStack = state.navigationStack + state.currentCategory
+                    navigationStack = state.navigationStack + listOf(currentNavState)
                 )
             }
 
@@ -231,31 +255,35 @@ class MusicViewModel @Inject constructor(
      */
     fun navigateBack(): Boolean {
         val currentStack = _uiState.value.navigationStack
-        if (currentStack.size <= 1) {
-            // 已经在最顶层，不能再返回
+        if (currentStack.isEmpty()) {
+            // 导航栈为空，无法返回
             return false
         }
 
         val previousCategory = currentStack.last()
         val newStack = currentStack.dropLast(1)
 
-        // 根据之前的分类加载对应的数据
+        // 恢复之前的分类状态
+        _uiState.update { it.copy(currentCategory = previousCategory, navigationStack = newStack) }
+
+        // 根据恢复的分类加载对应的数据
         when (previousCategory) {
             MusicCategory.ALBUMS -> loadAlbums()
             MusicCategory.ARTISTS -> loadArtists()
             MusicCategory.SONGS -> loadSongs()
             MusicCategory.FOLDER -> {
-                // 如果之前也是 FOLDER，递归找到更早的
-                if (newStack.size > 1) {
-                    _uiState.update { it.copy(navigationStack = newStack) }
-                    return navigateBack()
-                } else {
+                // 之前的 FOLDER 状态需要特殊处理，加载最近的专辑/艺术家列表
+                if (newStack.isNotEmpty() && newStack.last() == MusicCategory.FOLDER) {
+                    // 如果再之前也是 FOLDER，需要找到正确的父级
+                    // 这里简单处理为加载专辑列表
                     loadAlbums()
+                } else {
+                    // 恢复导航栈后再加载对应的数据
+                    // 由于已经更新了 currentCategory，不需要额外操作
                 }
             }
         }
 
-        _uiState.update { it.copy(navigationStack = newStack) }
         return true
     }
 
@@ -284,15 +312,34 @@ class MusicViewModel @Inject constructor(
     }
 
     /**
+     * 搜索专辑
+     */
+    fun searchAlbums(query: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+
+            try {
+                val results = jellyfinClient.getAlbums(searchTerm = query)
+                _uiState.update { it.copy(albums = results, isLoading = false) }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to search albums")
+                _uiState.update { it.copy(isLoading = false, error = "搜索失败: ${e.message}") }
+            }
+        }
+    }
+
+    /**
      * 播放歌曲
      */
     fun playSong(song: JellyfinSong) {
+        android.util.Log.i("♪", "VM playSong called: ${song.title}")
         viewModelScope.launch {
-            // 异步获取流媒体 URL
-            val streamUrl = jellyfinClient.getStreamUrl(song.id)
-            Timber.d("Playing song: ${song.title}, stream URL: $streamUrl")
+            // 异步获取流媒体 URL 和会话信息
+            val streamInfo = jellyfinClient.getStreamInfo(song.id)
+            android.util.Log.i("♪", "VM got streamInfo: ${song.title}, sessionId=${streamInfo.playSessionId}")
+            Timber.d("Playing song: ${song.title}, stream URL: ${streamInfo.url}")
 
-            if (streamUrl.isEmpty()) {
+            if (streamInfo.url.isEmpty()) {
                 _uiState.update { it.copy(error = "无法获取播放地址") }
                 return@launch
             }
@@ -303,8 +350,10 @@ class MusicViewModel @Inject constructor(
                 artist = song.artist,
                 album = song.album,
                 duration = song.duration,
-                streamUrl = streamUrl,
-                coverUrl = jellyfinClient.getCoverUrl(song.id)
+                streamUrl = streamInfo.url,
+                coverUrl = jellyfinClient.getCoverUrl(song.id),
+                playbackSessionId = streamInfo.playSessionId,
+                mediaSourceId = streamInfo.mediaSourceId
             )
 
             // 如果正在播放同一首歌列表，则切换播放/暂停
@@ -395,6 +444,57 @@ class MusicViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "Failed to add song to playlist")
                 _uiState.update { it.copy(error = "添加歌曲失败: ${e.message}") }
+            }
+        }
+    }
+
+    /**
+     * 加载播放列表详情
+     */
+    fun loadPlaylistDetail(playlistId: Long) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingPlaylistDetail = true) }
+
+            try {
+                // 获取播放列表信息
+                val playlist = playlistRepository.getPlaylistById(playlistId)
+                if (playlist == null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoadingPlaylistDetail = false,
+                            error = "播放列表不存在"
+                        )
+                    }
+                    return@launch
+                }
+
+                // 获取播放列表中的歌曲
+                val songIds = if (playlist.songIds.isEmpty()) {
+                    emptyList()
+                } else {
+                    playlist.songIds.split(",")
+                }
+
+                // 逐个获取歌曲详情
+                val songs = songIds.mapNotNull { songId ->
+                    jellyfinClient.getItem(songId)
+                }
+
+                _uiState.update {
+                    it.copy(
+                        currentPlaylist = playlist,
+                        currentPlaylistSongs = songs,
+                        isLoadingPlaylistDetail = false
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load playlist detail")
+                _uiState.update {
+                    it.copy(
+                        isLoadingPlaylistDetail = false,
+                        error = "加载播放列表失败: ${e.message}"
+                    )
+                }
             }
         }
     }

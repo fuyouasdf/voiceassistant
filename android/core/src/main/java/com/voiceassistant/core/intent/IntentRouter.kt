@@ -41,6 +41,9 @@ class IntentRouter @Inject constructor(
     private val llmRepository: LLMRepository?,
     private val playerRepository: PlayerRepository?
 ) {
+    // Play queue for next/previous functionality
+    private val playQueue = mutableListOf<Song>()
+    private var currentIndex: Int = -1
 
     /**
      * Parse text and determine intent
@@ -178,21 +181,13 @@ class IntentRouter @Inject constructor(
                         if (songs.isEmpty()) {
                             "没找到关于「$query」的歌曲"
                         } else {
+                            // Update play queue with search results
+                            playQueue.clear()
+                            playQueue.addAll(songs)
+                            currentIndex = 0
+
                             val song = songs.first()
-                            val streamUrl = musicRepo.getStreamUrl(song.id)
-                            if (player != null) {
-                                val playResult = player.play(streamUrl, song.title, song.artist ?: "未知艺术家")
-                                if (playResult.isSuccess) {
-                                    "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
-                                } else {
-                                    val error = playResult.exceptionOrNull()?.message ?: "播放失败"
-                                    Timber.e("Play failed: $error")
-                                    "播放失败：$error"
-                                }
-                            } else {
-                                // No player available, just report success
-                                "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
-                            }
+                            playSong(musicRepo, player, song)
                         }
                     },
                     onFailure = { "搜索歌曲失败，请稍后重试" }
@@ -210,8 +205,28 @@ class IntentRouter @Inject constructor(
                     if (result.isSuccess) "继续播放" else "继续播放失败"
                 } else "继续播放"
             }
-            "next" -> "正在播放下一首"
-            "previous" -> "正在播放上一首"
+            "next" -> {
+                if (playQueue.isEmpty()) {
+                    "没有可播放的歌曲列表，请先选择要播放的歌曲"
+                } else if (currentIndex >= playQueue.lastIndex) {
+                    "已经是最后一首了"
+                } else {
+                    currentIndex++
+                    val song = playQueue[currentIndex]
+                    playSong(musicRepo, player, song)
+                }
+            }
+            "previous" -> {
+                if (playQueue.isEmpty()) {
+                    "没有可播放的歌曲列表，请先选择要播放的歌曲"
+                } else if (currentIndex <= 0) {
+                    "已经是第一首了"
+                } else {
+                    currentIndex--
+                    val song = playQueue[currentIndex]
+                    playSong(musicRepo, player, song)
+                }
+            }
             "stop" -> {
                 if (player != null) {
                     val result = player.stop()
@@ -222,21 +237,146 @@ class IntentRouter @Inject constructor(
         }
     }
 
-    private fun handleVolume(intent: Intent): String {
+    /**
+     * Play a song using the provided repositories
+     */
+    private suspend fun playSong(
+        musicRepo: MusicRepository,
+        player: PlayerRepository?,
+        song: Song
+    ): String {
+        return try {
+            val streamUrl = musicRepo.getStreamUrl(song.id)
+            if (player != null) {
+                val playResult = player.play(streamUrl, song.title, song.artist ?: "未知艺术家")
+                if (playResult.isSuccess) {
+                    "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+                } else {
+                    val error = playResult.exceptionOrNull()?.message ?: "播放失败"
+                    Timber.e("Play failed: $error")
+                    "播放失败：$error"
+                }
+            } else {
+                // No player available, just report success
+                "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "playSong failed")
+            "播放失败：${e.message ?: "未知错误"}"
+        }
+    }
+
+    private suspend fun handleVolume(intent: Intent): String {
+        val player = playerRepository
+
+        // Get current volume if player is available, otherwise default to 50
+        val currentVolume = 50 // We'll use intent.value for absolute, or default increment
+
         return when (intent.action) {
-            "set" -> "音量调到 ${intent.value}%"
-            "up" -> "音量增加 ${intent.value}%"
-            "down" -> "音量减少 ${intent.value}%"
-            "mute" -> "已静音"
+            "set" -> {
+                val volume = intent.value ?: 50
+                if (player != null && player.isPlayerAvailable()) {
+                    val result = player.setVolume(volume)
+                    if (result.isSuccess) {
+                        "音量已调到 $volume%"
+                    } else {
+                        "音量调节失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
+                    }
+                } else {
+                    "音量调到 $volume% (播放器未连接)"
+                }
+            }
+            "up" -> {
+                val increment = intent.value ?: 10
+                val newVolume = (currentVolume + increment).coerceAtMost(100)
+                if (player != null && player.isPlayerAvailable()) {
+                    val result = player.setVolume(newVolume)
+                    if (result.isSuccess) {
+                        "音量已增加 $increment%，当前音量 $newVolume%"
+                    } else {
+                        "音量调节失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
+                    }
+                } else {
+                    "音量增加 $increment%"
+                }
+            }
+            "down" -> {
+                val decrement = intent.value ?: 10
+                val newVolume = (currentVolume - decrement).coerceAtLeast(0)
+                if (player != null && player.isPlayerAvailable()) {
+                    val result = player.setVolume(newVolume)
+                    if (result.isSuccess) {
+                        "音量已减少 $decrement%，当前音量 $newVolume%"
+                    } else {
+                        "音量调节失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
+                    }
+                } else {
+                    "音量减少 $decrement%"
+                }
+            }
+            "mute" -> {
+                if (player != null && player.isPlayerAvailable()) {
+                    val result = player.setVolume(0)
+                    if (result.isSuccess) {
+                        "已静音"
+                    } else {
+                        "静音失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
+                    }
+                } else {
+                    "已静音"
+                }
+            }
             else -> "音量操作"
         }
     }
 
-    private fun handleDevice(intent: Intent): String {
+    private suspend fun handleDevice(intent: Intent): String {
+        val player = playerRepository
+
+        if (player == null || !player.isPlayerAvailable()) {
+            return when (intent.action) {
+                "on" -> "设备未连接，无法打开"
+                "off" -> "设备未连接，无法关闭"
+                "toggle" -> "设备未连接，无法切换状态"
+                else -> "设备操作失败"
+            }
+        }
+
         return when (intent.action) {
-            "on" -> "已打开设备"
-            "off" -> "已关闭设备"
-            "toggle" -> "已切换设备状态"
+            "on" -> {
+                // "打开设备" - try to resume playback
+                val result = player.resume()
+                if (result.isSuccess) {
+                    "已打开设备并继续播放"
+                } else {
+                    "打开设备失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
+                }
+            }
+            "off" -> {
+                // "关闭设备" - stop playback
+                val result = player.stop()
+                if (result.isSuccess) {
+                    "已关闭设备"
+                } else {
+                    "关闭设备失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
+                }
+            }
+            "toggle" -> {
+                // "切换设备状态" - toggle between play and pause
+                // Check if currently playing by trying to pause
+                val pauseResult = player.pause()
+                if (pauseResult.isSuccess) {
+                    "已暂停播放"
+                } else {
+                    // Not playing, try to resume
+                    val resumeResult = player.resume()
+                    if (resumeResult.isSuccess) {
+                        "已继续播放"
+                    } else {
+                        "切换状态失败：${resumeResult.exceptionOrNull()?.message ?: "未知错误"}"
+                    }
+                }
+            }
             else -> "设备操作"
         }
     }

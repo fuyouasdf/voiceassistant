@@ -130,13 +130,14 @@
         android:orientation="vertical"
         app:layout_constraintTop_toBottomOf="@id/songInfo">
 
-        <SeekBar
-            android:id="@+id/seekBar"
+        <androidx.media3.ui.DefaultTimeBar
+            android:id="@+id/defaultTimeBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100"
-            android:progressTint="@color/primary"
-            android:thumbTint="@color/primary" />
+            app:played_color="@color/primary"
+            app:scrubber_color="@color/primary"
+            app:unplayed_color="@color/text_tertiary"
+            app:buffered_color="@color/text_secondary" />
 
         <LinearLayout
             android:layout_width="match_parent"

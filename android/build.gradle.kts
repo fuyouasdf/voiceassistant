@@ -28,5 +28,6 @@ extra["versions"] = mapOf(
     "androidxTestExtJunit" to "1.2.1",
     "androidxTestEspresso" to "3.7.0",
     "media3" to "1.8.0",
-    "coil" to "2.6.0"
+    "coil" to "2.6.0",
+    "gson" to "2.10.1"
 )

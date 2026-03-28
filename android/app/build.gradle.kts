@@ -96,7 +96,8 @@ dependencies {
     implementation("io.coil-kt:coil:${versions["coil"]}")
 
     // Media3 ExoPlayer
-    implementation("androidx.media3:media3-exoplayer:${versions["androidx-media3"]}")
+    implementation("androidx.media3:media3-exoplayer:${versions["media3"]}")
+    implementation("androidx.media3:media3-ui:${versions["media3"]}")
 
     // Test
     testImplementation("junit:junit:${versions["junit"]}")

@@ -24,6 +24,7 @@ import com.voiceassistant.app.R
 import com.voiceassistant.app.service.VoiceAssistantService
 import com.voiceassistant.app.ui.settings.SettingsActivity
 import com.voiceassistant.app.ui.music.MusicActivity
+import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
 import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
 import dagger.hilt.android.AndroidEntryPoint
@@ -73,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chipLight: Chip
     private lateinit var chipWeather: Chip
     private lateinit var chipAlarm: Chip
+    private lateinit var chipJellyfin: Chip
 
     // State
     private var isRecording = false
@@ -148,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         chipLight = findViewById(R.id.chipLight)
         chipWeather = findViewById(R.id.chipWeather)
         chipAlarm = findViewById(R.id.chipAlarm)
+        chipJellyfin = findViewById(R.id.chipJellyfin)
 
         // Start floating animation for empty state hint
         startFloatingAnimation()
@@ -211,6 +214,9 @@ class MainActivity : AppCompatActivity() {
         chipLight.setOnClickListener { triggerQuickAction("开灯") }
         chipWeather.setOnClickListener { triggerQuickAction("今天天气怎么样") }
         chipAlarm.setOnClickListener { triggerQuickAction("设一个明天早上7点的闹钟") }
+        chipJellyfin.setOnClickListener {
+            startActivity(Intent(this, JellyfinBrowseActivity::class.java))
+        }
     }
 
     private fun triggerQuickAction(text: String) {

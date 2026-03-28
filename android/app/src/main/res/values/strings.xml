@@ -78,4 +78,19 @@
     <string name="settings_test_connection">测试连接</string>
     <string name="settings_connection_success">连接成功</string>
     <string name="settings_connection_failed">连接失败</string>
+
+    <!-- Jellyfin Control -->
+    <string name="jellyfin_control_title">Jellyfin 控制</string>
+    <string name="jellyfin_control_refresh">刷新</string>
+    <string name="jellyfin_control_sessions">会话列表</string>
+    <string name="jellyfin_control_now_playing">正在播放</string>
+    <string name="jellyfin_control_no_session">未选择会话</string>
+    <string name="jellyfin_control_not_playing">未在播放</string>
+    <string name="jellyfin_control_playing">播放中</string>
+    <string name="jellyfin_control_paused">已暂停</string>
+    <string name="jellyfin_control_previous">上一曲</string>
+    <string name="jellyfin_control_play">播放</string>
+    <string name="jellyfin_control_pause">暂停</string>
+    <string name="jellyfin_control_stop">停止</string>
+    <string name="jellyfin_control_next">下一曲</string>
 </resources>

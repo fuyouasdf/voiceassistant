@@ -233,6 +233,20 @@
                         app:chipIconTint="@color/warning"
                         app:chipIconVisible="true" />
 
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipJellyfin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:text="Jellyfin"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        app:chipBackgroundColor="@color/surface"
+                        app:chipStrokeWidth="0dp"
+                        app:chipIcon="@drawable/ic_remote_play"
+                        app:chipIconTint="@color/primary"
+                        app:chipIconVisible="true" />
+
                 </LinearLayout>
             </HorizontalScrollView>
 

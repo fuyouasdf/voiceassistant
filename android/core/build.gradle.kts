@@ -51,6 +51,9 @@ dependencies {
     // AndroidX
     implementation("androidx.core:core-ktx:${versions["androidxCore"]}")
 
+    // Gson
+    implementation("com.google.code.gson:gson:${versions["gson"]}")
+
     // Media3
     implementation("androidx.media3:media3-common:${versions["media3"]}")
     implementation("androidx.media3:media3-session:${versions["media3"]}")
@@ -60,10 +63,8 @@ dependencies {
     // Sherpa-ONNX (AAR module built from sherpa-onnx-aar)
     implementation(project(":sherpa-onnx-aar:sherpa_onnx"))
 
-    // Retrofit
-    implementation("com.squareup.retrofit2:retrofit:${versions["retrofit"]}")
-    implementation("com.squareup.retrofit2:converter-gson:${versions["retrofit"]}")
-    implementation("com.squareup.okhttp3:okhttp:${versions["okhttp"]}")
+    // Data module (for JellyfinClient)
+    // Note: Removed due to circular dependency. Use PlaybackReporter interface instead.
 
     // Timber
     implementation("com.jakewharton.timber:timber:${versions["timber"]}")

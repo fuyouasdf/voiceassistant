@@ -58,6 +58,8 @@ class MusicLibraryFragment : Fragment() {
         songAdapter = SongAdapter(
             onSongClick = { song ->
                 viewModel.playSong(song)
+                // 播放歌曲后跳转到正在播放页面
+                (requireActivity() as? MusicActivity)?.openNowPlayingFragment()
             },
             onAddToPlaylistClick = { song ->
                 showAddToPlaylistDialog(song)

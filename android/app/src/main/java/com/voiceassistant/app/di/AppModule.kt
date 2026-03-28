@@ -1,12 +1,15 @@
 package com.voiceassistant.app.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
+import com.voiceassistant.app.ui.music.JellyfinPlaybackReporter
 import com.voiceassistant.core.audio.AudioCapture
 import com.voiceassistant.core.audio.AudioPlayer
 import com.voiceassistant.core.dlna.DLNAManager
 import com.voiceassistant.core.dlna.DLNAPlayer
 import com.voiceassistant.core.intent.IntentRouter
+import com.voiceassistant.core.music.PlaybackReporter
 import com.voiceassistant.core.pipeline.ASRManager
 import com.voiceassistant.core.pipeline.PipelineConfig
 import com.voiceassistant.core.pipeline.VoicePipeline
@@ -88,6 +91,12 @@ object AppModule {
         return ConfigHolder()
     }
 
+    @Provides
+    @Singleton
+    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("voice_assistant_prefs", Context.MODE_PRIVATE)
+    }
+
 
     @Provides
     @Singleton
@@ -142,6 +151,14 @@ object AppModule {
         jellyfinClient: JellyfinClient
     ): MusicRepository {
         return MusicRepositoryImpl(jellyfinClient)
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaybackReporter(
+        jellyfinPlaybackReporter: JellyfinPlaybackReporter
+    ): PlaybackReporter {
+        return jellyfinPlaybackReporter
     }
 
     @Provides

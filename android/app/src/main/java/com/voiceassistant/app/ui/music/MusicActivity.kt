@@ -30,6 +30,23 @@ class MusicActivity : AppCompatActivity() {
 
     private val tabTitles = listOf("音乐库", "播放列表")
 
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        // 先检查是否有 Fragment 在 back stack
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.popBackStack()
+            return
+        }
+
+        // 尝试返回上一级目录
+        if (viewModel.navigateBack()) {
+            return
+        }
+
+        // 最后才退出 Activity
+        super.onBackPressed()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMusicBinding.inflate(layoutInflater)
@@ -55,12 +72,16 @@ class MusicActivity : AppCompatActivity() {
             showCreatePlaylistDialog()
         }
 
-        // 搜索
+        // 搜索 - 根据当前分类决定搜索歌曲还是专辑
         binding.etSearch.setOnEditorActionListener { v, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 val query = v.text.toString().trim()
                 if (query.isNotEmpty()) {
-                    viewModel.searchSongs(query)
+                    val currentCategory = viewModel.uiState.value.currentCategory
+                    when (currentCategory) {
+                        MusicCategory.ALBUMS, MusicCategory.FOLDER -> viewModel.searchAlbums(query)
+                        else -> viewModel.searchSongs(query)
+                    }
                 }
                 true
             } else false
@@ -89,6 +110,14 @@ class MusicActivity : AppCompatActivity() {
             viewModel.playNext()
             openNowPlayingFragment()
         }
+
+        // 底部播放栏点击歌曲名跳转到正在播放页面
+        binding.playerBar.setOnClickListener {
+            openNowPlayingFragment()
+        }
+        // 确保内部布局也能响应点击
+        binding.playerBar.setClickable(true)
+        binding.playerBar.isFocusable = true
     }
 
     private fun observeState() {
@@ -142,8 +171,25 @@ class MusicActivity : AppCompatActivity() {
     /**
      * 打开正在播放页面
      */
-    private fun openNowPlayingFragment() {
+    fun openNowPlayingFragment() {
         val fragment = NowPlayingFragment()
+        supportFragmentManager.commit {
+            setCustomAnimations(
+                android.R.anim.fade_in,
+                android.R.anim.fade_out,
+                android.R.anim.fade_in,
+                android.R.anim.fade_out
+            )
+            add(android.R.id.content, fragment)
+            addToBackStack(null)
+        }
+    }
+
+    /**
+     * 打开播放列表详情页面
+     */
+    fun openPlaylistDetailFragment(playlistId: Long) {
+        val fragment = PlaylistDetailFragment.newInstance(playlistId)
         supportFragmentManager.commit {
             setCustomAnimations(
                 android.R.anim.fade_in,

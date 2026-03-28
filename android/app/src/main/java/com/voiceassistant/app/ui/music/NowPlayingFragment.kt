@@ -6,11 +6,12 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.SeekBar
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.media3.ui.TimeBar
 import coil.load
 import coil.transform.RoundedCornersTransformation
 import com.voiceassistant.app.R
@@ -35,6 +36,7 @@ class NowPlayingFragment : Fragment() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var isTrackingTouch = false
+    private var wasPlayingBeforeSeek = false
 
     // 进度更新 Runnable
     private val updateProgressRunnable = object : Runnable {
@@ -90,29 +92,36 @@ class NowPlayingFragment : Fragment() {
             musicPlayer.playNext()
         }
 
-        // 进度条拖动
-        binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    val state = musicPlayer.getState()
-                    val position = (progress.toLong() * state.duration) / 100
-                    binding.tvCurrentTime.text = formatTime(position)
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+        // 进度条拖动 (使用 DefaultTimeBar)
+        binding.defaultTimeBar.addListener(object : TimeBar.OnScrubListener {
+            override fun onScrubStart(timeBar: TimeBar, position: Long) {
                 isTrackingTouch = true
+                wasPlayingBeforeSeek = musicPlayer.state.value.isPlaying
+                android.util.Log.i("♪", "UI SEEK START: position=$position")
             }
 
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+            override fun onScrubMove(timeBar: TimeBar, position: Long) {
+                binding.tvCurrentTime.text = formatTime(position)
+            }
+
+            override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) {
                 isTrackingTouch = false
-                seekBar?.let {
-                    val state = musicPlayer.getState()
-                    val position = (it.progress.toLong() * state.duration) / 100
+                if (!canceled) {
+                    android.util.Log.i("♪", "UI SEEK STOP: position=$position")
                     musicPlayer.seekTo(position)
                 }
             }
         })
+
+        // 播放列表按钮
+        binding.btnPlaylist.setOnClickListener {
+            showPlaylistDialog()
+        }
+
+        // 收藏按钮
+        binding.btnFavorite.setOnClickListener {
+            musicPlayer.toggleFavorite()
+        }
     }
 
     private fun observePlayerState() {
@@ -163,12 +172,16 @@ class NowPlayingFragment : Fragment() {
     private fun updateProgress() {
         val state = musicPlayer.getState()
         if (state.duration > 0) {
-            val progress = ((state.currentPosition * 100) / state.duration).toInt()
-            binding.seekBar.progress = progress
+            // 使用 DefaultTimeBar 的绝对位置方法
+            binding.defaultTimeBar.setPosition(state.currentPosition)
+            binding.defaultTimeBar.setBufferedPosition(state.currentPosition) // 简化处理
+            binding.defaultTimeBar.setDuration(state.duration)
             binding.tvCurrentTime.text = formatTime(state.currentPosition)
             binding.tvTotalTime.text = formatTime(state.duration)
         } else {
-            binding.seekBar.progress = 0
+            binding.defaultTimeBar.setPosition(0)
+            binding.defaultTimeBar.setBufferedPosition(0)
+            binding.defaultTimeBar.setDuration(0)
             binding.tvCurrentTime.text = formatTime(0)
             binding.tvTotalTime.text = formatTime(0)
         }
@@ -188,6 +201,38 @@ class NowPlayingFragment : Fragment() {
         val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
         return String.format("%d:%02d", minutes, seconds)
+    }
+
+    /**
+     * 显示播放列表对话框
+     */
+    private fun showPlaylistDialog() {
+        val playlist = musicPlayer.state.value.playlist
+        if (playlist.isEmpty()) {
+            AlertDialog.Builder(requireContext())
+                .setTitle("播放列表")
+                .setMessage("播放列表为空")
+                .setPositiveButton("确定", null)
+                .show()
+            return
+        }
+
+        val currentIndex = musicPlayer.state.value.currentIndex
+        val songTitles = playlist.mapIndexed { index, item ->
+            val prefix = if (index == currentIndex) "▶ " else "${index + 1}. "
+            "$prefix${item.title} - ${item.artist ?: "未知艺术家"}"
+        }.toTypedArray()
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("播放列表 (${playlist.size}首)")
+            .setItems(songTitles) { _, which ->
+                // 播放选中的歌曲
+                if (which != currentIndex) {
+                    musicPlayer.seekToIndex(which)
+                }
+            }
+            .setPositiveButton("关闭", null)
+            .show()
     }
 
     override fun onDestroyView() {
