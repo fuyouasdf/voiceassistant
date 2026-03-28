@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.voiceassistant.app.databinding.FragmentMusicLibraryBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
@@ -28,6 +29,7 @@ class MusicLibraryFragment : Fragment() {
     private val viewModel: MusicViewModel by activityViewModels()
     private lateinit var songAdapter: SongAdapter
     private lateinit var albumAdapter: AlbumAdapter
+    private lateinit var folderAdapter: FolderAdapter
 
     private var currentCategory: MusicCategory = MusicCategory.ALBUMS
 
@@ -66,6 +68,15 @@ class MusicLibraryFragment : Fragment() {
             onAlbumClick = { album ->
                 // 点击专辑加载该专辑下的歌曲
                 viewModel.loadAlbumSongs(album.id)
+            }
+        )
+
+        folderAdapter = FolderAdapter(
+            onItemClick = { item ->
+                viewModel.onFolderItemClick(item)
+            },
+            getCoverUrl = { itemId ->
+                viewModel.getCoverUrl(itemId)
             }
         )
     }
@@ -109,6 +120,7 @@ class MusicLibraryFragment : Fragment() {
                     MusicCategory.SONGS -> showSongs(state)
                     MusicCategory.ALBUMS -> showAlbums(state)
                     MusicCategory.ARTISTS -> showArtists(state)
+                    MusicCategory.FOLDER -> showFolder(state)
                 }
 
                 // 错误处理
@@ -167,6 +179,21 @@ class MusicLibraryFragment : Fragment() {
             binding.recyclerView.visibility = View.GONE
             binding.tvEmpty.visibility = View.VISIBLE
             binding.tvEmpty.text = "暂无艺术家"
+        }
+    }
+
+    private fun showFolder(state: MusicUiState) {
+        // 文件夹内显示混合内容（歌曲、专辑、子文件夹）使用瀑布流布局
+        if (state.folderItems.isNotEmpty()) {
+            binding.recyclerView.layoutManager = StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL)
+            binding.recyclerView.adapter = folderAdapter
+            binding.recyclerView.visibility = View.VISIBLE
+            binding.tvEmpty.visibility = View.GONE
+            folderAdapter.submitList(state.folderItems)
+        } else if (!state.isLoading) {
+            binding.recyclerView.visibility = View.GONE
+            binding.tvEmpty.visibility = View.VISIBLE
+            binding.tvEmpty.text = "文件夹为空"
         }
     }
 

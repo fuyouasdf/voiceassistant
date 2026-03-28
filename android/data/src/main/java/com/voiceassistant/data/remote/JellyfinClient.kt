@@ -316,6 +316,59 @@ class JellyfinClient(private val baseUrl: String, private val apiKey: String) {
     }
 
     /**
+     * 获取文件夹下的所有项目（不限制类型）
+     * 用于浏览文件夹/艺术家/专辑内容
+     */
+    suspend fun getFolderItems(parentId: String, startIndex: Int = 0, limit: Int = 50): List<JellyfinItem> = withContext(Dispatchers.IO) {
+        Timber.d("getFolderItems: parentId=$parentId, startIndex=$startIndex, limit=$limit")
+
+        val userId = getDefaultUserId()
+        if (userId == null) {
+            Timber.e("getFolderItems失败: 无法获取userId")
+            return@withContext emptyList()
+        }
+
+        try {
+            // 不设置 includeMediaTypes，获取所有类型
+            val response = api.getItems(
+                userId = userId,
+                parentId = parentId,
+                includeMediaTypes = null,
+                startIndex = startIndex,
+                limit = limit
+            )
+
+            Timber.d("getFolderItems响应: isSuccessful=${response.isSuccessful}, code=${response.code()}")
+
+            if (response.isSuccessful) {
+                val items = response.body()?.items ?: emptyList()
+                Timber.d("获取到${items.size}个items")
+
+                val result = items.mapNotNull { item ->
+                    item.id?.let { id ->
+                        JellyfinItem(
+                            id = id,
+                            name = item.name ?: return@mapNotNull null,
+                            type = item.type ?: return@mapNotNull null,
+                            artist = item.artists?.firstOrNull(),
+                            albumName = item.albumName,
+                            runTimeTicks = item.runTimeTicks
+                        )
+                    }
+                }
+                Timber.d("返回项目列表: ${result.size} 项")
+                result
+            } else {
+                Timber.e("获取文件夹项目失败: ${response.code()}")
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "获取文件夹项目异常")
+            emptyList()
+        }
+    }
+
+    /**
      * 获取专辑/艺术家下的歌曲
      */
     suspend fun getItems(parentId: String, startIndex: Int = 0, limit: Int = 50): List<JellyfinSong> = withContext(Dispatchers.IO) {
@@ -515,6 +568,26 @@ data class JellyfinSong(
     val duration: Int, // 秒
     val coverUrl: String? = null
 )
+
+/**
+ * 通用文件夹项目（用于浏览文件夹内容）
+ */
+data class JellyfinItem(
+    val id: String,
+    val name: String,
+    val type: String, // Audio, MusicAlbum, MusicArtist, Folder, CollectionFolder 等
+    val artist: String? = null,
+    val albumName: String? = null,
+    val runTimeTicks: Long? = null
+) {
+    val duration: Int
+        get() = ((runTimeTicks ?: 0) / 10000000).toInt()
+
+    val isAudio: Boolean get() = type == "Audio"
+    val isAlbum: Boolean get() = type == "MusicAlbum"
+    val isArtist: Boolean get() = type == "MusicArtist"
+    val isFolder: Boolean get() = type == "Folder" || type == "CollectionFolder" || type == "ManualPlaylistsFolder"
+}
 
 data class JellyfinAlbum(
     val id: String,

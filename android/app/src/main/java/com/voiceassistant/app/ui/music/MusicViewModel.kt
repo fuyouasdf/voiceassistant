@@ -6,6 +6,7 @@ import com.voiceassistant.data.local.PlaylistEntity
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinArtist
 import com.voiceassistant.data.remote.JellyfinClient
+import com.voiceassistant.data.remote.JellyfinItem
 import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.repository.PlaylistRepository
 import com.voiceassistant.app.di.ConfigHolder
@@ -28,6 +29,7 @@ data class MusicUiState(
     val artists: List<com.voiceassistant.data.remote.JellyfinArtist> = emptyList(),
     val playlists: List<PlaylistEntity> = emptyList(),
     val searchResults: List<JellyfinSong> = emptyList(),
+    val folderItems: List<JellyfinItem> = emptyList(), // 文件夹内的项目（艺术家、专辑、歌曲混合）
     val currentSong: MusicItem? = null,
     val isPlaying: Boolean = false,
     val error: String? = null,
@@ -36,7 +38,7 @@ data class MusicUiState(
 )
 
 enum class MusicCategory {
-    SONGS, ALBUMS, ARTISTS
+    SONGS, ALBUMS, ARTISTS, FOLDER
 }
 
 /**
@@ -168,18 +170,49 @@ class MusicViewModel @Inject constructor(
     }
 
     /**
-     * 加载专辑下的歌曲
+     * 加载专辑/文件夹下的内容
      */
     fun loadAlbumSongs(albumId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, currentCategory = MusicCategory.SONGS) }
+            _uiState.update { it.copy(isLoading = true, currentCategory = MusicCategory.FOLDER) }
 
             try {
-                val songs = jellyfinClient.getItems(albumId)
-                _uiState.update { it.copy(songs = songs, isLoading = false) }
+                // 使用 getFolderItems 获取所有类型的项目
+                val items = jellyfinClient.getFolderItems(albumId)
+                Timber.d("loadAlbumSongs: 获取到${items.size}个混合项目")
+
+                // 分类处理
+                val songs = items.filter { it.isAudio }.map { item ->
+                    JellyfinSong(
+                        id = item.id,
+                        title = item.name,
+                        artist = item.artist,
+                        album = item.albumName,
+                        duration = item.duration,
+                        coverUrl = jellyfinClient.getCoverUrl(item.id)
+                    )
+                }
+
+                val subAlbums = items.filter { it.isAlbum || it.isFolder }.map { item ->
+                    JellyfinAlbum(
+                        id = item.id,
+                        name = item.name,
+                        artist = item.artist,
+                        imageTag = null
+                    )
+                }
+
+                _uiState.update {
+                    it.copy(
+                        songs = songs,
+                        albums = subAlbums,
+                        folderItems = items,
+                        isLoading = false
+                    )
+                }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load album songs")
-                _uiState.update { it.copy(isLoading = false, error = "加载专辑歌曲失败: ${e.message}") }
+                Timber.e(e, "Failed to load folder items")
+                _uiState.update { it.copy(isLoading = false, error = "加载失败: ${e.message}") }
             }
         }
     }
@@ -339,6 +372,34 @@ class MusicViewModel @Inject constructor(
      */
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /**
+     * 获取封面图片 URL
+     */
+    fun getCoverUrl(itemId: String): String {
+        return jellyfinClient.getCoverUrl(itemId)
+    }
+
+    /**
+     * 处理文件夹项目点击
+     */
+    fun onFolderItemClick(item: com.voiceassistant.data.remote.JellyfinItem) {
+        when {
+            item.isAudio -> {
+                // 点击的是歌曲，查找对应的 JellyfinSong 并播放
+                val song = _uiState.value.songs.find { it.id == item.id }
+                song?.let { playSong(it) }
+            }
+            item.isAlbum || item.isFolder -> {
+                // 点击的是专辑或文件夹，加载其内容
+                loadAlbumSongs(item.id)
+            }
+            item.isArtist -> {
+                // 点击的是艺术家，加载该艺术家的内容
+                loadAlbumSongs(item.id)
+            }
+        }
     }
 
     override fun onCleared() {

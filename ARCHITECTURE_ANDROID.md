@@ -2,8 +2,8 @@
 
 > 目标兼容 Android 6.0 (API 23)，基于 MVVM + Clean Architecture
 
-**版本**: 1.1
-**日期**: 2026-03-22
+**版本**: 1.2
+**日期**: 2026-03-27
 **minSdk**: 26
 **targetSdk**: 34
 
@@ -213,77 +213,74 @@ voice-assistant-android/
 
 ---
 
-## Jellyfin 音乐投放
+## Jellyfin 音乐播放
 
 ### 架构概述
-使用自实现的 SSDP 发现协议发现 DLNA 设备，通过 Jellyfin REST API 获取音乐流并推送到 DLNA 设备播放。
+使用 Jellyfin REST API 获取音乐库数据，通过 Jellyfin 内置的 DLNA 投放功能将音乐推送到 DLNA 设备播放。
 
 ### 依赖
 ```gradle
 // Retrofit (已有)
 implementation 'com.squareup.retrofit2:retrofit:2.9.0'
-```
-// core/build.gradle.kts
-// 无额外依赖，使用原生 Java Socket 实现 SSDP
-```
-
-### Subsonic 认证流程
-不向 DLNA 设备传递 Cookie 或 Authorization header，使用 Subsonic 标准的 URL 参数认证：
-
-```
-http://<navidrome-host>:4533/rest/stream.view
-  ?id=<songId>
-  &u=<username>
-  &t=<md5(password + salt)>
-  &s=<randomSalt>
-  &v=1.16.1
-  &c=voice-assistant
-  &f=json
+// OkHttp (已有)
+implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+// Gson (已有)
+implementation 'com.google.code.gson:gson:2.10.1'
 ```
 
-**认证参数说明**：
-| 参数 | 说明 |
-|------|------|
-| u | 用户名 |
-| s | 随机 salt（每次请求生成） |
-| t | md5(password + salt) |
-| v | API 版本 (1.16.1) |
-| c | 客户端名称 (voice-assistant) |
+### Jellyfin API 认证
+使用 API Key 认证，通过 `X-Emby-Token` header 传递：
+
+```
+GET /Items?parentId={id}&includeMediaTypes=Audio
+Headers:
+  X-Emby-Token: <api_key>
+```
 
 ### 核心组件
+
+#### JellyfinClient
+- 统一处理所有 Jellyfin API 请求
+- 使用 Retrofit + OkHttp
+- Gson 反序列化 PascalCase JSON
+- 主要端点：
+  - `GET /Items` - 获取音乐库项目
+  - `GET /Items/{id}/stream` - 获取音频流地址
+  - `GET /Artists` - 获取艺术家列表
+  - `GET /Users/{userId}/Items` - 获取用户音乐
+
+#### MusicPlayer
+- 封装 Jellyfin 音频播放
+- 管理播放状态（播放/暂停/上一首/下一首）
+- 支持播放列表
+
+#### 播放流程
+1. 用户选择歌曲 → MusicViewModel.playSong()
+2. JellyfinClient.getStreamUrl(songId) 获取流地址
+3. MusicPlayer 播放音频流
+4. UI 通过 StateFlow 观察播放状态
+
+### 音乐库浏览
+支持多级浏览：
+- **专辑视图**：显示所有专辑（GridLayout）
+- **专辑详情**：点击专辑后显示该专辑下的歌曲和子专辑
+- **艺术家视图**：显示所有艺术家
+- **歌曲列表**：显示所有歌曲（LinearLayout）
+
+MusicCategory 枚举：
+```kotlin
+enum class MusicCategory {
+    SONGS, ALBUMS, ARTISTS, FOLDER
+}
+```
+
+### DLNA 投放
+使用自实现的 SSDP 发现协议发现 DLNA 设备，通过 Jellyfin 的 DLNA 功能投放音乐。
 
 #### DLNAManager
 - 使用原生 SSDP 协议发现 DLNA 设备 (M-SEARCH 广播)
 - 通过 HTTP GET 获取设备描述 XML
 - 管理设备列表和连接状态
-
-#### DLNAAuthHelper
-```kotlin
-object DLNAAuthHelper {
-    fun generateStreamUrl(
-        baseUrl: String,
-        songId: String,
-        username: String,
-        password: String
-    ): String {
-        val salt = UUID.randomUUID().toString().take(8)
-        val token = md5(password + salt)
-        return "$baseUrl/rest/stream.view" +
-            "?id=$songId" +
-            "&u=${URLEncoder.encode(username, "UTF-8")}" +
-            "&t=$token" +
-            "&s=$salt" +
-            "&v=1.16.1" +
-            "&c=voice-assistant"
-    }
-}
-```
-
-#### 播放流程
-1. 用户语音点歌 → IntentRouter 路由到 MUSIC 意图
-2. MusicRepository 通过 JellyfinClient 搜索歌曲
-3. 获取歌曲流地址 (Items/{id}/stream)
-4. DLNAPlayer 通过 HTTP 请求推送流媒体 URL 到设备
 
 ---
 
