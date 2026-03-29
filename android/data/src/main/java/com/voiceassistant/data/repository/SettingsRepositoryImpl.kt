@@ -36,10 +36,16 @@ class SettingsRepositoryImpl @Inject constructor(
     // Jellyfin
     override suspend fun getJellyfinUrl(): String = getString(ConfigKeys.JELLYFIN_URL, "")
     override suspend fun setJellyfinUrl(url: String) = setString(ConfigKeys.JELLYFIN_URL, url)
-    override suspend fun getJellyfinUsername(): String = getString(ConfigKeys.JELLYFIN_USERNAME, "")
-    override suspend fun setJellyfinUsername(username: String) = setString(ConfigKeys.JELLYFIN_USERNAME, username)
-    override suspend fun getJellyfinPassword(): String = getString(ConfigKeys.JELLYFIN_PASSWORD, "")
-    override suspend fun setJellyfinPassword(password: String) = setString(ConfigKeys.JELLYFIN_PASSWORD, password)
+    override suspend fun getJellyfinApiKey(): String = getString(ConfigKeys.JELLYFIN_API_KEY, "")
+    override suspend fun setJellyfinApiKey(key: String) = setString(ConfigKeys.JELLYFIN_API_KEY, key)
+
+    // DLNA
+    override suspend fun getDLNADeviceIp(): String = getString(ConfigKeys.DLNA_DEVICE_IP, "")
+    override suspend fun setDLNADeviceIp(ip: String) = setString(ConfigKeys.DLNA_DEVICE_IP, ip)
+    override suspend fun getDLNADeviceName(): String = getString(ConfigKeys.DLNA_DEVICE_NAME, "")
+    override suspend fun setDLNADeviceName(name: String) = setString(ConfigKeys.DLNA_DEVICE_NAME, name)
+    override suspend fun getDLNADeviceUuid(): String = getString(ConfigKeys.DLNA_DEVICE_UUID, "")
+    override suspend fun setDLNADeviceUuid(uuid: String) = setString(ConfigKeys.DLNA_DEVICE_UUID, uuid)
 
     // LLM
     override suspend fun getLLMBaseUrl(): String = getString(ConfigKeys.LLM_BASE_URL, "http://192.168.31.244:20034")
@@ -70,10 +76,16 @@ interface SettingsRepository {
     // Jellyfin
     suspend fun getJellyfinUrl(): String
     suspend fun setJellyfinUrl(url: String)
-    suspend fun getJellyfinUsername(): String
-    suspend fun setJellyfinUsername(username: String)
-    suspend fun getJellyfinPassword(): String
-    suspend fun setJellyfinPassword(password: String)
+    suspend fun getJellyfinApiKey(): String
+    suspend fun setJellyfinApiKey(key: String)
+
+    // DLNA
+    suspend fun getDLNADeviceIp(): String
+    suspend fun setDLNADeviceIp(ip: String)
+    suspend fun getDLNADeviceName(): String
+    suspend fun setDLNADeviceName(name: String)
+    suspend fun getDLNADeviceUuid(): String
+    suspend fun setDLNADeviceUuid(uuid: String)
 
     // LLM
     suspend fun getLLMBaseUrl(): String

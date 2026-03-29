@@ -73,16 +73,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideJellyfinClient(configHolder: ConfigHolder): JellyfinClient {
-        val client = JellyfinClient(
+        return JellyfinClient(
             baseUrl = configHolder.jellyfinUrl.ifEmpty { "http://localhost:8096" },
-            username = configHolder.jellyfinUsername,
-            password = configHolder.jellyfinPassword
+            apiKey = configHolder.jellyfinApiKey
         )
-        // 设置凭据更新回调，当 ConfigHolder.reload() 被调用时会同步更新 JellyfinClient
-        configHolder.onJellyfinCredentialsChanged = { username, password ->
-            client.updateCredentials(username, password)
-        }
-        return client
     }
 
     @Provides

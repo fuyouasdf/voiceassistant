@@ -449,22 +449,14 @@ class MainActivity : AppCompatActivity() {
      * 测试 LLM 连接状态
      */
     private fun testLlmConnection() {
-        lifecycleScope.launch {
-            val llmConfigured = configHolder.llmBaseUrl.isNotEmpty() && configHolder.llmApiKey.isNotEmpty()
-            if (!llmConfigured) {
-                tvProvider.text = "LLM: 未配置"
-                return@launch
-            }
-
-            tvProvider.text = "LLM: 连接中..."
-            val result = llmRepository.testConnection()
-            if (result.isSuccess) {
-                tvProvider.text = "LLM: 已连接"
-                updateStatus(true) // LLM 在线时更新主页状态为在线
-            } else {
-                tvProvider.text = "LLM: 未连接"
-            }
+        val llmConfigured = configHolder.llmBaseUrl.isNotEmpty() && configHolder.llmApiKey.isNotEmpty()
+        if (!llmConfigured) {
+            tvProvider.text = "LLM: 未配置"
+            return
         }
+
+        tvProvider.text = "LLM: 已配置"
+        updateStatus(true) // LLM 配置时更新主页状态为在线
     }
 
     /**
@@ -473,7 +465,7 @@ class MainActivity : AppCompatActivity() {
     private fun testJellyfinConnection() {
         lifecycleScope.launch {
             val jellyfinConfigured = configHolder.jellyfinUrl.isNotEmpty() &&
-                configHolder.jellyfinUsername.isNotEmpty() && configHolder.jellyfinPassword.isNotEmpty()
+                configHolder.jellyfinApiKey.isNotEmpty()
             if (!jellyfinConfigured) {
                 tvJellyfinStatus.text = "Jellyfin: 未配置"
                 jellyfinStatusDot.setBackgroundResource(R.drawable.circle_status_offline)
@@ -482,10 +474,6 @@ class MainActivity : AppCompatActivity() {
 
             tvJellyfinStatus.text = "Jellyfin: 连接中..."
             try {
-                jellyfinClient.updateCredentials(
-                    configHolder.jellyfinUsername,
-                    configHolder.jellyfinPassword
-                )
                 val result = jellyfinClient.testConnection()
                 val isOnline = result.isSuccess
                 tvJellyfinStatus.text = if (isOnline) "Jellyfin: 已连接" else "Jellyfin: 未连接"

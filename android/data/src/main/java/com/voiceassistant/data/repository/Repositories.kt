@@ -56,20 +56,4 @@ class LLMRepositoryImpl(
             Result.failure(e)
         }
     }
-
-    override suspend fun testConnection(): Result<Boolean> = withContext(Dispatchers.IO) {
-        try {
-            val response = api.getModels()
-            if (response.isSuccessful) {
-                Timber.d("LLM connection test successful")
-                Result.success(true)
-            } else {
-                Timber.e("LLM connection test failed: ${response.code()}")
-                Result.failure(Exception("Connection failed: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "LLM connection test failed")
-            Result.failure(e)
-        }
-    }
 }

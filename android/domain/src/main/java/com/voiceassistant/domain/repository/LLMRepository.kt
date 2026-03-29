@@ -10,10 +10,4 @@ interface LLMRepository {
      * @return The LLM's response text
      */
     suspend fun chat(message: String): Result<String>
-
-    /**
-     * Test connection to LLM API via /v1/models endpoint
-     * @return Result.success(true) if connected, Result.failure if not
-     */
-    suspend fun testConnection(): Result<Boolean>
 }

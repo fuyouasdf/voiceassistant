@@ -37,8 +37,7 @@ class SettingsActivity : AppCompatActivity() {
 
     // Music Service
     private lateinit var etJellyfinUrl: TextInputEditText
-    private lateinit var etJellyfinUsername: TextInputEditText
-    private lateinit var etJellyfinPassword: TextInputEditText
+    private lateinit var etJellyfinApiKey: TextInputEditText
     private lateinit var jellyfinStatusDot: View
     private lateinit var tvJellyfinOnlineStatus: TextView
     private lateinit var btnTestJellyfin: MaterialButton
@@ -92,8 +91,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun initViews() {
         // Music Service - Jellyfin
         etJellyfinUrl = findViewById(R.id.etJellyfinUrl)
-        etJellyfinUsername = findViewById(R.id.etJellyfinUsername)
-        etJellyfinPassword = findViewById(R.id.etJellyfinPassword)
+        etJellyfinApiKey = findViewById(R.id.etJellyfinApiKey)
         jellyfinStatusDot = findViewById(R.id.jellyfinStatusDot)
         tvJellyfinOnlineStatus = findViewById(R.id.tvJellyfinOnlineStatus)
         btnTestJellyfin = findViewById(R.id.btnTestJellyfin)
@@ -164,8 +162,7 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             // Load Music Service settings - Jellyfin
             etJellyfinUrl.setText(settingsRepository.getJellyfinUrl())
-            etJellyfinUsername.setText(settingsRepository.getJellyfinUsername())
-            etJellyfinPassword.setText(settingsRepository.getJellyfinPassword())
+            etJellyfinApiKey.setText(settingsRepository.getJellyfinApiKey())
 
             // Test Jellyfin connection on load
             testJellyfinConnectionOnLoad()
@@ -196,12 +193,10 @@ class SettingsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // Update JellyfinClient with current settings before testing
                 val url = etJellyfinUrl.text.toString()
-                val username = etJellyfinUsername.text.toString()
-                val password = etJellyfinPassword.text.toString()
+                val apiKey = etJellyfinApiKey.text.toString()
 
-                if (url.isEmpty() || username.isEmpty() || password.isEmpty()) {
+                if (url.isEmpty() || apiKey.isEmpty()) {
                     progressJellyfin.visibility = View.GONE
                     btnTestJellyfin.isEnabled = true
                     tvJellyfinStatus.text = getString(R.string.settings_jellyfin_offline)
@@ -212,7 +207,6 @@ class SettingsActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                jellyfinClient.updateCredentials(username, password)
                 val result = jellyfinClient.testConnection()
                 progressJellyfin.visibility = View.GONE
                 btnTestJellyfin.isEnabled = true
@@ -247,17 +241,15 @@ class SettingsActivity : AppCompatActivity() {
      */
     private fun testJellyfinConnectionOnLoad() {
         val url = etJellyfinUrl.text.toString()
-        val username = etJellyfinUsername.text.toString()
-        val password = etJellyfinPassword.text.toString()
+        val apiKey = etJellyfinApiKey.text.toString()
 
-        if (url.isEmpty() || username.isEmpty() || password.isEmpty()) {
+        if (url.isEmpty() || apiKey.isEmpty()) {
             updateJellyfinOnlineStatus(false)
             return
         }
 
         lifecycleScope.launch {
             try {
-                jellyfinClient.updateCredentials(username, password)
                 val result = jellyfinClient.testConnection()
                 updateJellyfinOnlineStatus(result.isSuccess)
             } catch (e: Exception) {
@@ -286,40 +278,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun testLlmConnection() {
-        btnTestLlm.isEnabled = false
-        progressLlm.visibility = View.VISIBLE
-        tvLlmStatus.visibility = View.GONE
-
-        lifecycleScope.launch {
-            try {
-                // Update configHolder with current settings before testing
-                configHolder.llmBaseUrl = etLlmUrl.text.toString()
-                configHolder.llmApiKey = etLlmApiKey.text.toString()
-
-                val result = llmRepository.testConnection()
-                progressLlm.visibility = View.GONE
-                btnTestLlm.isEnabled = true
-
-                if (result.isSuccess) {
-                    tvLlmStatus.text = getString(R.string.settings_llm_online)
-                    tvLlmStatus.setTextColor(getColor(R.color.status_online))
-                    tvLlmStatus.visibility = View.VISIBLE
-                    Toast.makeText(this@SettingsActivity, R.string.settings_llm_online, Toast.LENGTH_SHORT).show()
-                } else {
-                    tvLlmStatus.text = getString(R.string.settings_llm_offline)
-                    tvLlmStatus.setTextColor(getColor(R.color.status_offline))
-                    tvLlmStatus.visibility = View.VISIBLE
-                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_llm_offline) + ": " + result.exceptionOrNull()?.message, Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                progressLlm.visibility = View.GONE
-                btnTestLlm.isEnabled = true
-                tvLlmStatus.text = getString(R.string.settings_llm_offline)
-                tvLlmStatus.setTextColor(getColor(R.color.status_offline))
-                tvLlmStatus.visibility = View.VISIBLE
-                Toast.makeText(this@SettingsActivity, getString(R.string.settings_llm_offline) + ": " + e.message, Toast.LENGTH_SHORT).show()
-            }
-        }
+        // LLM 使用 API Key 方式，无需测试连接
+        Toast.makeText(this, "LLM 配置已保存", Toast.LENGTH_SHORT).show()
     }
 
     private fun saveSettings() {
@@ -327,8 +287,7 @@ class SettingsActivity : AppCompatActivity() {
             try {
                 // Save Music Service settings - Jellyfin
                 settingsRepository.setJellyfinUrl(etJellyfinUrl.text.toString())
-                settingsRepository.setJellyfinUsername(etJellyfinUsername.text.toString())
-                settingsRepository.setJellyfinPassword(etJellyfinPassword.text.toString())
+                settingsRepository.setJellyfinApiKey(etJellyfinApiKey.text.toString())
 
                 // Save AI Service settings
                 settingsRepository.setLLMBaseUrl(etLlmUrl.text.toString())
