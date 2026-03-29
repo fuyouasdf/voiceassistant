@@ -25,4 +25,7 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET songIds = :songIds, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updatePlaylistSongs(id: Long, songIds: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE playlists SET songIds = :songIds, songData = :songData, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updatePlaylistSongs(id: Long, songIds: String, songData: String, updatedAt: Long = System.currentTimeMillis())
 }

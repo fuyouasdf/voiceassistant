@@ -3,14 +3,19 @@ package com.voiceassistant.app.ui.settings
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import android.widget.ScrollView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -73,6 +78,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnAddWakeWord: MaterialButton
 
     private lateinit var btnSave: MaterialButton
+    private lateinit var rootScrollView: ScrollView
+    private lateinit var contentLayout: View
 
     private var isLoading = false
     private val wakeWordsList = mutableListOf<WakeWord>()
@@ -82,7 +89,11 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // Enable edge-to-edge
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         initViews()
+        setupInsets()
         setupListeners()
         showLoadingState()
 
@@ -103,6 +114,9 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        rootScrollView = findViewById(R.id.rootScrollView)
+        contentLayout = findViewById(R.id.contentLayout)
+
         // Music Service - Jellyfin
         etJellyfinUrl = findViewById(R.id.etJellyfinUrl)
         etJellyfinApiKey = findViewById(R.id.etJellyfinApiKey)
@@ -141,6 +155,14 @@ class SettingsActivity : AppCompatActivity() {
 
         // Save Button
         btnSave = findViewById(R.id.btnSave)
+    }
+
+    private fun setupInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(rootScrollView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            contentLayout.setPadding(16, 16, 16, insets.bottom + 16)
+            windowInsets
+        }
     }
 
     private fun setupListeners() {

@@ -11,6 +11,9 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
@@ -59,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var jellyfinClient: JellyfinClient
 
     // UI Components
+    private lateinit var statusBarArea: LinearLayout
     private lateinit var statusDot: View
     private lateinit var tvStatus: TextView
     private lateinit var tvProvider: TextView
@@ -77,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvAsrResult: TextView
 
     // Input Area
+    private lateinit var inputArea: LinearLayout
     private lateinit var voiceInputCard: MaterialCardView
     private lateinit var etTextInput: EditText
     private lateinit var btnSend: ImageButton
@@ -106,7 +111,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Enable edge-to-edge display
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         initViews()
+        setupInsets()
         setupListeners()
         observeVoicePipeline()
         checkPermissions()
@@ -121,6 +130,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initViews() {
         // Status
+        statusBarArea = findViewById(R.id.statusBarArea)
         statusDot = findViewById(R.id.statusDot)
         tvStatus = findViewById(R.id.tvStatus)
         tvProvider = findViewById(R.id.tvProvider)
@@ -145,6 +155,7 @@ class MainActivity : AppCompatActivity() {
         tvAsrResult = findViewById(R.id.tvAsrResult)
 
         // Input
+        inputArea = findViewById(R.id.inputArea)
         voiceInputCard = findViewById(R.id.voiceInputCard)
         etTextInput = findViewById(R.id.etTextInput)
         btnSend = findViewById(R.id.btnSend)
@@ -161,6 +172,31 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
+    }
+
+    private fun setupInsets() {
+        // Top: Status bar area
+        ViewCompat.setOnApplyWindowInsetsListener(statusBarArea) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, insets.top, 0, 0)
+            windowInsets
+        }
+
+        // Bottom: Input area with navigation bar padding
+        ViewCompat.setOnApplyWindowInsetsListener(inputArea) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                insets.bottom + 32.dpToPx()
+            )
+            windowInsets
+        }
+    }
+
+    private fun Int.dpToPx(): Int {
+        return (this * resources.displayMetrics.density).toInt()
     }
 
     private fun setupListeners() {

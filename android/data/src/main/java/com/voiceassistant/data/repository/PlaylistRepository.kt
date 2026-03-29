@@ -1,5 +1,7 @@
 package com.voiceassistant.data.repository
 
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.voiceassistant.data.local.PlaylistDao
 import com.voiceassistant.data.local.PlaylistEntity
 import com.voiceassistant.data.local.PlaylistSong
@@ -14,6 +16,8 @@ import javax.inject.Singleton
 class PlaylistRepository @Inject constructor(
     private val playlistDao: PlaylistDao
 ) {
+    private val gson = Gson()
+
     /**
      * 获取所有播放列表
      */
@@ -52,16 +56,27 @@ class PlaylistRepository @Inject constructor(
      */
     suspend fun addSongToPlaylist(playlistId: Long, song: Song) {
         val playlist = playlistDao.getPlaylistById(playlistId) ?: return
-        val currentSongs = if (playlist.songIds.isEmpty()) {
-            mutableListOf()
-        } else {
-            playlist.songIds.split(",").toMutableList()
-        }
+
+        // 解析现有歌曲数据
+        val currentSongs = parseSongList(playlist.songData).toMutableList()
 
         // 检查是否已存在
-        if (!currentSongs.contains(song.id)) {
-            currentSongs.add(song.id)
-            playlistDao.updatePlaylistSongs(playlistId, currentSongs.joinToString(","))
+        if (!currentSongs.any { it.songId == song.id }) {
+            val playlistSong = PlaylistSong(
+                songId = song.id,
+                title = song.title,
+                artist = song.artist,
+                album = song.album,
+                duration = song.duration,
+                streamUrl = song.url ?: "",
+                coverUrl = song.coverUrl
+            )
+            currentSongs.add(playlistSong)
+
+            // 更新数据库
+            val newSongIds = currentSongs.joinToString(",") { it.songId }
+            val newSongData = gson.toJson(currentSongs)
+            playlistDao.updatePlaylistSongs(playlistId, newSongIds, newSongData)
         }
     }
 
@@ -70,10 +85,52 @@ class PlaylistRepository @Inject constructor(
      */
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: String) {
         val playlist = playlistDao.getPlaylistById(playlistId) ?: return
-        val currentSongs = playlist.songIds.split(",").toMutableList()
 
-        currentSongs.remove(songId)
-        playlistDao.updatePlaylistSongs(playlistId, currentSongs.joinToString(","))
+        val currentSongs = parseSongList(playlist.songData).toMutableList()
+        currentSongs.removeAll { it.songId == songId }
+
+        val newSongIds = currentSongs.joinToString(",") { it.songId }
+        val newSongData = gson.toJson(currentSongs)
+        playlistDao.updatePlaylistSongs(playlistId, newSongIds, newSongData)
+    }
+
+    /**
+     * 获取播放列表中的歌曲
+     */
+    fun getPlaylistSongs(playlist: PlaylistEntity): List<PlaylistSong> {
+        // 优先从 songData 解析
+        if (playlist.songData.isNotEmpty()) {
+            return parseSongList(playlist.songData)
+        }
+        // 兼容旧数据：从 songIds 解析（只包含 ID，没有详细信息）
+        if (playlist.songIds.isNotEmpty()) {
+            return playlist.songIds.split(",").map { id ->
+                PlaylistSong(
+                    songId = id,
+                    title = "未知歌曲",
+                    artist = null,
+                    album = null,
+                    duration = 0,
+                    streamUrl = "",
+                    coverUrl = null
+                )
+            }
+        }
+        return emptyList()
+    }
+
+    /**
+     * 解析歌曲列表
+     */
+    private fun parseSongList(songData: String): List<PlaylistSong> {
+        if (songData.isEmpty()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<PlaylistSong>>() {}.type
+            gson.fromJson(songData, type) ?: emptyList()
+        } catch (e: Exception) {
+            Timber.e(e, "解析歌曲列表失败")
+            emptyList()
+        }
     }
 
     /**
@@ -81,7 +138,7 @@ class PlaylistRepository @Inject constructor(
      */
     suspend fun getPlaylistSongCount(playlistId: Long): Int {
         val playlist = playlistDao.getPlaylistById(playlistId) ?: return 0
-        return if (playlist.songIds.isEmpty()) 0 else playlist.songIds.split(",").size
+        return parseSongList(playlist.songData).size
     }
 
     /**

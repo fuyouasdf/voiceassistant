@@ -3,14 +3,18 @@ package com.voiceassistant.app.ui.music
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.voiceassistant.data.local.PlaylistEntity
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.remote.SessionInfo
+import com.voiceassistant.data.repository.PlaylistRepository
+import com.voiceassistant.domain.model.Song
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -40,11 +44,16 @@ data class JellyfinBrowseUiState(
 @HiltViewModel
 class JellyfinBrowseViewModel @Inject constructor(
     private val jellyfinClient: JellyfinClient,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    private val playlistRepository: PlaylistRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(JellyfinBrowseUiState())
     val uiState: StateFlow<JellyfinBrowseUiState> = _uiState.asStateFlow()
+
+    // 播放列表
+    private val _playlists = MutableStateFlow<List<PlaylistEntity>>(emptyList())
+    val playlists: StateFlow<List<PlaylistEntity>> = _playlists.asStateFlow()
 
     // 记住上次选择的设备ID
     private val savedDeviceId: String?
@@ -55,6 +64,19 @@ class JellyfinBrowseViewModel @Inject constructor(
         loadAlbums()
         // 刷新DLNA设备列表（从Jellyfin会话获取）
         refreshDlnaDevices()
+        // 加载播放列表
+        loadPlaylists()
+    }
+
+    /**
+     * 加载播放列表
+     */
+    private fun loadPlaylists() {
+        viewModelScope.launch {
+            playlistRepository.getAllPlaylists().collect { list ->
+                _playlists.value = list
+            }
+        }
     }
 
     /**
@@ -293,5 +315,35 @@ class JellyfinBrowseViewModel @Inject constructor(
         val min = seconds / 60
         val sec = seconds % 60
         return "%d:%02d".format(min, sec)
+    }
+
+    /**
+     * 添加歌曲到播放列表
+     */
+    fun addToPlaylist(playlistId: Long, song: JellyfinSong) {
+        viewModelScope.launch {
+            try {
+                val domainSong = Song(
+                    id = song.id,
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    duration = song.duration,
+                    url = null,
+                    coverUrl = song.coverUrl
+                )
+                playlistRepository.addSongToPlaylist(playlistId, domainSong)
+            } catch (e: Exception) {
+                Timber.e(e, "添加到播放列表失败")
+                _uiState.value = _uiState.value.copy(error = "添加到播放列表失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 创建播放列表
+     */
+    suspend fun createPlaylist(name: String): Long {
+        return playlistRepository.createPlaylist(name)
     }
 }

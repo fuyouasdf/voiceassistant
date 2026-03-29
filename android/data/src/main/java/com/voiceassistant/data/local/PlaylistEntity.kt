@@ -11,7 +11,8 @@ data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
-    val songIds: String = "", // 歌曲 ID 列表，用逗号分隔
+    val songIds: String = "", // 歌曲 ID 列表，用逗号分隔（兼容旧数据）
+    val songData: String = "", // JSON 格式的歌曲数据
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

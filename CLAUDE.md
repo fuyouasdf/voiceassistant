@@ -53,7 +53,7 @@ voice-assistant/
 ---
 
 ## 代码优先级 (重要)
-
+Room 数据库 schema 变了，需要增加版本号。
 ### sherpa-onnx-aar/ - 语音部分参考
 
 `android/sherpa-onnx-aar/` 目录包含 **Sherpa-ONNX 本地库**，语音管道部分可参考：

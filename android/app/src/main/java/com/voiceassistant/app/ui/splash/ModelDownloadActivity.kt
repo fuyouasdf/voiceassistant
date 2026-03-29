@@ -3,12 +3,16 @@ package com.voiceassistant.app.ui.splash
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.voiceassistant.app.R
 import com.voiceassistant.app.model.ModelDownloadState
@@ -46,10 +50,28 @@ class ModelDownloadActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_model_download)
 
+        // Enable edge-to-edge
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         initViews()
+        setupInsets()
         setupLogoAnimation()
         observeDownloadState()
         startInitialization()
+    }
+
+    private fun setupInsets() {
+        val rootLayout = findViewById<ConstraintLayout>(R.id.rootLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(insets.left + 24.dpToPx(), insets.top + 24.dpToPx(),
+                           insets.right + 24.dpToPx(), insets.bottom + 24.dpToPx())
+            windowInsets
+        }
+    }
+
+    private fun Int.dpToPx(): Int {
+        return (this * resources.displayMetrics.density).toInt()
     }
 
     private fun initViews() {

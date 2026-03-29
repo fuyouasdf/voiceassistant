@@ -29,6 +29,7 @@ import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.LLMApi
 import com.voiceassistant.data.repository.LLMRepositoryImpl
 import com.voiceassistant.data.repository.MusicRepositoryImpl
+import com.voiceassistant.data.repository.PlaylistRepository
 import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.data.repository.SettingsRepositoryImpl
 import com.voiceassistant.domain.repository.LLMRepository
@@ -55,7 +56,7 @@ object AppModule {
             AppDatabase::class.java,
             "voice_assistant.db"
         )
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .addMigrations(AppDatabase.MIGRATION_2_3)
             .build()
     }
 
@@ -69,6 +70,12 @@ object AppModule {
     @Singleton
     fun providePlaylistDao(database: AppDatabase): PlaylistDao {
         return database.playlistDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaylistRepository(playlistDao: PlaylistDao): PlaylistRepository {
+        return PlaylistRepository(playlistDao)
     }
 
     @Provides
