@@ -513,10 +513,11 @@ class VoicePipeline(
             return
         }
 
-        // If TTS is disabled, skip speech synthesis and return to idle
+        // If TTS is disabled, skip speech synthesis but still show message in UI
         if (!ttsEnabledProvider()) {
             Timber.d("TTS is disabled, skipping speech synthesis")
-            transitionTo(PipelineState.IDLE, message = text)
+            transitionTo(PipelineState.SPEAKING, message = text)
+            transitionTo(PipelineState.IDLE)
             if (isCoreInitialized) {
                 startKWSListening()
             }
