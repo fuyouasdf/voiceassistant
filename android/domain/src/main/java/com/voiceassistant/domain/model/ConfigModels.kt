@@ -5,11 +5,6 @@ data class JellyfinConfig(
     val apiKey: String
 )
 
-data class DLNAConfig(
-    val deviceIp: String,
-    val deviceName: String
-)
-
 data class LLMConfig(
     val baseUrl: String,
     val apiKey: String,

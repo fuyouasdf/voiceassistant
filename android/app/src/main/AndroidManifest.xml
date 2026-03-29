@@ -55,22 +55,6 @@
             android:theme="@style/Theme.VoiceAssistant"
             android:parentActivityName=".ui.main.MainActivity" />
 
-        <!-- Music Activity -->
-        <activity
-            android:name=".ui.music.MusicActivity"
-            android:exported="false"
-            android:hardwareAccelerated="true"
-            android:theme="@style/Theme.VoiceAssistant"
-            android:parentActivityName=".ui.main.MainActivity" />
-
-        <!-- Jellyfin Control Activity -->
-        <activity
-            android:name=".ui.music.JellyfinControlActivity"
-            android:exported="false"
-            android:hardwareAccelerated="true"
-            android:theme="@style/Theme.VoiceAssistant"
-            android:parentActivityName=".ui.music.MusicActivity" />
-
         <!-- Jellyfin Browse Activity -->
         <activity
             android:name=".ui.music.JellyfinBrowseActivity"

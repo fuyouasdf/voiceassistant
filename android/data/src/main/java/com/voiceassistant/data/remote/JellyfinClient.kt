@@ -24,7 +24,8 @@ import java.util.concurrent.TimeUnit
  */
 class JellyfinClient(
     private val baseUrl: String,
-    private val apiKey: String = "",
+    private var username: String = "",
+    private var password: String = "",
     private val deviceId: String = "voice-assistant-android"
 ) {
 
@@ -32,22 +33,49 @@ class JellyfinClient(
     private var cachedUserId: String? = null
     private var cachedAccessToken: String? = null
 
+    /**
+     * 更新凭据（用于设置页面修改后同步）
+     * 会清除缓存的会话，下次请求会自动登录
+     */
+    fun updateCredentials(newUsername: String, newPassword: String) {
+        username = newUsername
+        password = newPassword
+        // 清除缓存的会话，强制下次重新登录
+        cachedAccessToken = null
+        cachedUserId = null
+        Timber.d("JellyfinClient凭据已更新，清除缓存会话")
+    }
+
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
-            val requestBuilder = chain.request().newBuilder()
+            val originalRequest = chain.request()
+            val requestBuilder = originalRequest.newBuilder()
                 .addHeader("Content-Type", "application/json")
-            // Use access token if available, otherwise use API key
-            if (!cachedAccessToken.isNullOrEmpty()) {
-                requestBuilder.addHeader("X-MediaBrowser-Token", cachedAccessToken!!)
-            } else if (apiKey.isNotEmpty()) {
-                requestBuilder.addHeader("X-MediaBrowser-Token", apiKey)
+
+            // Jellyfin uses MediaBrowser Authorization header format
+            val baseAuth = "MediaBrowser Client=\"Jellyfin Web\", Device=\"Chrome\", DeviceId=\"TW96aWxsYS81LjAgKFdpbmRvd3MgTlQgMTAuMDsgV2luNjQ7IHg2NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzE0Ni4wLjAuMCBTYWZhcmkvNTM3LjM2fDE3NzQ3MTQ4MDkwNDc1\", Version=\"10.10.7\""
+
+            val authHeader = if (originalRequest.url.encodedPath.contains("AuthenticateByName", ignoreCase = true)) {
+                // Login request doesn't need Token
+                baseAuth
+            } else if (!cachedAccessToken.isNullOrEmpty()) {
+                // Authenticated requests include Token in Authorization header
+                "$baseAuth, Token=\"$cachedAccessToken\""
+            } else {
+                null
             }
+
+            if (authHeader != null) {
+                requestBuilder.addHeader("Authorization", authHeader)
+            }
+
             val request = requestBuilder.build()
-            Timber.d("Jellyfin请求: ${request.method} ${request.url}")
+            val authHeaderSent = request.header("Authorization")
+            Timber.d("Jellyfin请求: ${request.method} ${request.url}, cachedToken=${cachedAccessToken?.take(8) ?: "null"}, Auth=${if (authHeaderSent != null) "present" else "MISSING"}")
             val response = chain.proceed(request)
             Timber.d("Jellyfin响应: ${response.code} for ${request.url}")
             response
@@ -67,7 +95,7 @@ class JellyfinClient(
     private val sessionApi = retrofit.create(JellyfinSessionApi::class.java)
 
     init {
-        Timber.d("JellyfinClient初始化: baseUrl=$baseUrl, apiKey=${if (apiKey.isNotEmpty()) "已设置" else "未设置"}")
+        Timber.d("JellyfinClient初始化: baseUrl=$baseUrl, username=${if (username.isNotEmpty()) "已设置" else "未设置"}")
     }
 
     private fun normalizeUrl(url: String): String {
@@ -570,7 +598,6 @@ class JellyfinClient(
         // 参考: https://github.com/jellyfin/jellyfin/blob/9a35fd673203cfaf0098138b2768750f4818b3ab/Jellyfin.Api/Helpers/MediaInfoHelper.cs#L196-L201
         val mediaSourceId = (result.mediaSourceId ?: songId).replace("-", "")
         val playSessionId = result.playSessionId ?: ""
-        val apiKeyParam = "api_key=$apiKey"
         val playSessionParam = if (playSessionId.isNotEmpty()) "&PlaySessionId=$playSessionId" else ""
         val mediaSourceIdParam = "&MediaSourceId=$mediaSourceId"
         val deviceIdParam = "&DeviceId=$deviceId"
@@ -589,14 +616,14 @@ class JellyfinClient(
             needsTranscode -> {
                 Timber.d("容器 ${result.container} 不被 ExoPlayer 支持，使用转码")
                 // 使用 /Audio/{id}/stream 并强制转码参数
-                val url = "$baseUrl/Audio/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam&Container=mp4&AudioCodec=aac"
+                val url = "$baseUrl/Audio/$songId/stream?$playSessionParam$mediaSourceIdParam$deviceIdParam&Container=mp4&AudioCodec=aac"
                 Timber.d("使用转码URL (Audio stream): $url")
                 url
             }
             result.playMethod == PlayMethodType.DIRECT_PLAY -> {
                 // 使用 /Videos/{id}/stream 但不带 static=true
                 // 这样 Jellyfin 返回 206 Partial Content，支持 HTTP Range seek
-                val url = "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
+                val url = "$baseUrl/Videos/$songId/stream?$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 Timber.d("使用DIRECT_PLAY生成URL: $url")
                 url
             }
@@ -604,9 +631,9 @@ class JellyfinClient(
                 // 使用 /Videos/{itemId}/stream.{container} 格式
                 val container = result.container
                 val url = if (!container.isNullOrEmpty()) {
-                    "$baseUrl/Videos/$songId/stream.$container?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
+                    "$baseUrl/Videos/$songId/stream.$container?$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 } else {
-                    "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
+                    "$baseUrl/Videos/$songId/stream?$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 }
                 Timber.d("使用DIRECT_STREAM URL: $url")
                 url
@@ -622,12 +649,12 @@ class JellyfinClient(
                     }
                     // transcodingUrl 通常已包含必要的参数
                     if (fullUrl.contains("?")) {
-                        "$fullUrl&$apiKeyParam$deviceIdParam"
+                        "$fullUrl&$deviceIdParam"
                     } else {
-                        "$fullUrl?$apiKeyParam$deviceIdParam"
+                        "$fullUrl?$deviceIdParam"
                     }
                 } else {
-                    "$baseUrl/Videos/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam"
+                    "$baseUrl/Videos/$songId/stream?$playSessionParam$mediaSourceIdParam$deviceIdParam"
                 }
                 Timber.d("使用TRANSCODE URL: $url")
                 url
@@ -681,7 +708,6 @@ class JellyfinClient(
         }
 
         val startTimeTicks = startTimeMs * 10000 // 毫秒转 ticks
-        val apiKeyParam = "api_key=$apiKey"
         val playSessionParam = if (effectivePlaySessionId.isNotEmpty()) "&PlaySessionId=$effectivePlaySessionId" else ""
         val mediaSourceIdParam = "&MediaSourceId=$effectiveMediaSourceId"
         val deviceIdParam = "&DeviceId=$deviceId"
@@ -689,7 +715,7 @@ class JellyfinClient(
 
         // 始终使用 /Audio/{id}/stream 端点进行 seek
         // 这样 Jellyfin 从 StartTimeTicks 指定的位置开始转码，支持任意 seek 位置
-        val url = "$baseUrl/Audio/$songId/stream?$apiKeyParam$playSessionParam$mediaSourceIdParam$deviceIdParam$startTimeParam&Container=mp4&AudioCodec=aac"
+        val url = "$baseUrl/Audio/$songId/stream?$playSessionParam$mediaSourceIdParam$deviceIdParam$startTimeParam&Container=mp4&AudioCodec=aac"
         Timber.d("getStreamUrlWithStartTime: songId=$songId, startTimeMs=$startTimeMs, sessionId=$effectivePlaySessionId, url=$url")
         url
     }
@@ -700,6 +726,13 @@ class JellyfinClient(
     suspend fun testConnection(): Result<Boolean> = withContext(Dispatchers.IO) {
         Timber.d("testConnection: baseUrl=$baseUrl")
         try {
+            // 先登录获取认证 token
+            val loginResult = login()
+            if (loginResult.isFailure) {
+                Timber.e("testConnection登录失败: ${loginResult.exceptionOrNull()?.message}")
+                return@withContext Result.failure(loginResult.exceptionOrNull() ?: Exception("Login failed"))
+            }
+
             val response = api.getSystemInfo()
             Timber.d("testConnection响应: isSuccessful=${response.isSuccessful}, code=${response.code()}")
 
@@ -718,20 +751,20 @@ class JellyfinClient(
     }
 
     /**
-     * 使用用户名密码登录
-     * @param username 用户名
-     * @param password 密码
+     * 使用存储的用户名密码登录
      * @return 登录结果，包含用户ID和访问令牌
      */
-    suspend fun login(username: String, password: String): Result<LoginResult> = withContext(Dispatchers.IO) {
+    suspend fun login(): Result<LoginResult> = withContext(Dispatchers.IO) {
+        if (username.isEmpty() || password.isEmpty()) {
+            Timber.w("用户名或密码为空，无法登录")
+            return@withContext Result.failure(Exception("Username or password is empty"))
+        }
         Timber.d("login: username=$username")
         try {
-            // Jellyfin 密码使用 MD5 hash
-            val md5Hash = md5(password)
+            // Jellyfin 使用明文密码
             val request = AuthenticateRequest(
                 username = username,
-                password = md5Hash,
-                passwordMd5 = md5Hash
+                password = password
             )
             val response = api.authenticateByName(request)
             Timber.d("login响应: isSuccessful=${response.isSuccessful}, code=${response.code()}")
@@ -740,14 +773,14 @@ class JellyfinClient(
                 val authResponse = response.body()
                 val user = authResponse?.user
                 val session = authResponse?.session
-                if (user != null && session != null) {
+                if (user != null) {
                     cachedUserId = user.id
-                    cachedAccessToken = session.accessToken
-                    Timber.d("登录成功: userId=${user.id}")
+                    cachedAccessToken = authResponse.accessToken
+                    Timber.d("登录成功: userId=${user.id}, token=${authResponse.accessToken?.take(8)}...")
                     Result.success(LoginResult(
                         userId = user.id ?: "",
                         userName = user.name ?: username,
-                        accessToken = session.accessToken ?: ""
+                        accessToken = authResponse.accessToken ?: ""
                     ))
                 } else {
                     Timber.e("登录响应数据不完整")
@@ -764,6 +797,21 @@ class JellyfinClient(
         }
     }
 
+    /**
+     * 确保已登录，如果未登录则自动登录
+     */
+    suspend fun ensureLoggedIn(): Result<Unit> {
+        if (!cachedAccessToken.isNullOrEmpty()) {
+            return Result.success(Unit)
+        }
+        return login().map { }
+    }
+
+    /**
+     * 获取当前登录用户的ID
+     */
+    fun getCurrentUserId(): String? = cachedUserId
+
     private fun md5(input: String): String {
         val md = MessageDigest.getInstance("MD5")
         val digest = md.digest(input.toByteArray())
@@ -772,9 +820,10 @@ class JellyfinClient(
 
     /**
      * 获取封面图 URL
+     * 注意：需要先调用 ensureLoggedIn() 登录后才能获取封面
      */
     fun getCoverUrl(itemId: String, width: Int = 300, height: Int = 300): String {
-        val url = "$baseUrl/Items/$itemId/Images/Primary?maxWidth=$width&maxHeight=$height&api_key=$apiKey"
+        val url = "$baseUrl/Items/$itemId/Images/Primary?maxWidth=$width&maxHeight=$height"
         Timber.d("封面图URL: $url")
         return url
     }
@@ -970,9 +1019,13 @@ class JellyfinClient(
     suspend fun getSessions(): List<SessionInfo> = withContext(Dispatchers.IO) {
         Timber.d("getSessions")
         try {
+            // 确保已登录
+            ensureLoggedIn()
             val response = sessionApi.getSessions()
             if (response.isSuccessful) {
-                response.body()?.mapNotNull { dto -> dto.toSessionInfo() } ?: emptyList()
+                val sessions = response.body()?.mapNotNull { dto -> dto.toSessionInfo() } ?: emptyList()
+                Timber.d("getSessions返回 ${sessions.size} 个会话: ${sessions.map { "${it.deviceName}(${it.client})" }}")
+                sessions
             } else {
                 Timber.e("获取会话失败: ${response.code()}")
                 emptyList()
@@ -1085,6 +1138,7 @@ class JellyfinClient(
 // SessionDto 扩展函数
 private fun SessionDto.toSessionInfo(): SessionInfo? {
     if (id == null) return null
+    Timber.d("toSessionInfo: deviceName='$deviceName', deviceId='$deviceId', client='$client', isActive=$isActive, supportsMediaControl=$supportsMediaControl")
     return SessionInfo(
         id = id,
         deviceName = deviceName ?: "Unknown",
@@ -1550,8 +1604,7 @@ data class NowPlayingItemDto(
  */
 data class AuthenticateRequest(
     @SerializedName("Username") val username: String,
-    @SerializedName("Password") val password: String,
-    @SerializedName("PasswordMd5") val passwordMd5: String
+    @SerializedName("Pw") val password: String
 )
 
 /**
@@ -1559,7 +1612,8 @@ data class AuthenticateRequest(
  */
 data class AuthenticateResponse(
     @SerializedName("User") val user: UserDto?,
-    @SerializedName("SessionInfo") val session: SessionInfoDto?
+    @SerializedName("SessionInfo") val session: SessionInfoDto?,
+    @SerializedName("AccessToken") val accessToken: String?  // AccessToken 在顶层，不在 SessionInfo 里
 )
 
 /**
@@ -1568,7 +1622,6 @@ data class AuthenticateResponse(
 data class SessionInfoDto(
     @SerializedName("Id") val id: String?,
     @SerializedName("UserId") val userId: String?,
-    @SerializedName("AccessToken") val accessToken: String?,
     @SerializedName("DeviceId") val deviceId: String?
 )
 

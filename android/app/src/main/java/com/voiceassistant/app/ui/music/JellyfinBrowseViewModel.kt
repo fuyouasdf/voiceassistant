@@ -58,12 +58,22 @@ class JellyfinBrowseViewModel @Inject constructor(
     }
 
     /**
-     * 加载专辑列表
+     * 确保已登录，然后加载专辑列表
      */
     fun loadAlbums() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
+                // 先确保登录
+                val loginResult = jellyfinClient.ensureLoggedIn()
+                if (loginResult.isFailure) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "登录失败: ${loginResult.exceptionOrNull()?.message}"
+                    )
+                    return@launch
+                }
+                // 加载专辑
                 val albums = jellyfinClient.getAlbums()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -102,6 +112,8 @@ class JellyfinBrowseViewModel @Inject constructor(
                 error = null
             )
             try {
+                // 确保登录
+                jellyfinClient.ensureLoggedIn()
                 val songs = jellyfinClient.searchSongs(query)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -125,6 +137,8 @@ class JellyfinBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
+                // 确保登录
+                jellyfinClient.ensureLoggedIn()
                 val songs = jellyfinClient.getItems(album.id)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -252,6 +266,7 @@ class JellyfinBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val sessions = jellyfinClient.getSessions()
+                Timber.d("过滤前会话数: ${sessions.size}, 所有会话: ${sessions.map { "${it.deviceName}(${it.client}): active=${it.isActive}, control=${it.supportsMediaControl}" }}")
                 // 过滤出支持媒体控制且活跃的会话（这些就是可投屏设备）
                 val castableDevices = sessions.filter { it.supportsMediaControl && it.isActive }
                 Timber.d("发现 ${castableDevices.size} 个可投屏设备")

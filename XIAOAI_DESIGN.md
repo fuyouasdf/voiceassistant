@@ -1,7 +1,7 @@
 # 小爱同学风格语音助手设计方案
 
-> **版本**: 1.0
-> **日期**: 2026-03-28
+> **版本**: 1.1
+> **日期**: 2026-03-29
 > **项目**: voice-assistant
 > **目标**: 将现有语音助手增强为类似小爱同学的智能语音交互应用
 
@@ -1271,6 +1271,27 @@ class MusicSkill(
 
 **文件**: `app/src/main/java/com/voiceassistant/app/ui/main/AvatarView.kt`
 
+**Avatar 尺寸规格**：
+
+| 状态 | 尺寸 | 外环直径 | 波形区域 |
+|------|------|----------|----------|
+| **主界面** | 120dp | 160dp | 20dp |
+| **通知栏展开** | 80dp | 110dp | 14dp |
+| **小部件** | 48dp | 64dp | 8dp |
+
+**Avatar 颜色**：
+
+| 元素 | 浅色模式 | 深色模式 |
+|------|---------|---------|
+| 头像背景 | `#EEF2FF` (Indigo 50) | `#312E81` (Indigo 900) |
+| 外环 (默认) | `#6366F1` (Indigo 500) | `#818CF8` (Indigo 400) |
+| 外环 (脉冲) | `#6366F1` → 透明 | `#818CF8` → 透明 |
+| 表情区域 | 跟随外环 | 跟随外环 |
+
+**AvatarView 代码**：
+
+**文件**: `app/src/main/java/com/voiceassistant/app/ui/main/AvatarView.kt`
+
 ```kotlin
 package com.voiceassistant.app.ui.main
 
@@ -1446,6 +1467,324 @@ class AvatarView @JvmOverloads constructor(
 
 </com.google.android.material.card.MaterialCardView>
 ```
+
+### 5.10 资源文件规格
+
+#### colors.xml (颜色资源)
+
+**文件**: `app/src/main/res/values/colors.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色调 -->
+    <color name="primary">#6366F1</color>
+    <color name="primary_dark">#4F46E5</color>
+    <color name="primary_light">#818CF8</color>
+    <color name="on_primary">#FFFFFF</color>
+
+    <!-- 次要色调 -->
+    <color name="secondary">#EC4899</color>
+    <color name="secondary_dark">#DB2777</color>
+    <color name="on_secondary">#FFFFFF</color>
+
+    <!-- 背景色 -->
+    <color name="background">#FFFFFF</color>
+    <color name="on_background">#1E293B</color>
+
+    <!-- 表面色 -->
+    <color name="surface">#F8FAFC</color>
+    <color name="surface_variant">#F1F5F9</color>
+    <color name="on_surface">#1E293B</color>
+    <color name="on_surface_variant">#64748B</color>
+
+    <!-- 边框/分割线 -->
+    <color name="outline">#E2E8F0</color>
+    <color name="outline_variant">#CBD5E1</color>
+
+    <!-- 错误色 -->
+    <color name="error">#EF4444</color>
+    <color name="on_error">#FFFFFF</color>
+
+    <!-- Avatar 专用色 -->
+    <color name="avatar_background">#EEF2FF</color>
+    <color name="avatar_ring">#6366F1</color>
+    <color name="avatar_ring_pulse">#6366F1</color>
+
+    <!-- 气泡颜色 -->
+    <color name="bubble_user">#6366F1</color>
+    <color name="bubble_user_text">#FFFFFF</color>
+    <color name="bubble_ai">#F8FAFC</color>
+    <color name="bubble_ai_text">#1E293B</color>
+
+    <!-- 技能卡片 -->
+    <color name="skill_card_bg">#F1F5F9</color>
+    <color name="skill_card_bg_pressed">#E0E7FF</color>
+    <color name="skill_card_border">#CBD5E1</color>
+</resources>
+```
+
+**深色模式**: `res/values-night/colors.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色调 -->
+    <color name="primary">#818CF8</color>
+    <color name="primary_dark">#6366F1</color>
+    <color name="primary_light">#A5B4FC</color>
+    <color name="on_primary">#1E1B4B</color>
+
+    <!-- 次要色调 -->
+    <color name="secondary">#F472B6</color>
+    <color name="secondary_dark">#EC4899</color>
+    <color name="on_secondary">#4C0519</color>
+
+    <!-- 背景色 -->
+    <color name="background">#121212</color>
+    <color name="on_background">#F8FAFC</color>
+
+    <!-- 表面色 -->
+    <color name="surface">#1E293B</color>
+    <color name="surface_variant">#334155</color>
+    <color name="on_surface">#F8FAFC</color>
+    <color name="on_surface_variant">#94A3B8</color>
+
+    <!-- 边框/分割线 -->
+    <color name="outline">#475569</color>
+    <color name="outline_variant">#64748B</color>
+
+    <!-- 错误色 -->
+    <color name="error">#F87171</color>
+    <color name="on_error">#7F1D1D</color>
+
+    <!-- Avatar 专用色 -->
+    <color name="avatar_background">#312E81</color>
+    <color name="avatar_ring">#818CF8</color>
+    <color name="avatar_ring_pulse">#818CF8</color>
+
+    <!-- 气泡颜色 -->
+    <color name="bubble_user">#818CF8</color>
+    <color name="bubble_user_text">#1E1B4B</color>
+    <color name="bubble_ai">#334155</color>
+    <color name="bubble_ai_text">#F8FAFC</color>
+
+    <!-- 技能卡片 -->
+    <color name="skill_card_bg">#334155</color>
+    <color name="skill_card_bg_pressed">#4338CA</color>
+    <color name="skill_card_border">#475569</color>
+</resources>
+```
+
+#### dimens.xml (间距资源)
+
+**文件**: `app/src/main/res/values/dimens.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 间距 -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">16dp</dimen>
+    <dimen name="spacing_lg">24dp</dimen>
+    <dimen name="spacing_xl">32dp</dimen>
+    <dimen name="spacing_xxl">48dp</dimen>
+
+    <!-- 圆角 -->
+    <dimen name="corner_sm">8dp</dimen>
+    <dimen name="corner_md">12dp</dimen>
+    <dimen name="corner_lg">16dp</dimen>
+    <dimen name="corner_xl">18dp</dimen>
+    <dimen name="corner_full">50dp</dimen>
+
+    <!-- Avatar -->
+    <dimen name="avatar_size_main">120dp</dimen>
+    <dimen name="avatar_ring_diameter">160dp</dimen>
+    <dimen name="avatar_wave_area">20dp</dimen>
+    <dimen name="avatar_size_small">80dp</dimen>
+    <dimen name="avatar_size_widget">48dp</dimen>
+
+    <!-- 技能卡片 -->
+    <dimen name="skill_card_size">80dp</dimen>
+    <dimen name="skill_icon_size">32dp</dimen>
+    <dimen name="skill_card_corner">16dp</dimen>
+
+    <!-- 触摸目标 -->
+    <dimen name="touch_target_min">44dp</dimen>
+
+    <!-- 阴影 -->
+    <dimen name="elevation_card">4dp</dimen>
+    <dimen name="elevation_button">12dp</dimen>
+    <dimen name="elevation_dialog">48dp</dimen>
+</resources>
+```
+
+### 5.4 设计系统规格
+
+#### 颜色系统 (Color Palette)
+
+| 用途 | 浅色模式 | 深色模式 | 说明 |
+|------|---------|---------|------|
+| **Primary** | `#6366F1` (Indigo 500) | `#818CF8` (Indigo 400) | 主色调，按钮/强调 |
+| **Secondary** | `#EC4899` (Pink 500) | `#F472B6` (Pink 400) | 次要强调，语音动画 |
+| **Background** | `#FFFFFF` | `#121212` | 页面背景 |
+| **Surface** | `#F8FAFC` (Slate 50) | `#1E293B` (Slate 800) | 卡片/气泡背景 |
+| **SurfaceVariant** | `#F1F5F9` (Slate 100) | `#334155` (Slate 700) | 技能卡片背景 |
+| **OnPrimary** | `#FFFFFF` | `#1E1B4B` | Primary 上文字 |
+| **OnBackground** | `#1E293B` (Slate 800) | `#F8FAFC` (Slate 50) | 主文字 |
+| **OnSurfaceVariant** | `#64748B` (Slate 500) | `#94A3B8` (Slate 400) | 次要文字 |
+| **Outline** | `#E2E8F0` (Slate 200) | `#475569` (Slate 600) | 边框/分割线 |
+| **Error** | `#EF4444` (Red 500) | `#F87171` (Red 400) | 错误状态 |
+
+#### 字体系统 (Typography)
+
+| 样式 | 字体 | 大小 | 行高 | 字重 | 用途 |
+|------|------|------|------|------|------|
+| **DisplayLarge** | Noto Sans SC | 32sp | 40sp | 700 | 欢迎语/状态文字 |
+| **TitleLarge** | Noto Sans SC | 22sp | 28sp | 600 | 顶栏标题 |
+| **TitleMedium** | Noto Sans SC | 16sp | 24sp | 600 | 技能卡片名称 |
+| **BodyLarge** | Noto Sans SC | 16sp | 24sp | 400 | 对话气泡文字 |
+| **BodyMedium** | Noto Sans SC | 14sp | 20sp | 400 | 辅助说明文字 |
+| **LabelLarge** | Noto Sans SC | 14sp | 20sp | 500 | 按钮文字 |
+| **LabelSmall** | Noto Sans SC | 11sp | 16sp | 500 | 时间戳/标签 |
+
+#### 间距系统 (Spacing)
+
+基于 4dp 网格系统：
+
+| 名称 | 数值 | 用途 |
+|------|------|------|
+| **xs** | 4dp | 图标与文字间距 |
+| **sm** | 8dp | 卡片内边距 |
+| **md** | 16dp | 组件间距/页面边距 |
+| **lg** | 24dp | 区块间距 |
+| **xl** | 32dp | 大区块分隔 |
+| **xxl** | 48dp | Avatar 与内容间距 |
+
+#### 圆角系统 (Corner Radius)
+
+| 组件 | 圆角 |
+|------|------|
+| 气泡 (用户) | 18dp (左侧圆) |
+| 气泡 (AI) | 18dp (右侧圆) |
+| 技能卡片 | 16dp |
+| 按钮 | 12dp |
+| 输入框 | 12dp |
+| Avatar 外环 | 50% (圆形) |
+
+#### 阴影系统 (Elevation)
+
+| 组件 | 高度 | 阴影 |
+|------|------|------|
+| 技能卡片 | 2dp | `elevation: 4dp` |
+| 顶栏 | 0dp | `elevation: 0dp` (需设置阴影) |
+| 语音按钮 | 6dp | `elevation: 12dp` |
+| 对话气泡 | 0dp | 无阴影，自然层叠 |
+| 弹窗/Dialog | 24dp | `elevation: 48dp` |
+
+### 5.5 动画规格
+
+#### 动画时序 (Animation Timing)
+
+| 动画类型 | 时长 | 缓动函数 |
+|----------|------|----------|
+| 微交互 (hover/press) | 150ms | `ease-out` |
+| 状态切换 (fade/scale) | 200ms | `ease-in-out` |
+| 面板展开/收起 | 300ms | `ease-out` |
+| Avatar 状态动画 | 300-1500ms | `accelerate-decelerate` |
+| 语音波形脉冲 | 1200ms (循环) | `linear` |
+| 呼吸动画 | 3000ms (循环) | `accelerate-decelerate` |
+
+#### Avatar 状态动画详细说明
+
+| 状态 | 动画效果 | 参数 |
+|------|---------|------|
+| **IDLE** | 轻微呼吸缩放 | `scale: 1.0 → 1.03 → 1.0`, 周期 3000ms |
+| **LISTENING** | 外环脉冲扩散 | `scale: 1.0 → 1.8 → 1.0`, `alpha: 1.0 → 0.2`, 周期 1200ms |
+| **PROCESSING** | 360° 旋转 | `rotation: 0° → 360°`, 周期 1500ms |
+| **SPEAKING** | 波形跳动 | `scaleX/Y: 0.8 → 1.2 → 0.8`, 周期 300ms |
+| **HAPPY** | 向上跳跃 | `translationY: 0 → -30dp → 0`, 周期 500ms |
+| **SAD** | 下沉渐隐 | `translationY: 0 → 10dp`, `alpha: 1.0 → 0.7`, 周期 500ms |
+
+#### 手势交互
+
+| 交互 | 行为 |
+|------|------|
+| 语音按钮按下 | `scale: 1.0 → 0.92`, `alpha: 1.0 → 0.8`, 持续至松开 |
+| 技能卡片点击 | `scale: 1.0 → 0.95 → 1.0`, 涟漪效果从中心扩散 |
+| 对话气泡点击 | 背景色加深 5%，显示复制/删除选项 |
+
+### 5.6 组件状态规格
+
+#### 语音按钮状态
+
+| 状态 | 背景色 | 边框 | 图标 | 说明 |
+|------|--------|------|------|------|
+| **默认** | Primary | 无 | 麦克风图标 | 等待用户操作 |
+| **按下** | Primary Dark | 加深 10% | 麦克风图标 + 波纹 | 正在录音 |
+| **禁用** | Slate 300 | 虚线 | 麦克风图标 (灰) | 服务不可用 |
+| **加载中** | Primary | 无 | 旋转圆环 | 处理中 |
+
+#### 技能卡片状态
+
+| 状态 | 背景色 | 边框 | 缩放 |
+|------|--------|------|------|
+| **默认** | SurfaceVariant | 无 | 1.0 |
+| **按下** | Primary/10% | Primary/30% | 0.95 |
+| **禁用** | Slate 100 | 无 | 0.98 |
+| **选中** | Primary/15% | Primary 2dp | 1.0 |
+
+#### 对话气泡状态
+
+| 类型 | 背景色 | 圆角 | 最大宽度 |
+|------|--------|------|----------|
+| **用户气泡** | Primary | 18dp (左侧全圆) | 屏幕宽 - 80dp |
+| **AI 气泡** | Surface | 18dp (右侧全圆) | 屏幕宽 - 80dp |
+| **系统消息** | SurfaceVariant | 8dp | 屏幕宽 - 32dp |
+
+### 5.7 无障碍设计 (Accessibility)
+
+| 要求 | 规格 |
+|------|------|
+| **触摸目标最小尺寸** | 44×44dp (符合 WCAG 2.1) |
+| **文字对比度** | 主文字 4.5:1，次要文字 3:1 |
+| **内容描述** | Avatar 需提供 `contentDescription="小爱同学头像"` |
+| **语音按钮** | `contentDescription="按住说话"` |
+| **技能图标** | 每个图标需有 `contentDescription` |
+| **动态效果** | 检测 `ReduceMotion`，必要时禁用动画 |
+| **字体缩放** | 支持最大 200% 系统字体缩放 |
+
+### 5.8 响应式布局
+
+#### 断点定义
+
+| 设备 | 屏幕宽度 | 布局调整 |
+|------|----------|----------|
+| 手机竖屏 | < 600dp | 单列，技能卡片 4 个/行 |
+| 手机横屏 | 600-840dp | 单列，技能卡片 5 个/行 |
+| 平板竖屏 | > 840dp | 双列对话区，右侧面板显示快捷操作 |
+
+#### 安全区域
+
+| 区域 | 边距 |
+|------|------|
+| 状态栏下方 | 至少 24dp 或使用 `WindowInsetsCompat` |
+| 导航栏下方 | 至少 16dp 或使用 `WindowInsetsCompat` |
+| 侧边与内容 | 至少 16dp |
+
+### 5.9 深色模式适配
+
+深色模式关键适配点：
+
+| 组件 | 浅色 | 深色 | 注意 |
+|------|------|------|------|
+| **背景** | `#FFFFFF` | `#121212` | 避免纯黑 `#000000` |
+| **气泡 (用户)** | `#6366F1` | `#818CF8` | 对比度需 ≥ 4.5:1 |
+| **气泡 (AI)** | `#F8FAFC` | `#1E293B` | 文字 `#F8FAFC` |
+| **技能卡片** | `#F1F5F9` | `#334155` | 边框 `#475569` |
+| **顶栏** | `#FFFFFF` | `#1E293B` | 标题 `#F8FAFC` |
+| **头像背景** | `#EEF2FF` | `#312E81` | Avatar 外环发光色 |
 
 ---
 

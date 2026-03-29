@@ -54,7 +54,23 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:text="CPU"
+                    android:text="LLM"
+                    android:textColor="@color/text_tertiary"
+                    android:textSize="12sp" />
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginHorizontal="6dp"
+                    android:background="@drawable/circle_status_online"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvJellyfinStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Jellyfin"
                     android:textColor="@color/text_tertiary"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -177,19 +193,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipMusic"
-                        android:layout_width="wrap_content"
-                        android:layout_height="40dp"
-                        android:text="播放音乐"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp"
-                        app:chipBackgroundColor="@color/surface"
-                        app:chipStrokeWidth="0dp"
-                        app:chipIcon="@drawable/ic_music"
-                        app:chipIconTint="@color/primary"
-                        app:chipIconVisible="true" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipWeather"

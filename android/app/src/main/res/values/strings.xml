@@ -45,12 +45,13 @@
     <string name="settings_category_music">音乐服务</string>
     <string name="settings_category_ai">AI 服务</string>
     <string name="settings_category_voice">语音设置</string>
-    <string name="settings_category_dlna">DLNA 投屏</string>
 
     <string name="settings_jellyfin_url">Jellyfin 地址</string>
     <string name="settings_jellyfin_url_hint">http://192.168.1.100:8096</string>
-    <string name="settings_jellyfin_api_key">API Key</string>
-    <string name="settings_jellyfin_api_key_hint">请输入 Jellyfin API Key</string>
+    <string name="settings_jellyfin_username">账号</string>
+    <string name="settings_jellyfin_username_hint">请输入 Jellyfin 账号</string>
+    <string name="settings_jellyfin_password">密码</string>
+    <string name="settings_jellyfin_password_hint">请输入 Jellyfin 密码</string>
 
     <string name="settings_llm_url">LLM API 地址</string>
     <string name="settings_llm_url_hint">https://api.deepseek.com</string>
@@ -64,18 +65,16 @@
     <string name="settings_tts_speed">TTS 语速</string>
     <string name="settings_tts_enabled">启用语音播报</string>
 
-    <string name="settings_dlna_device_name">已选设备</string>
-    <string name="settings_dlna_device_ip">设备地址</string>
-    <string name="settings_dlna_scan">扫描设备</string>
-    <string name="settings_dlna_scanning">正在扫描...</string>
-    <string name="settings_dlna_no_device">未选择设备</string>
-    <string name="settings_dlna_select_device">选择投屏设备</string>
-    <string name="settings_dlna_no_devices_found">未发现设备</string>
-    <string name="settings_dlna_scan_complete">扫描完成，发现 %d 个设备</string>
-
     <string name="settings_save">保存</string>
     <string name="settings_saved">设置已保存</string>
     <string name="settings_test_connection">测试连接</string>
+    <string name="settings_test_llm_connection">测试 LLM 连接</string>
+    <string name="settings_llm_testing">正在测试...</string>
+    <string name="settings_llm_online">LLM 在线</string>
+    <string name="settings_llm_offline">LLM 离线</string>
+    <string name="settings_test_jellyfin_connection">测试 Jellyfin 连接</string>
+    <string name="settings_jellyfin_online">Jellyfin 在线</string>
+    <string name="settings_jellyfin_offline">Jellyfin 离线</string>
     <string name="settings_connection_success">连接成功</string>
     <string name="settings_connection_failed">连接失败</string>
 

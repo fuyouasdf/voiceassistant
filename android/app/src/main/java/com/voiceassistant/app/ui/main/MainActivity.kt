@@ -21,9 +21,10 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
 import com.voiceassistant.app.R
+import com.voiceassistant.app.di.ConfigHolder
 import com.voiceassistant.app.service.VoiceAssistantService
+import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.app.ui.settings.SettingsActivity
-import com.voiceassistant.app.ui.music.MusicActivity
 import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
 import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
@@ -43,10 +44,17 @@ class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var voicePipeline: VoicePipeline
 
+    @Inject
+    lateinit var configHolder: ConfigHolder
+
+    @Inject
+    lateinit var llmRepository: LLMRepository
+
     // UI Components
     private lateinit var statusDot: View
     private lateinit var tvStatus: TextView
     private lateinit var tvProvider: TextView
+    private lateinit var tvJellyfinStatus: TextView
     private lateinit var btnSettings: ImageButton
 
     // Conversation
@@ -70,7 +78,6 @@ class MainActivity : AppCompatActivity() {
     private val waveBars = mutableListOf<View>()
 
     // Quick Actions
-    private lateinit var chipMusic: Chip
     private lateinit var chipWeather: Chip
     private lateinit var chipJellyfin: Chip
 
@@ -106,16 +113,27 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 每次返回主页时重新检测 LLM 连接状态
+        testLlmConnection()
+    }
+
     private fun initViews() {
         // Status
         statusDot = findViewById(R.id.statusDot)
         tvStatus = findViewById(R.id.tvStatus)
         tvProvider = findViewById(R.id.tvProvider)
+        tvJellyfinStatus = findViewById(R.id.tvJellyfinStatus)
         btnSettings = findViewById(R.id.btnSettings)
 
-        // 显示检测到的计算单元
-        val provider = com.voiceassistant.core.sherpa.GpuDetector.getBestProvider()
-        tvProvider.text = provider.uppercase()
+        // 测试 LLM 连接状态
+        testLlmConnection()
+
+        // 显示 Jellyfin 配置状态
+        val jellyfinConfigured = configHolder.jellyfinUrl.isNotEmpty() &&
+            configHolder.jellyfinUsername.isNotEmpty() && configHolder.jellyfinPassword.isNotEmpty()
+        tvJellyfinStatus.text = if (jellyfinConfigured) "Jellyfin: 已配置" else "Jellyfin: 未配置"
 
         // Conversation
         tvEmptyHint = findViewById(R.id.tvEmptyHint)
@@ -144,7 +162,6 @@ class MainActivity : AppCompatActivity() {
         waveBars.add(findViewById(R.id.waveBar5))
 
         // Quick actions
-        chipMusic = findViewById(R.id.chipMusic)
         chipWeather = findViewById(R.id.chipWeather)
         chipJellyfin = findViewById(R.id.chipJellyfin)
 
@@ -204,9 +221,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick actions
-        chipMusic.setOnClickListener {
-            startActivity(Intent(this, MusicActivity::class.java))
-        }
         chipWeather.setOnClickListener { triggerQuickAction("今天天气怎么样") }
         chipJellyfin.setOnClickListener {
             startActivity(Intent(this, JellyfinBrowseActivity::class.java))
@@ -624,5 +638,27 @@ class MainActivity : AppCompatActivity() {
 
         // Start ASR/TTS background initialization after service starts
         voicePipeline.initializeInBackground()
+    }
+
+    /**
+     * 测试 LLM 连接状态
+     */
+    private fun testLlmConnection() {
+        lifecycleScope.launch {
+            val llmConfigured = configHolder.llmBaseUrl.isNotEmpty() && configHolder.llmApiKey.isNotEmpty()
+            if (!llmConfigured) {
+                tvProvider.text = "LLM: 未配置"
+                return@launch
+            }
+
+            tvProvider.text = "LLM: 连接中..."
+            val result = llmRepository.testConnection()
+            if (result.isSuccess) {
+                tvProvider.text = "LLM: 已连接"
+                updateStatus(true) // LLM 在线时更新主页状态为在线
+            } else {
+                tvProvider.text = "LLM: 未连接"
+            }
+        }
     }
 }

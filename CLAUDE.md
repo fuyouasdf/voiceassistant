@@ -54,18 +54,6 @@ voice-assistant/
 
 ## 代码优先级 (重要)
 
-### jellyfin-android/ - 经过验证，直接使用
-
-`android/jellyfin-android/` 目录包含 **经过验证的 Jellyfin SDK 实现**，应作为 Jellyfin/音乐播放功能的参考和直接使用：
-
-- 完整的 Jellyfin REST API 客户端实现
-- 经过实际测试的播放功能
-- 音乐库浏览、搜索、流媒体播放
-
-**相关文件**:
-- `android/jellyfin-android/app/src/main/java/...` - Jellyfin 客户端代码
-- `android/data/src/main/java/com/voiceassistant/data/remote/JellyfinClient.kt` - 自己的实现（可参考 jellyfin-android 改进）
-
 ### sherpa-onnx-aar/ - 语音部分参考
 
 `android/sherpa-onnx-aar/` 目录包含 **Sherpa-ONNX 本地库**，语音管道部分可参考：
@@ -137,7 +125,10 @@ vits-melo-tts-zh_en 模型过大(163MB)，合成慢。花燕模型(vits-piper-zh
 **mediaSourceId 必须去 dashes**：Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源。
 
 **相关文件**: `android/data/src/main/java/com/voiceassistant/data/remote/JellyfinClient.kt`
-
+jellyfin 的接口必须要使用 playwright mcp来进行验证接口格式
+地址192.168.31.206:8096
+账号：app
+密码：qweqwe
 ---
 
 ## 文档链接
