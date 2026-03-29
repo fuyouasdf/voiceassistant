@@ -291,7 +291,8 @@ class SettingsActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                val result = jellyfinClient.testConnection()
+                val testClient = JellyfinClient(url, apiKey)
+                val result = testClient.testConnection()
                 progressJellyfin.visibility = View.GONE
                 btnTestJellyfin.isEnabled = true
 
@@ -334,7 +335,8 @@ class SettingsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val result = jellyfinClient.testConnection()
+                val testClient = JellyfinClient(url, apiKey)
+                val result = testClient.testConnection()
                 updateJellyfinOnlineStatus(result.isSuccess)
             } catch (e: Exception) {
                 updateJellyfinOnlineStatus(false)
