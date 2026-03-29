@@ -3,9 +3,9 @@ package com.voiceassistant.app.ui.music
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.voiceassistant.data.local.PlaylistEntity
-import com.voiceassistant.data.local.PlaylistSong
-import com.voiceassistant.data.repository.PlaylistRepository
+import com.voiceassistant.domain.model.Playlist
+import com.voiceassistant.domain.model.PlaylistSong
+import com.voiceassistant.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +19,7 @@ import javax.inject.Inject
  */
 data class PlaylistUiState(
     val isLoading: Boolean = false,
-    val playlist: PlaylistEntity? = null,
+    val playlist: Playlist? = null,
     val songs: List<PlaylistSong> = emptyList(),
     val error: String? = null
 )

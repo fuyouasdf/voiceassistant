@@ -29,12 +29,13 @@ import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.LLMApi
 import com.voiceassistant.data.repository.LLMRepositoryImpl
 import com.voiceassistant.data.repository.MusicRepositoryImpl
-import com.voiceassistant.data.repository.PlaylistRepository
+import com.voiceassistant.data.repository.PlaylistRepositoryImpl
 import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.data.repository.SettingsRepositoryImpl
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.PlayerRepository
+import com.voiceassistant.domain.repository.PlaylistRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -75,7 +76,7 @@ object AppModule {
     @Provides
     @Singleton
     fun providePlaylistRepository(playlistDao: PlaylistDao): PlaylistRepository {
-        return PlaylistRepository(playlistDao)
+        return PlaylistRepositoryImpl(playlistDao)
     }
 
     @Provides
@@ -246,9 +247,10 @@ object AppModule {
     fun provideIntentRouter(
         musicRepository: MusicRepository?,
         llmRepository: LLMRepository?,
-        playerRepository: PlayerRepository?
+        playerRepository: PlayerRepository?,
+        playlistRepository: PlaylistRepository?
     ): IntentRouter {
-        return IntentRouter(musicRepository, llmRepository, playerRepository)
+        return IntentRouter(musicRepository, llmRepository, playerRepository, playlistRepository)
     }
 
     @Provides

@@ -21,8 +21,9 @@ import com.voiceassistant.app.R
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.remote.SessionInfo
-import com.voiceassistant.data.repository.PlaylistRepository
+import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.Song
+import com.voiceassistant.domain.repository.PlaylistRepository
 import com.voiceassistant.app.databinding.ActivityJellyfinBrowseBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
@@ -293,7 +294,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     /**
      * 显示播放列表中的歌曲对话框
      */
-    private fun showPlaylistSongsDialog(playlist: com.voiceassistant.data.local.PlaylistEntity) {
+    private fun showPlaylistSongsDialog(playlist: Playlist) {
         val intent = Intent(this, PlaylistActivity::class.java).apply {
             putExtra(PlaylistActivity.EXTRA_PLAYLIST_ID, playlist.id)
         }

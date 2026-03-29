@@ -4,6 +4,8 @@ import com.voiceassistant.domain.model.Song
 import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.PlayerRepository
+import com.voiceassistant.domain.repository.PlaylistRepository
+import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -39,7 +41,8 @@ data class Intent(
 class IntentRouter @Inject constructor(
     private val musicRepository: MusicRepository?,
     private val llmRepository: LLMRepository?,
-    private val playerRepository: PlayerRepository?
+    private val playerRepository: PlayerRepository?,
+    private val playlistRepository: PlaylistRepository?
 ) {
     // Play queue for next/previous functionality
     private val playQueue = mutableListOf<Song>()
@@ -172,7 +175,7 @@ class IntentRouter @Inject constructor(
             "play" -> {
                 val query = intent.query ?: ""
                 if (query.isEmpty()) {
-                    return "请告诉我你想听什么歌曲"
+                    return playRandomFromPlaylist(musicRepo, player)
                 }
 
                 val result = musicRepo.searchSongs(query)
@@ -264,6 +267,53 @@ class IntentRouter @Inject constructor(
             Timber.e(e, "playSong failed")
             "播放失败：${e.message ?: "未知错误"}"
         }
+    }
+
+    /**
+     * Play a random song from the local playlist
+     */
+    private suspend fun playRandomFromPlaylist(
+        musicRepo: MusicRepository?,
+        player: PlayerRepository?
+    ): String {
+        if (musicRepo == null) {
+            return "音乐服务未配置"
+        }
+
+        val playlistRepo = playlistRepository
+        if (playlistRepo == null) {
+            return "播放列表服务未配置"
+        }
+
+        // Get the first playlist
+        val playlists = playlistRepo.getAllPlaylists().first()
+        if (playlists.isEmpty()) {
+            return "没有可用的播放列表"
+        }
+        val playlist = playlists.first()
+
+        val songs = playlistRepo.getPlaylistSongs(playlist)
+        if (songs.isEmpty()) {
+            return "播放列表为空，请先添加歌曲"
+        }
+
+        val randomSong = songs.random()
+        val song = Song(
+            id = randomSong.songId,
+            title = randomSong.title,
+            artist = randomSong.artist,
+            album = randomSong.album,
+            duration = randomSong.duration,
+            url = randomSong.streamUrl,
+            coverUrl = randomSong.coverUrl
+        )
+
+        // Update play queue
+        playQueue.clear()
+        playQueue.add(song)
+        currentIndex = 0
+
+        return playSong(musicRepo, player, song)
     }
 
     private suspend fun handleVolume(intent: Intent): String {

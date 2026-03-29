@@ -6,7 +6,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.voiceassistant.app.databinding.ItemPlaylistSongBinding
-import com.voiceassistant.data.local.PlaylistSong
+import com.voiceassistant.domain.model.PlaylistSong
 
 /**
  * 播放列表歌曲适配器

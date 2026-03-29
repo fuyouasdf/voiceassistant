@@ -3,13 +3,13 @@ package com.voiceassistant.app.ui.music
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.voiceassistant.data.local.PlaylistEntity
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.remote.SessionInfo
-import com.voiceassistant.data.repository.PlaylistRepository
+import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.Song
+import com.voiceassistant.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,8 +52,8 @@ class JellyfinBrowseViewModel @Inject constructor(
     val uiState: StateFlow<JellyfinBrowseUiState> = _uiState.asStateFlow()
 
     // 播放列表
-    private val _playlists = MutableStateFlow<List<PlaylistEntity>>(emptyList())
-    val playlists: StateFlow<List<PlaylistEntity>> = _playlists.asStateFlow()
+    private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
+    val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
     // 记住上次选择的设备ID
     private val savedDeviceId: String?
