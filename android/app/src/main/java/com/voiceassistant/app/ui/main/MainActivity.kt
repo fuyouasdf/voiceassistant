@@ -1,10 +1,14 @@
 package com.voiceassistant.app.ui.main
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -13,6 +17,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -80,6 +85,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chipWeather: Chip
     private lateinit var chipJellyfin: Chip
 
+    // Haptic Feedback
+    private var vibrator: Vibrator? = null
+
     // State
     private var lastRecognizedText = ""
     private var lastResponseText = ""
@@ -144,6 +152,15 @@ class MainActivity : AppCompatActivity() {
         // Quick actions
         chipWeather = findViewById(R.id.chipWeather)
         chipJellyfin = findViewById(R.id.chipJellyfin)
+
+        // Initialize vibrator for haptic feedback
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
     }
 
     private fun setupListeners() {
@@ -241,13 +258,24 @@ class MainActivity : AppCompatActivity() {
                     }
                     PipelineState.IDLE -> {
                         resetUI()
+                        stopAsrPulseAnimation()
                         updateStatus(true)
+                        // Show toast if init failed (message indicates failure)
+                        if (message?.contains("暂不可用") == true || message?.contains("初始化") == true) {
+                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                        }
                     }
                     PipelineState.WAKEWORD_DETECTED -> {
                         btnSend.visibility = View.INVISIBLE
+                        // Haptic feedback on wake word detection
+                        triggerHapticFeedback()
+                        // Show wake success indicator
+                        showWakeSuccessIndicator(message ?: "唤醒成功")
                     }
                     PipelineState.LISTENING -> {
                         btnSend.visibility = View.INVISIBLE
+                        // Start pulse animation
+                        startAsrPulseAnimation()
                     }
                     PipelineState.RECORDING -> {
                         showAsrCard()
@@ -267,6 +295,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     PipelineState.SPEAKING -> {
                         btnSend.visibility = View.VISIBLE
+                        stopAsrPulseAnimation()
                         hideAsrCard()
                     }
                 }
@@ -294,6 +323,50 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Trigger haptic feedback (vibration) for wake word detection
+     */
+    private fun triggerHapticFeedback() {
+        try {
+            vibrator?.let { v ->
+                if (v.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        v.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        v.vibrate(100)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Haptic feedback failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Start pulse animation on the ASR pulse dot (for LISTENING state)
+     */
+    private fun startAsrPulseAnimation() {
+        asrPulseDot.visibility = View.VISIBLE
+        val scaleX = android.animation.ObjectAnimator.ofFloat(asrPulseDot, "scaleX", 1f, 1.5f, 1f)
+        val scaleY = android.animation.ObjectAnimator.ofFloat(asrPulseDot, "scaleY", 1f, 1.5f, 1f)
+        scaleX.duration = 1000
+        scaleY.duration = 1000
+        scaleX.repeatCount = android.animation.ObjectAnimator.INFINITE
+        scaleY.repeatCount = android.animation.ObjectAnimator.INFINITE
+        scaleX.start()
+        scaleY.start()
+    }
+
+    /**
+     * Stop the pulse animation
+     */
+    private fun stopAsrPulseAnimation() {
+        asrPulseDot.animate().cancel()
+        asrPulseDot.scaleX = 1f
+        asrPulseDot.scaleY = 1f
+    }
+
     // ==================== ASR Card ====================
 
     private fun showAsrCard() {
@@ -305,13 +378,18 @@ class MainActivity : AppCompatActivity() {
         asrResultCard.visibility = View.GONE
     }
 
-    private fun updateAsrText(text: String, isFinal: Boolean) {
-        tvAsrResult.text = text
+    private fun showWakeSuccessIndicator(message: String) {
+        asrResultCard.visibility = View.VISIBLE
+        tvAsrResult.text = message
+        asrResultCard.alpha = 1f
+        // Change card background to indicate success
+        asrResultCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.primary))
     }
 
-    private fun stopAsrPulseAnimation() {
-        asrPulseDot.scaleX = 1f
-        asrPulseDot.scaleY = 1f
+    private fun updateAsrText(text: String, isFinal: Boolean) {
+        // Reset card background to normal when recording starts
+        asrResultCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.surface))
+        tvAsrResult.text = text
     }
 
     // ==================== Message Handling ====================
@@ -440,6 +518,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(intent)
         }
+
+        // Start KWS listening for wake word detection
+        voicePipeline.start()
 
         // Start ASR/TTS background initialization after service starts
         voicePipeline.initializeInBackground()

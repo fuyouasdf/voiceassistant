@@ -16,6 +16,14 @@ private const val DEFAULT_SYSTEM_PROMPT = """你的默认身份是家居场景�
 - 不使用复杂符号、表格或大段文本
 - 除非用户要求，否则不展开专业分析"""
 
+// Default wake words in format "keyword:response"
+private val DEFAULT_WAKE_WORDS = listOf(
+    "小爱同学:我在",
+    "你好问问:我在",
+    "小艺小艺:我在",
+    "小米小米:我在"
+)
+
 @Singleton
 class SettingsRepositoryImpl @Inject constructor(
     private val configDao: ConfigDao
@@ -61,6 +69,16 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun getWakeSensitivity(): Float = getString(ConfigKeys.WAKE_SENSITIVITY, "0.5").toFloatOrNull() ?: 0.5f
     override suspend fun setWakeSensitivity(sensitivity: Float) = setString(ConfigKeys.WAKE_SENSITIVITY, sensitivity.toString())
 
+    override suspend fun getWakeWords(): List<String> {
+        val stored = getString(ConfigKeys.WAKE_WORDS, "")
+        if (stored.isEmpty()) return DEFAULT_WAKE_WORDS
+        return stored.split("|").filter { it.isNotBlank() }
+    }
+
+    override suspend fun setWakeWords(words: List<String>) {
+        setString(ConfigKeys.WAKE_WORDS, words.joinToString("|"))
+    }
+
     override suspend fun getTtsSpeed(): Float = getString(ConfigKeys.TTS_SPEED, "1.0").toFloatOrNull() ?: 1.0f
     override suspend fun setTtsSpeed(speed: Float) = setString(ConfigKeys.TTS_SPEED, speed.toString())
 
@@ -100,6 +118,8 @@ interface SettingsRepository {
     // Voice Settings
     suspend fun getWakeSensitivity(): Float
     suspend fun setWakeSensitivity(sensitivity: Float)
+    suspend fun getWakeWords(): List<String>
+    suspend fun setWakeWords(words: List<String>)
     suspend fun getTtsSpeed(): Float
     suspend fun setTtsSpeed(speed: Float)
     suspend fun getTtsEnabled(): Boolean

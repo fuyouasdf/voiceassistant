@@ -25,6 +25,15 @@ interface SherpaKWS {
     fun setSensitivity(sensitivity: Float)
 
     /**
+     * Reload keywords from a new keywords file path.
+     * Thread-safe: acquires lock, releases old KeywordSpotter, creates new one.
+     * @param keywordsFilePath Absolute path to the new keywords.txt
+     * @param threshold Optional new threshold. If null, keeps current threshold.
+     * @return true if reload successful
+     */
+    fun reloadKeywords(keywordsFilePath: String, threshold: Float? = null): Boolean
+
+    /**
      * Release resources
      */
     fun release()

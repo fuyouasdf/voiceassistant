@@ -85,7 +85,11 @@ class JellyfinClient(
     /**
      * 获取默认用户 ID
      */
-    private suspend fun getDefaultUserId(): String? {
+    /**
+     * 获取默认用户 ID，支持自动重试
+     * 当缓存的 userId 失效（服务器返回 404）时，会自动清除缓存并重新获取
+     */
+    private suspend fun getDefaultUserId(allowRetry: Boolean = true): String? {
         if (cachedUserId != null) {
             Timber.d("使用缓存的userId: $cachedUserId")
             return cachedUserId
@@ -114,10 +118,21 @@ class JellyfinClient(
     }
 
     /**
+     * 清除缓存的用户 ID，下一次调用会重新获取
+     */
+    fun clearUserIdCache() {
+        if (cachedUserId != null) {
+            Timber.d("清除缓存的userId: $cachedUserId")
+            cachedUserId = null
+        }
+    }
+
+    /**
      * 搜索歌曲
      * 使用 /Items 端点（与 Jellyfin Web 相同），需要 userId 才能返回结果
+     * 当服务器返回 404 时（通常是缓存的 userId 失效），会自动重试一次
      */
-    suspend fun searchSongs(query: String, limit: Int = 20): List<JellyfinSong> = withContext(Dispatchers.IO) {
+    suspend fun searchSongs(query: String, limit: Int = 20, retryOn404: Boolean = true): List<JellyfinSong> = withContext(Dispatchers.IO) {
         Timber.d("searchSongs: query=$query, limit=$limit")
 
         val userId = getDefaultUserId()
@@ -163,6 +178,11 @@ class JellyfinClient(
                 }
                 Timber.d("返回歌曲列表: ${songs.size} 首")
                 songs
+            } else if (response.code() == 404 && retryOn404 && cachedUserId != null) {
+                // 404 错误通常是缓存的 userId 失效，清除缓存并重试
+                Timber.w("searchSongs返回404，清除userId缓存并重试")
+                cachedUserId = null
+                searchSongs(query, limit, retryOn404 = false)
             } else {
                 Timber.e("搜索失败: ${response.code()}")
                 emptyList()
@@ -175,8 +195,9 @@ class JellyfinClient(
 
     /**
      * 获取专辑列表，或搜索专辑（当 searchTerm 不为空时）
+     * 当服务器返回 404 时（通常是缓存的 userId 失效），会自动重试一次
      */
-    suspend fun getAlbums(parentId: String? = null, startIndex: Int = 0, limit: Int = 50, searchTerm: String? = null): List<JellyfinAlbum> = withContext(Dispatchers.IO) {
+    suspend fun getAlbums(parentId: String? = null, startIndex: Int = 0, limit: Int = 50, searchTerm: String? = null, retryOn404: Boolean = true): List<JellyfinAlbum> = withContext(Dispatchers.IO) {
         Timber.d("getAlbums: parentId=$parentId, startIndex=$startIndex, limit=$limit, searchTerm=$searchTerm")
 
         val userId = getDefaultUserId()
@@ -234,6 +255,11 @@ class JellyfinClient(
                 }
                 Timber.d("返回专辑列表: ${albums.size} 张")
                 albums
+            } else if (response.code() == 404 && retryOn404 && cachedUserId != null) {
+                // 404 错误通常是缓存的 userId 失效，清除缓存并重试
+                Timber.w("getAlbums返回404，清除userId缓存并重试")
+                cachedUserId = null
+                getAlbums(parentId, startIndex, limit, searchTerm, retryOn404 = false)
             } else {
                 Timber.e("获取专辑失败: ${response.code()} - ${response.message()}")
                 try {
@@ -300,8 +326,9 @@ class JellyfinClient(
 
     /**
      * 获取所有歌曲（不带 parentId，获取用户的音乐库）
+     * 当服务器返回 404 时（通常是缓存的 userId 失效），会自动重试一次
      */
-    suspend fun getAllSongs(startIndex: Int = 0, limit: Int = 100): List<JellyfinSong> = withContext(Dispatchers.IO) {
+    suspend fun getAllSongs(startIndex: Int = 0, limit: Int = 100, retryOn404: Boolean = true): List<JellyfinSong> = withContext(Dispatchers.IO) {
         Timber.d("getAllSongs: startIndex=$startIndex, limit=$limit")
 
         val userId = getDefaultUserId()
@@ -345,6 +372,11 @@ class JellyfinClient(
                 }
                 Timber.d("返回歌曲列表: ${songs.size} 首")
                 songs
+            } else if (response.code() == 404 && retryOn404 && cachedUserId != null) {
+                // 404 错误通常是缓存的 userId 失效，清除缓存并重试
+                Timber.w("getAllSongs返回404，清除userId缓存并重试")
+                cachedUserId = null
+                getAllSongs(startIndex, limit, retryOn404 = false)
             } else {
                 Timber.e("获取歌曲失败: ${response.code()}")
                 emptyList()
@@ -358,8 +390,9 @@ class JellyfinClient(
     /**
      * 获取文件夹下的所有项目（不限制类型）
      * 用于浏览文件夹/艺术家/专辑内容
+     * 当服务器返回 404 时（通常是缓存的 userId 失效），会自动重试一次
      */
-    suspend fun getFolderItems(parentId: String, startIndex: Int = 0, limit: Int = 50): List<JellyfinItem> = withContext(Dispatchers.IO) {
+    suspend fun getFolderItems(parentId: String, startIndex: Int = 0, limit: Int = 50, retryOn404: Boolean = true): List<JellyfinItem> = withContext(Dispatchers.IO) {
         Timber.d("getFolderItems: parentId=$parentId, startIndex=$startIndex, limit=$limit")
 
         val userId = getDefaultUserId()
@@ -398,6 +431,11 @@ class JellyfinClient(
                 }
                 Timber.d("返回项目列表: ${result.size} 项")
                 result
+            } else if (response.code() == 404 && retryOn404 && cachedUserId != null) {
+                // 404 错误通常是缓存的 userId 失效，清除缓存并重试
+                Timber.w("getFolderItems返回404，清除userId缓存并重试")
+                cachedUserId = null
+                getFolderItems(parentId, startIndex, limit, retryOn404 = false)
             } else {
                 Timber.e("获取文件夹项目失败: ${response.code()}")
                 emptyList()
@@ -411,8 +449,9 @@ class JellyfinClient(
     /**
      * 获取专辑/艺术家下的歌曲
      * 如果直接获取不到歌曲，会递归搜索子文件夹
+     * 当服务器返回 404 时（通常是缓存的 userId 失效），会自动重试一次
      */
-    suspend fun getItems(parentId: String, startIndex: Int = 0, limit: Int = 50): List<JellyfinSong> = withContext(Dispatchers.IO) {
+    suspend fun getItems(parentId: String, startIndex: Int = 0, limit: Int = 50, retryOn404: Boolean = true): List<JellyfinSong> = withContext(Dispatchers.IO) {
         Timber.d("getItems: parentId=$parentId, startIndex=$startIndex, limit=$limit")
 
         val userId = getDefaultUserId()
@@ -465,7 +504,7 @@ class JellyfinClient(
                     for (folder in folders) {
                         Timber.d("搜索文件夹: ${folder.name}, id=${folder.id}")
                         folder.id?.let { folderId ->
-                            val subSongs = getItems(folderId, 0, 50)
+                            val subSongs = getItems(folderId, 0, 50, retryOn404 = false)
                             if (subSongs.isNotEmpty()) {
                                 songs.addAll(subSongs)
                                 Timber.d("从文件夹 ${folder.name} 获取到 ${subSongs.size} 首歌曲")
@@ -478,6 +517,11 @@ class JellyfinClient(
 
                 Timber.d("返回歌曲列表: ${songs.size} 首")
                 songs.take(limit)
+            } else if (response.code() == 404 && retryOn404 && cachedUserId != null) {
+                // 404 错误通常是缓存的 userId 失效，清除缓存并重试
+                Timber.w("getItems返回404，清除userId缓存并重试")
+                cachedUserId = null
+                getItems(parentId, startIndex, limit, retryOn404 = false)
             } else {
                 Timber.e("获取歌曲失败: ${response.code()}")
                 emptyList()

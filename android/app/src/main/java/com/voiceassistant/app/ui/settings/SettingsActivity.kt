@@ -1,18 +1,25 @@
 package com.voiceassistant.app.ui.settings
 
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.voiceassistant.app.R
 import com.voiceassistant.app.di.ConfigHolder
+import com.voiceassistant.core.pipeline.VoicePipeline
+import com.voiceassistant.core.pipeline.WakeWord
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.domain.repository.LLMRepository
@@ -34,6 +41,9 @@ class SettingsActivity : AppCompatActivity() {
 
     @Inject
     lateinit var jellyfinClient: JellyfinClient
+
+    @Inject
+    lateinit var voicePipeline: VoicePipeline
 
     // Music Service
     private lateinit var etJellyfinUrl: TextInputEditText
@@ -59,10 +69,14 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var switchTtsEnabled: SwitchMaterial
     private lateinit var sliderTtsSpeed: Slider
     private lateinit var tvTtsSpeed: TextView
+    private lateinit var rvWakeWords: RecyclerView
+    private lateinit var btnAddWakeWord: MaterialButton
 
     private lateinit var btnSave: MaterialButton
 
     private var isLoading = false
+    private val wakeWordsList = mutableListOf<WakeWord>()
+    private lateinit var wakeWordAdapter: WakeWordAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,6 +127,17 @@ class SettingsActivity : AppCompatActivity() {
         switchTtsEnabled = findViewById(R.id.switchTtsEnabled)
         sliderTtsSpeed = findViewById(R.id.sliderTtsSpeed)
         tvTtsSpeed = findViewById(R.id.tvTtsSpeed)
+        rvWakeWords = findViewById(R.id.rvWakeWords)
+        btnAddWakeWord = findViewById(R.id.btnAddWakeWord)
+
+        // Initialize wake words RecyclerView
+        wakeWordAdapter = WakeWordAdapter(
+            wakeWords = wakeWordsList,
+            onEdit = { position, wakeWord -> showEditWakeWordDialog(position, wakeWord) },
+            onDelete = { position -> wakeWordAdapter.removeAt(position) }
+        )
+        rvWakeWords.layoutManager = LinearLayoutManager(this)
+        rvWakeWords.adapter = wakeWordAdapter
 
         // Save Button
         btnSave = findViewById(R.id.btnSave)
@@ -146,6 +171,11 @@ class SettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             testLlmConnection()
+        }
+
+        // Add wake word button
+        btnAddWakeWord.setOnClickListener {
+            showAddWakeWordDialog()
         }
 
         // Save button
@@ -183,7 +213,61 @@ class SettingsActivity : AppCompatActivity() {
             val ttsSpeed = settingsRepository.getTtsSpeed()
             sliderTtsSpeed.value = ttsSpeed
             tvTtsSpeed.text = String.format("%.1fx", ttsSpeed)
+
+            // Load Wake Words
+            val storedWords = settingsRepository.getWakeWords()
+            wakeWordsList.clear()
+            storedWords.forEach { line ->
+                val parts = line.split(":", limit = 2)
+                wakeWordsList.add(WakeWord(
+                    keyword = parts[0].trim(),
+                    response = parts.getOrNull(1)?.trim() ?: "我在"
+                ))
+            }
+            wakeWordAdapter.notifyDataSetChanged()
         }
+    }
+
+    private fun showAddWakeWordDialog() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_wake_word, null)
+        val etKeyword = dialogView.findViewById<TextInputEditText>(R.id.etWakeWordKeyword)
+        val etResponse = dialogView.findViewById<TextInputEditText>(R.id.etWakeWordResponse)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_wake_words_add)
+            .setView(dialogView)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val keyword = etKeyword.text.toString().trim()
+                val response = etResponse.text.toString().trim().ifEmpty { "我在" }
+                if (keyword.isNotEmpty()) {
+                    wakeWordsList.add(WakeWord(keyword, response))
+                    wakeWordAdapter.notifyItemInserted(wakeWordsList.size - 1)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showEditWakeWordDialog(position: Int, wakeWord: WakeWord) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_wake_word, null)
+        val etKeyword = dialogView.findViewById<TextInputEditText>(R.id.etWakeWordKeyword)
+        val etResponse = dialogView.findViewById<TextInputEditText>(R.id.etWakeWordResponse)
+        etKeyword.setText(wakeWord.keyword)
+        etResponse.setText(wakeWord.response)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_wake_words_edit)
+            .setView(dialogView)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val keyword = etKeyword.text.toString().trim()
+                val response = etResponse.text.toString().trim().ifEmpty { "我在" }
+                if (keyword.isNotEmpty()) {
+                    wakeWordsList[position] = WakeWord(keyword, response)
+                    wakeWordAdapter.notifyItemChanged(position)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun testJellyfinConnection() {
@@ -300,9 +384,16 @@ class SettingsActivity : AppCompatActivity() {
                 settingsRepository.setTtsSpeed(sliderTtsSpeed.value)
                 settingsRepository.setTtsEnabled(switchTtsEnabled.isChecked)
 
+                // Save Wake Words
+                val wakeWordsLines = wakeWordsList.map { "${it.keyword}:${it.response}" }
+                settingsRepository.setWakeWords(wakeWordsLines)
+
                 // Update ConfigHolder for immediate use
                 configHolder.settingsRepository = settingsRepository
                 configHolder.reload()
+
+                // Reload KWS with new wake words
+                voicePipeline.reloadWakeWords(wakeWordsList)
 
                 Toast.makeText(this@SettingsActivity, R.string.settings_saved, Toast.LENGTH_SHORT).show()
                 finish()

@@ -30,6 +30,7 @@ object ConfigKeys {
     const val OPENCLAW_TOKEN = "openclaw_token"
 
     const val WAKE_SENSITIVITY = "wake_sensitivity"
+    const val WAKE_WORDS = "wake_words"
     const val TTS_SPEED = "tts_speed"
     const val TTS_ENABLED = "tts_enabled"
 }

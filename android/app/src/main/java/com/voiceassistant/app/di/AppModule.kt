@@ -13,6 +13,7 @@ import com.voiceassistant.core.music.PlaybackReporter
 import com.voiceassistant.core.pipeline.ASRManager
 import com.voiceassistant.core.pipeline.PipelineConfig
 import com.voiceassistant.core.pipeline.VoicePipeline
+import com.voiceassistant.core.pipeline.WakeWordManager
 import com.voiceassistant.core.sherpa.SherpaASR
 import com.voiceassistant.core.sherpa.SherpaASRImpl
 import com.voiceassistant.core.sherpa.SherpaKWS
@@ -245,6 +246,12 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideWakeWordManager(@ApplicationContext context: Context): WakeWordManager {
+        return WakeWordManager(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideVoicePipeline(
         kws: SherpaKWS,
         vad: SherpaVAD,
@@ -253,7 +260,8 @@ object AppModule {
         intentRouter: IntentRouter,
         audioCapture: AudioCapture,
         audioPlayer: AudioPlayer,
-        configHolder: ConfigHolder
+        configHolder: ConfigHolder,
+        wakeWordManager: WakeWordManager
     ): VoicePipeline {
         return VoicePipeline(
             config = PipelineConfig(),
@@ -264,7 +272,9 @@ object AppModule {
             intentRouter = intentRouter,
             audioCapture = audioCapture,
             audioPlayer = audioPlayer,
-            ttsEnabledProvider = { configHolder.ttsEnabled }
+            ttsEnabledProvider = { configHolder.ttsEnabled },
+            wakeSensitivityProvider = { configHolder.wakeSensitivity },
+            wakeWordManager = wakeWordManager
         )
     }
 }

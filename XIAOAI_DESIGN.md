@@ -1,6 +1,6 @@
 # 小爱同学风格语音助手设计方案
 
-> **版本**: 1.1
+> **版本**: 1.3
 > **日期**: 2026-03-29
 > **项目**: voice-assistant
 > **目标**: 将现有语音助手增强为类似小爱同学的智能语音交互应用
@@ -1036,6 +1036,1619 @@ class IntentRouter @Inject constructor(
     fun getGreeting(): String = conversationManager.getGreeting()
 }
 ```
+
+---
+
+## 3.7 错误处理规范
+
+### 错误分类体系
+
+所有技能错误分为三类：
+
+| 错误类型 | 说明 | 用户可见性 | 处理策略 |
+|----------|------|-----------|----------|
+| **TransientError** (瞬时错误) | 网络超时、服务器500、服务暂时不可用 | 可重试提示 | Retry 2x with exponential backoff |
+| **PermanentError** (永久错误) | 设备离线、API Key无效、参数错误 | 明确错误信息 | 降级到兜底回答 |
+| **FatalError** (致命错误) | 未捕获异常、数据损坏 | 友好错误 + 日志 | 上报，返回"出了点问题" |
+
+### 错误传播链
+
+```
+Skill.execute()
+    │
+    ├─→ TransientError ──→ RetryInterceptor ──→ Retry 2x ──→ Still fail ──→ FallbackResponse
+    │                                                    └─→ Success
+    │
+    ├─→ PermanentError ──→ SkillResult(errorMsg, requiresFollowUp=false)
+    │
+    └─→ FatalError ──→ SkillResult("抱歉，出了点问题，请稍后重试")
+                   └─→ Timber.e(...) // 上报错误
+```
+
+### SkillResult 错误扩展
+
+```kotlin
+data class SkillResult(
+    val response: String,
+    val action: SkillAction? = null,
+    val requiresFollowUp: Boolean = false,
+    val error: SkillError? = null  // 新增：错误信息
+)
+
+sealed class SkillError {
+    data class Transient(val retryAfter: Int? = null) : SkillError()
+    data class Permanent(val code: ErrorCode, val message: String) : SkillError()
+    data class Fatal(val throwable: Throwable) : SkillError()
+}
+
+enum class ErrorCode {
+    DEVICE_OFFLINE,
+    DEVICE_UNREACHABLE,
+    API_KEY_INVALID,
+    API_RATE_LIMITED,
+    NETWORK_UNAVAILABLE,
+    TIMEOUT,
+    INVALID_PARAMS,
+    UNKNOWN
+}
+```
+
+### 各技能错误处理规范
+
+#### SmartHomeSkill 错误处理
+
+```kotlin
+override suspend fun execute(context: SkillContext): SkillResult {
+    return try {
+        val success = deviceRepository.control(deviceType, action, value)
+        if (!success) {
+            SkillResult(
+                "抱歉，${getDeviceName(deviceType)}没有响应",
+                error = SkillError.Permanent(ErrorCode.DEVICE_UNREACHABLE, "设备无响应")
+            )
+        } else {
+            SkillResult(response, action = SkillAction.ControlDevice(deviceType, action, value))
+        }
+    } catch (e: java.net.SocketTimeoutException) {
+        Timber.w(e, "设备控制超时: $deviceType")
+        SkillResult(
+            "抱歉，${getDeviceName(deviceType)}响应超时，稍后重试吧",
+            error = SkillError.Transient(5)
+        )
+    } catch (e: java.net.UnknownHostException) {
+        Timber.w(e, "设备网络不可达: $deviceType")
+        SkillResult(
+            "抱歉，${getDeviceName(deviceType)}网络连接失败",
+            error = SkillError.Permanent(ErrorCode.DEVICE_OFFLINE, "设备离线")
+        )
+    } catch (e: Exception) {
+        Timber.e(e, "设备控制异常: $deviceType")
+        SkillResult(
+            "抱歉，控制${getDeviceName(deviceType)}失败了",
+            error = SkillError.Fatal(e)
+        )
+    }
+}
+```
+
+#### WeatherSkill 错误处理
+
+```kotlin
+override suspend fun execute(context: SkillContext): SkillResult {
+    return try {
+        val weather = weatherApi.getWeather(location ?: "当前地区", timeRange)
+        SkillResult(buildWeatherResponse(weather, timeRange))
+    } catch (e: WeatherApiException) when (e.code) {
+        400 -> SkillResult("抱歉，位置信息无效", error = SkillError.Permanent(ErrorCode.INVALID_PARAMS, "无效位置"))
+        401 -> SkillResult("抱歉，天气服务未授权", error = SkillError.Fatal(e))
+        429 -> SkillResult("天气查询太频繁了，稍后再试", error = SkillError.Transient(60))
+        500, 502, 503 -> SkillResult("天气服务暂时不可用，稍后重试", error = SkillError.Transient(30))
+        else -> SkillResult("抱歉，无法获取天气信息", error = SkillError.Transient())
+    } catch (e: java.net.UnknownHostException) {
+        SkillResult("网络连接失败，请检查网络", error = SkillError.Permanent(ErrorCode.NETWORK_UNAVAILABLE, "网络不可用"))
+    } catch (e: Exception) {
+        Timber.e(e, "天气查询异常")
+        SkillResult("抱歉，天气查询失败了", error = SkillError.Fatal(e))
+    }
+}
+
+class WeatherApiException(val code: Int, override val message: String) : Exception(message)
+```
+
+#### AlarmSkill 错误处理
+
+```kotlin
+override suspend fun execute(context: SkillContext): SkillResult {
+    val alarmTime = slots["time"]?.let { parseTime(it) } ?: extractTimeFromText(text)
+
+    if (alarmTime == null) {
+        return SkillResult(
+            "请问你想设置几点的闹钟？比如下午3点",
+            requiresFollowUp = true
+        )
+    }
+
+    // 检查时间合理性
+    if (alarmTime.isBefore(LocalTime.now())) {
+        return SkillResult(
+            "这个时间已经过了，设置明天的闹钟吗？",
+            requiresFollowUp = true,
+            error = SkillError.Permanent(ErrorCode.INVALID_PARAMS, "时间已过")
+        )
+    }
+
+    return try {
+        val alarmId = alarmManager.setAlarm(alarmTime, label)
+        SkillResult("好的，已设置${formatTime(alarmTime)}的闹钟", action = SkillAction.SetAlarm(alarmTime, label))
+    } catch (e: Exception) {
+        Timber.e(e, "设置闹钟失败")
+        SkillResult("抱歉，设置闹钟失败了", error = SkillError.Fatal(e))
+    }
+}
+```
+
+#### IntentRouter 错误处理增强
+
+```kotlin
+suspend fun handle(text: String): String {
+    return try {
+        conversationManager.addUserMessage(text)
+
+        val matchedSkill = findMatchedSkill(text)
+        if (matchedSkill != null) {
+            val context = buildSkillContext(text)
+            val result = matchedSkill.execute(context)
+
+            if (result.requiresFollowUp && llmRepository != null) {
+                val llmResponse = llmRepository.chat(text).getOrNull() ?: "没听懂，请再说一遍"
+                conversationManager.addAssistantMessage(llmResponse)
+                return llmResponse
+            }
+
+            conversationManager.addAssistantMessage(result.response)
+            return result.response
+        }
+
+        return handleWithLLM(text)
+    } catch (e: CancellationException) {
+        throw e // 不捕获协程取消
+    } catch (e: Exception) {
+        Timber.e(e, "IntentRouter 处理异常: $text")
+        val response = "抱歉，处理出错了，请稍后重试"
+        conversationManager.addAssistantMessage(response)
+        response
+    }
+}
+
+private suspend fun handleWithLLM(text: String): String {
+    val llm = llmRepository ?: run {
+        val response = "这个问题我暂时回答不了，你可以试试问我天气、播放音乐或者控制智能家居~"
+        conversationManager.addAssistantMessage(response)
+        return response
+    }
+
+    val prompt = conversationManager.buildContextualPrompt(text)
+
+    val result = llmRepository.chat(prompt)
+
+    result.fold(
+        onSuccess = { response ->
+            conversationManager.addAssistantMessage(response)
+            response
+        },
+        onFailure = { error ->
+            Timber.w(error, "LLM 调用失败，尝试降级")
+            val fallback = generateSimpleFallback(text)
+            if (fallback != null) {
+                conversationManager.addAssistantMessage(fallback)
+                return fallback
+            }
+            val response = "这个问题我暂时回答不了，你可以试试问我天气、播放音乐或者控制智能家居~"
+            conversationManager.addAssistantMessage(response)
+            response
+        }
+    )
+}
+
+private fun generateSimpleFallback(text: String): String? {
+    return when {
+        text.contains("天气") -> "抱歉，天气服务暂时不可用"
+        text.contains("播放") || text.contains("音乐") -> "抱歉，音乐服务暂时不可用"
+        text.contains("打开") || text.contains("关闭") -> "抱歉，智能家居服务暂时不可用"
+        else -> null
+    }
+}
+```
+
+---
+
+## 3.8 离线行为规范
+
+### 离线状态定义
+
+| 状态 | 网络 | LLM | 天气API | Jellyfin | SmartHome |
+|------|------|-----|---------|----------|-----------|
+| **完全在线** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **LLM离线** | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **天气API离线** | ✅ | ✅ | ❌ | ✅ | ✅ |
+| **Jellyfin离线** | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **完全离线** | ❌ | ❌ | ❌ | ❌ | ✅ (本地Hub) |
+
+### 离线降级策略
+
+```kotlin
+/**
+ * 离线降级管理器
+ */
+class OfflineDegradationManager(
+    private val networkMonitor: NetworkMonitor,
+    private val llmRepository: LLMRepository?,
+    private val weatherApi: WeatherApi?,
+    private val jellyfinClient: JellyfinClient?
+) {
+    val isOnline: Boolean get() = networkMonitor.isConnected()
+    val isLLMAvailable: Boolean get() = isOnline && llmRepository != null
+    val isWeatherAvailable: Boolean get() = isOnline && weatherApi != null
+    val isJellyfinAvailable: Boolean get() = jellyfinClient?.isConnected() == true
+}
+```
+
+### 各技能离线处理
+
+#### WeatherSkill 离线处理
+
+```kotlin
+class WeatherSkill(
+    private val weatherApi: WeatherApi,
+    private val networkMonitor: NetworkMonitor
+) : Skill {
+    // ... keywords and other properties
+
+    override suspend fun execute(context: SkillContext): SkillResult {
+        if (!networkMonitor.isConnected()) {
+            return SkillResult(
+                "天气查询需要联网哦，打开网络后再试试吧~",
+                error = SkillError.Permanent(ErrorCode.NETWORK_UNAVAILABLE, "网络离线")
+            )
+        }
+
+        return try {
+            val weather = weatherApi.getWeather(location ?: "当前地区", timeRange)
+            SkillResult(buildWeatherResponse(weather, timeRange))
+        } catch (e: WeatherApiException) when (e.code) {
+            // ... normal error handling
+        }
+    }
+}
+```
+
+#### MusicSkill 离线处理
+
+```kotlin
+class MusicSkill(
+    private val musicRepository: MusicRepository,
+    private val playerRepository: PlayerRepository?,
+    private val jellyfinClient: JellyfinClient?
+) : Skill {
+    override suspend fun execute(context: SkillContext): SkillResult {
+        // Jellyfin 本地网络检查
+        if (jellyfinClient?.isConnected() != true) {
+            return SkillResult(
+                "音乐服务暂时不可用，请确保 Jellyfin 服务器正常运行~",
+                error = SkillError.Permanent(ErrorCode.SERVICE_UNAVAILABLE, "Jellyfin离线")
+            )
+        }
+        // ... rest of implementation
+    }
+}
+```
+
+#### SmartHomeSkill 离线处理
+
+```kotlin
+class SmartHomeSkill(
+    private val deviceRepository: SmartDeviceRepository
+) : Skill {
+    override suspend fun execute(context: SkillContext): SkillResult {
+        // 智能家居通常本地通信，不需要互联网
+        // 但需要检查 Hub 连接状态
+        return try {
+            val success = deviceRepository.control(deviceType, action, value)
+            if (!success) {
+                return SkillResult(
+                    "抱歉，无法连接到智能家居Hub，请检查网络连接",
+                    error = SkillError.Permanent(ErrorCode.DEVICE_OFFLINE, "Hub离线")
+                )
+            }
+            SkillResult(response, action = SkillAction.ControlDevice(deviceType, action, value))
+        } catch (e: Exception) {
+            // ... error handling
+        }
+    }
+}
+```
+
+#### IntentRouter 完全离线兜底
+
+```kotlin
+private suspend fun handleOffline(text: String): String {
+    // 完全离线时的兜底响应
+    val lowerText = text.lowercase()
+
+    return when {
+        // 基础语音命令 - 离线可执行
+        lowerText.contains("现在几点") || lowerText.contains("时间") -> {
+            val now = LocalTime.now()
+            "现在是${now.hour}点${now.minute}分"
+        }
+        lowerText.contains("今天几号") || lowerText.contains("日期") -> {
+            val today = LocalDate.now()
+            "今天是${today.year}年${today.monthValue}月${today.dayOfMonth}日，${today.dayOfWeek.chinese()}"
+        }
+        lowerText.contains("打开灯") || lowerText.contains("关闭灯") -> {
+            // SmartHomeSkill 处理，Hub 在线即可
+            val skill = findMatchedSkill(text)
+            if (skill != null) {
+                val result = skill.execute(buildSkillContext(text))
+                return result.response
+            }
+            "无法执行家居控制"
+        }
+        // 无法处理的离线命令
+        else -> {
+            "抱歉，完全离线状态下，我只能回答时间和执行家居控制。联网后我可以回答更多问题~"
+        }
+    }
+}
+```
+
+### 网络状态监听
+
+```kotlin
+/**
+ * 网络状态监听器
+ * 用于实时感知网络状态变化
+ */
+interface NetworkMonitor {
+    val isConnected: StateFlow<Boolean>
+    val connectionType: StateFlow<ConnectionType> // WIFI, CELLULAR, NONE
+
+    fun checkConnectivity(): Boolean
+}
+
+enum class ConnectionType {
+    WIFI, CELLULAR, ETHERNET, NONE
+}
+```
+
+### 离线缓存策略
+
+```kotlin
+/**
+ * 天气缓存 - 减少离线时的体验降级
+ */
+class WeatherCache {
+    private val cache = MutableStateFlow<WeatherCacheEntry?>(null)
+
+    data class WeatherCacheEntry(
+        val weather: WeatherInfo,
+        val timestamp: Long,
+        val expiresAt: Long = timestamp + 30 * 60 * 1000 // 30分钟有效
+    )
+
+    fun getCached(location: String): WeatherInfo? {
+        val entry = cache.value
+        return if (entry != null && entry.expiresAt > System.currentTimeMillis()) {
+            entry.weather
+        } else null
+    }
+
+    fun cache(weather: WeatherInfo, location: String) {
+        cache.value = WeatherCacheEntry(weather, System.currentTimeMillis())
+    }
+}
+```
+
+---
+
+## 3.9 测试策略规范
+
+### 测试金字塔
+
+```
+        ┌─────────────┐
+        │    E2E     │  ← 关键用户路径测试 (5%)
+        │   Tests    │
+        ├─────────────┤
+        │ Integration │  ← Skill 集成、IntentRouter 路由 (20%)
+        │   Tests    │
+        ├─────────────┤
+        │ Unit Tests │  ← 每个 Skill、ConversationManager (75%)
+        │            │
+        └─────────────┘
+```
+
+### 单元测试规范
+
+#### Skill 单元测试模板
+
+```kotlin
+class SmartHomeSkillTest {
+    private lateinit var skill: SmartHomeSkill
+    private lateinit var mockDeviceRepository: SmartDeviceRepository
+
+    @Before
+    fun setup() {
+        mockDeviceRepository = mockk(relaxed = true)
+        skill = SmartHomeSkill(mockDeviceRepository)
+    }
+
+    @Test
+    fun `execute - 成功打开灯`() = runTest {
+        // Given
+        every { mockDeviceRepository.control(DeviceType.LIGHT, DeviceAction.ON, null) } returns true
+        val context = SkillContext(
+            text = "打开灯",
+            slots = emptyMap(),
+            conversationHistory = emptyList(),
+            userProfile = null
+        )
+
+        // When
+        val result = skill.execute(context)
+
+        // Then
+        assert(result.response.contains("已打开灯"))
+        assert(result.action is SkillAction.ControlDevice)
+    }
+
+    @Test
+    fun `execute - 设备无响应`() = runTest {
+        // Given
+        every { mockDeviceRepository.control(DeviceType.LIGHT, DeviceAction.ON, null) } returns false
+        val context = SkillContext(
+            text = "打开灯",
+            slots = emptyMap(),
+            conversationHistory = emptyList(),
+            userProfile = null
+        )
+
+        // When
+        val result = skill.execute(context)
+
+        // Then
+        assert(result.response.contains("没有响应"))
+        assert(result.error is SkillError.Permanent)
+    }
+
+    @Test
+    fun `execute - 网络超时`() = runTest {
+        // Given
+        every { mockDeviceRepository.control(DeviceType.LIGHT, DeviceAction.ON, null) } throws SocketTimeoutException()
+        val context = SkillContext(
+            text = "打开灯",
+            slots = emptyMap(),
+            conversationHistory = emptyList(),
+            userProfile = null
+        )
+
+        // When
+        val result = skill.execute(context)
+
+        // Then
+        assert(result.error is SkillError.Transient)
+        assert(result.response.contains("超时"))
+    }
+}
+```
+
+#### AlarmSkill 单元测试
+
+```kotlin
+class AlarmSkillTest {
+    @Test
+    fun `parseTime - 下午时间正确转换`() {
+        val skill = AlarmSkill(mockk())
+        val result = skill.parseTime("下午3点30分")
+        assert(result == LocalTime.of(15, 30))
+    }
+
+    @Test
+    fun `parseTime - 早上12点转换`() {
+        val skill = AlarmSkill(mockk())
+        val result = skill.parseTime("早上12点")
+        assert(result == LocalTime.of(0, 0))
+    }
+
+    @Test
+    fun `execute - 无时间参数需要追问`() = runTest {
+        val skill = AlarmSkill(mockk(relaxed = true))
+        val context = SkillContext(
+            text = "设置闹钟",
+            slots = emptyMap(),
+            conversationHistory = emptyList(),
+            userProfile = null
+        )
+
+        val result = skill.execute(context)
+
+        assert(result.requiresFollowUp)
+        assert(result.response.contains("几点的"))
+    }
+}
+```
+
+#### ConversationManager 单元测试
+
+```kotlin
+class ConversationManagerTest {
+    private lateinit var manager: ConversationManager
+
+    @Before
+    fun setup() {
+        manager = ConversationManager()
+    }
+
+    @Test
+    fun `addUserMessage - 添加到历史`() {
+        manager.addUserMessage("今天天气")
+        assert(manager.getHistory().size == 1)
+        assert(manager.getHistory()[0].role == Role.USER)
+    }
+
+    @Test
+    fun `addAssistantMessage - 个性化处理`() {
+        manager.addAssistantMessage("好的")
+        val history = manager.getHistory()
+        assert(history[0].content.contains("还有什么需要帮忙"))
+    }
+
+    @Test
+    fun `buildContextualPrompt - 包含历史`() {
+        manager.addUserMessage("今天天气怎么样")
+        manager.addAssistantMessage("今天晴天")
+        val prompt = manager.buildContextualPrompt("明天呢")
+
+        assert(prompt.contains("小爱同学"))
+        assert(prompt.contains("今天天气怎么样"))
+        assert(prompt.contains("今天晴天"))
+    }
+
+    @Test
+    fun `getGreeting - 根据时间返回不同问候`() {
+        val morningManager = mockTime(LocalTime.of(8, 0))
+        assert(morningManager.getGreeting().contains("早上好"))
+
+        val nightManager = mockTime(LocalTime.of(22, 0))
+        assert(nightManager.getGreeting().contains("夜深了"))
+    }
+}
+```
+
+### 集成测试规范
+
+#### IntentRouter 集成测试
+
+```kotlin
+class IntentRouterIntegrationTest {
+    @Test
+    fun `handle - 匹配 SmartHomeSkill`() = runTest {
+        val skill = SmartHomeSkill(mockDeviceRepository)
+        val router = IntentRouter(listOf(skill), null, conversationManager)
+
+        val response = router.handle("打开客厅灯")
+
+        assert(response.contains("已打开") || response.contains("灯"))
+    }
+
+    @Test
+    fun `handle - 无匹配使用LLM兜底`() = runTest {
+        val mockLLM = mockk<LLMRepository>()
+        every { mockLLM.chat(any()) } returns Result.success("这是LLM的回答")
+        val router = IntentRouter(emptyList(), mockLLM, conversationManager)
+
+        val response = router.handle("今天午餐吃什么")
+
+        assert(response.contains("LLM"))
+    }
+
+    @Test
+    fun `handle - 多轮对话上下文`() = runTest {
+        val router = IntentRouter(listOf(skill), llm, conversationManager)
+
+        router.handle("设置闹钟")
+        router.handle("下午3点")
+
+        val history = conversationManager.getHistory()
+        assert(history.size >= 4) // 问 + 答 + 问 + 答
+    }
+}
+```
+
+### E2E 测试规范
+
+```kotlin
+class VoiceAssistantE2ETest {
+    @Test
+    fun `完整流程 - 语音设置闹钟`() = runTest {
+        // 1. 唤醒
+        voicePipeline.triggerWakeWord()
+
+        // 2. 语音输入
+        voicePipeline.inputSpeech("设置一个下午3点的闹钟")
+
+        // 3. 等待处理
+        delay(2000)
+
+        // 4. 验证闹钟已设置
+        val alarms = alarmScheduler.getActiveAlarms()
+        assert(alarms.any { it.time == LocalTime.of(15, 0) })
+
+        // 5. 验证TTS回复
+        verify(tts).speak(capture(responseCaptor))
+        assert(responseCaptor.value.contains("已设置"))
+    }
+}
+```
+
+### Mock 基础设施
+
+```kotlin
+/**
+ * 测试用 Mock 依赖
+ */
+object TestDependencies {
+    fun mockSmartDeviceRepository() = mockk<SmartDeviceRepository> {
+        every { control(any(), any(), any()) } returns true
+        every { getDeviceState(any()) } returns DeviceState(DeviceType.LIGHT, true, 100)
+        every { discoverDevices() } returns listOf(
+            DiscoveredDevice("1", "客厅灯", DeviceType.LIGHT, "客厅"),
+            DiscoveredDevice("2", "空调", DeviceType.AC, "客厅")
+        )
+    }
+
+    fun mockAlarmScheduler() = mockk<AlarmScheduler> {
+        every { setAlarm(any(), any()) } returns "alarm-123"
+        every { getActiveAlarms() } returns emptyList()
+        every { cancelAlarm(any()) } returns true
+    }
+
+    fun mockWeatherApi() = mockk<WeatherApi> {
+        every { getWeather(any(), any()) } returns WeatherInfo(
+            city = "北京",
+            condition = "晴",
+            tempLow = 15,
+            tempHigh = 25,
+            humidity = 50,
+            windSpeed = 3
+        )
+    }
+}
+```
+
+---
+
+## 3.10 数据持久化规范
+
+### 持久化需求矩阵
+
+| 数据 | 存储方式 | 生命周期 | 说明 |
+|------|----------|----------|------|
+| **对话历史** | Room/SharedPreferences | 应用内 | 最近 N 条，可配置 |
+| **用户画像** | Room | 永久 | 用户名、偏好设置 |
+| **闹钟** | AlarmManager | 系统级 | 由 Android 管理系统 |
+| **设备状态缓存** | Room/Memory | 应用内 | SmartHome 设备状态 |
+| **天气缓存** | Memory | 30分钟 | 减少重复 API 调用 |
+| **Skill 配置** | DataStore | 永久 | 技能开关、API Keys |
+
+### 对话历史持久化
+
+```kotlin
+@Entity(tableName = "conversation_history")
+data class ConversationHistoryEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val role: String,  // "USER" or "ASSISTANT"
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val sessionId: String  // 用于区分不同对话会话
+)
+
+class ConversationRepository {
+    private val dao: ConversationHistoryDao
+
+    suspend fun saveTurn(role: Role, content: String, sessionId: String) {
+        dao.insert(ConversationHistoryEntity(
+            role = role.name,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            sessionId = sessionId
+        ))
+    }
+
+    suspend fun getHistory(sessionId: String, limit: Int = 20): List<ConversationTurn> {
+        return dao.getRecent(sessionId, limit).map { entity ->
+            ConversationTurn(
+                role = Role.valueOf(entity.role),
+                content = entity.content,
+                timestamp = entity.timestamp
+            )
+        }
+    }
+
+    suspend fun clearHistory(sessionId: String) {
+        dao.deleteSession(sessionId)
+    }
+}
+```
+
+### 用户画像持久化
+
+```kotlin
+@Entity(tableName = "user_profile")
+data class UserProfileEntity(
+    @PrimaryKey
+    val id: Int = 1,  // 单用户，应用只有一份
+    val name: String? = null,
+    val morningAlarmTime: String? = null,  // "HH:mm" format
+    val favoriteMusicGenres: String? = null,  // JSON array
+    val smartHomeDevicesJson: String? = null,  // JSON map
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+class UserProfileRepository {
+    private val dao: UserProfileDao
+
+    suspend fun getUserProfile(): UserProfile? {
+        val entity = dao.get() ?: return null
+        return UserProfile(
+            name = entity.name,
+            morningAlarm = entity.morningAlarmTime?.let { LocalTime.parse(it) },
+            favoriteMusic = entity.favoriteMusicGenres?.split(",") ?: emptyList(),
+            smartHomeDevices = entity.smartHomeDevicesJson?.let { parseDevices(it) } ?: emptyMap()
+        )
+    }
+
+    suspend fun updateUserProfile(profile: UserProfile) {
+        dao.insert(profile.toEntity())
+    }
+}
+```
+
+### 设备状态缓存
+
+```kotlin
+@Entity(tableName = "device_state_cache")
+data class DeviceStateCacheEntity(
+    @PrimaryKey
+    val deviceId: String,
+    val deviceType: String,
+    val isOn: Boolean,
+    val value: Int?,  // 亮度、温度等
+    val lastUpdated: Long
+)
+
+class DeviceStateCache {
+    private val dao: DeviceStateCacheDao
+    private val cacheValidityMs = 60_000  // 1分钟内有效
+
+    suspend fun getCachedState(deviceId: String): DeviceState? {
+        val cached = dao.get(deviceId) ?: return null
+        if (System.currentTimeMillis() - cached.lastUpdated > cacheValidityMs) {
+            return null  // 缓存过期
+        }
+        return DeviceState(
+            type = DeviceType.valueOf(cached.deviceType),
+            isOn = cached.isOn,
+            value = cached.value
+        )
+    }
+
+    suspend fun cacheState(deviceId: String, state: DeviceState) {
+        dao.insert(DeviceStateCacheEntity(
+            deviceId = deviceId,
+            deviceType = state.type.name,
+            isOn = state.isOn,
+            value = state.value,
+            lastUpdated = System.currentTimeMillis()
+        ))
+    }
+}
+```
+
+### DataStore 用于 Skill 配置
+
+```kotlin
+class SkillConfigRepository(private val dataStore: DataStore<Preferences>) {
+    private val weatherApiKeyKey = stringPreferencesKey("weather_api_key")
+    private val hfengApiKeyKey = stringPreferencesKey("hefeng_api_key")
+    private val skillEnabledKey = stringSetPreferencesKey("skill_enabled")
+
+    suspend fun getWeatherApiKey(): String? {
+        return dataStore.data.first()[weatherApiKeyKey]
+    }
+
+    suspend fun setWeatherApiKey(key: String) {
+        dataStore.edit { it[weatherApiKeyKey] = key }
+    }
+
+    suspend fun isSkillEnabled(skillName: String): Boolean {
+        val enabled = dataStore.data.first()[skillEnabledKey] ?: setOf("all")
+        return enabled.contains("all") || enabled.contains(skillName)
+    }
+
+    suspend fun setSkillEnabled(skillName: String, enabled: Boolean) {
+        dataStore.edit { prefs ->
+            val current = prefs[skillEnabledKey]?.toMutableSet() ?: mutableSetOf("all")
+            if (enabled) {
+                current.add(skillName)
+            } else {
+                current.remove(skillName)
+            }
+            prefs[skillEnabledKey] = current
+        }
+    }
+}
+```
+
+---
+
+## 3.11 安全考虑
+
+### 输入验证
+
+```kotlin
+/**
+ * 语音输入验证器
+ */
+object VoiceInputValidator {
+    private const val MAX_TEXT_LENGTH = 500
+    private val DangerousPatterns = listOf(
+        Regex(".*(rm -rf|sudo|chmod|eval|exec).*", RegexOption.IGNORE_CASE),
+        Regex(".*(<script|javascript:|onerror=).*", RegexOption.IGNORE_CASE)
+    )
+
+    fun validate(text: String): ValidationResult {
+        return when {
+            text.isBlank() -> ValidationResult.Invalid("输入不能为空")
+            text.length > MAX_TEXT_LENGTH -> ValidationResult.Invalid("输入过长")
+            DangerousPatterns.any { it.matches(text) } -> ValidationResult.Invalid("无效输入")
+            else -> ValidationResult.Valid(text.trim())
+        }
+    }
+}
+
+sealed class ValidationResult {
+    data class Valid(val text: String) : ValidationResult()
+    data class Invalid(val reason: String) : ValidationResult()
+}
+```
+
+### API Key 保护
+
+```kotlin
+/**
+ * API Key 安全存储
+ * 使用 Android EncryptedSharedPreferences
+ */
+class SecureKeyStorage(context: Context) {
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val securePrefs = EncryptedSharedPreferences.create(
+        context,
+        "secure_prefs",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    fun saveApiKey(keyName: String, apiKey: String) {
+        securePrefs.edit().putString(keyName, apiKey).apply()
+    }
+
+    fun getApiKey(keyName: String): String? {
+        return securePrefs.getString(keyName, null)
+    }
+
+    fun deleteApiKey(keyName: String) {
+        securePrefs.edit().remove(keyName).apply()
+    }
+}
+```
+
+### 技能调用频率限制
+
+```kotlin
+/**
+ * 技能调用频率限制器
+ */
+class SkillRateLimiter {
+    private val callTimestamps = ConcurrentHashMap<String, ArrayDeque<Long>>()
+
+    fun canCall(skillName: String, maxCallsPerMinute: Int = 10): Boolean {
+        val now = System.currentTimeMillis()
+        val windowMs = 60_000L
+
+        val timestamps = callTimestamps.computeIfAbsent(skillName) { ArrayDeque() }
+
+        synchronized(timestamps) {
+            // 移除窗口外的记录
+            while (timestamps.isNotEmpty() && now - timestamps.peekFirst() > windowMs) {
+                timestamps.removeFirst()
+            }
+
+            return if (timestamps.size < maxCallsPerMinute) {
+                timestamps.addLast(now)
+                true
+            } else {
+                false
+            }
+        }
+    }
+}
+```
+
+---
+
+## 3.12 可观测性规范
+
+### 日志规范
+
+```kotlin
+/**
+ * 技能执行日志
+ */
+object SkillLogger {
+    private const val TAG = "SkillExecution"
+
+    fun logExecution(skillName: String, text: String, durationMs: Long, success: Boolean) {
+        if (success) {
+            Timber.d("$TAG: $skillName executed in ${durationMs}ms - input: $text")
+        } else {
+            Timber.w("$TAG: $skillName failed in ${durationMs}ms - input: $text")
+        }
+    }
+
+    fun logError(skillName: String, text: String, error: Throwable) {
+        Timber.e(error, "$TAG: $skillName error - input: $text, error: ${error.message}")
+    }
+}
+
+/**
+ * IntentRouter 日志
+ */
+object RouterLogger {
+    private const val TAG = "IntentRouter"
+
+    fun logRouting(text: String, matchedSkill: String?, confidence: Float?) {
+        Timber.d("$TAG: routing '$text' -> skill=$matchedSkill, confidence=$confidence")
+    }
+
+    fun logLLMFallback(text: String) {
+        Timber.d("$TAG: no skill matched, falling back to LLM for '$text'")
+    }
+}
+```
+
+### Metrics 规范
+
+```kotlin
+/**
+ * 技能执行指标
+ */
+object SkillMetrics {
+    private val skillExecutionTime = Histogram.builder("skill_execution_time_ms")
+        .description("Skill execution time in milliseconds")
+        .register()
+
+    private val skillSuccessCount = Counter.builder("skill_execution_success_total")
+        .description("Total number of successful skill executions")
+        .register()
+
+    private val skillFailureCount = Counter.builder("skill_execution_failure_total")
+        .description("Total number of failed skill executions")
+        .register()
+
+    fun recordExecution(skillName: String, durationMs: Long, success: Boolean) {
+        skillExecutionTime.record(durationMs, Tags.of("skill", skillName))
+        if (success) {
+            skillSuccessCount.increment(Tags.of("skill", skillName))
+        } else {
+            skillFailureCount.increment(Tags.of("skill", skillName))
+        }
+    }
+}
+
+/**
+ * IntentRouter 指标
+ */
+object RouterMetrics {
+    private val routingCount = Counter.builder("intent_router_routing_total")
+        .description("Total number of routing decisions")
+        .register()
+
+    private val skillMatchCount = Counter.builder("intent_router_skill_match_total")
+        .description("Total number of skill matches")
+        .register()
+
+    private val llmFallbackCount = Counter.builder("intent_router_llm_fallback_total")
+        .description("Total number of LLM fallback calls")
+        .register()
+
+    fun recordRouting(matchedSkill: Boolean) {
+        routingCount.increment()
+        if (matchedSkill) {
+            skillMatchCount.increment()
+        } else {
+            llmFallbackCount.increment()
+        }
+    }
+}
+```
+
+### 追踪规范
+
+```kotlin
+/**
+ * 技能执行追踪
+ */
+object SkillTracer {
+    fun traceSkillExecution(
+        spanName: String,
+        skillName: String,
+        text: String,
+        block: () -> SkillResult
+    ): SkillResult {
+        return trace(spanName) { span ->
+            span.setAttribute("skill.name", skillName)
+            span.setAttribute("skill.input", text)
+            try {
+                val result = block()
+                span.setAttribute("skill.success", result.error == null)
+                result
+            } catch (e: Exception) {
+                span.setAttribute("skill.error", true)
+                span.setAttribute("skill.error.message", e.message ?: "Unknown")
+                throw e
+            }
+        }
+    }
+}
+```
+
+---
+
+## 3.13 多轮对话流程规范
+
+### 多轮对话状态机
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        多轮对话状态机                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────┐    用户输入    ┌──────────────┐    槽位完整   ┌──────────┐  │
+│  │  IDLE   │ ───────────▶ │ AWAITING_SLOT │ ───────────▶ │ EXECUTING │  │
+│  └─────────┘              └──────────────┘              └──────────┘  │
+│       ▲                           │                            │          │
+│       │                           │ 槽位不完整/追问              │ 完成     │
+│       │                           ▼                            ▼          │
+│       │                    ┌──────────────┐              ┌──────────┐   │
+│       │                    │  AWAITING    │              │  RESPONDING│   │
+│       │                    │  CONFIRM     │              └──────────┘   │
+│       │                    └──────────────┘                    │          │
+│       │                           │                             ▼          │
+│       │                           │                      ┌──────────┐   │
+│       │                           └──────────────────────▶│   IDLE   │   │
+│       │                                                └──────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+状态说明：
+- IDLE: 等待用户唤醒
+- AWAITING_SLOT: 等待用户补充必要参数（如时间、地点）
+- AWAITING_CONFIRM: 等待用户确认（如"确定设置吗？"）
+- EXECUTING: 技能执行中
+- RESPONDING: 回复用户中
+```
+
+### 槽位填充机制
+
+```kotlin
+/**
+ * 槽位状态
+ */
+data class SlotState(
+    val skillName: String,
+    val requiredSlots: Map<String, SlotDefinition>,
+    val filledSlots: MutableMap<String, String> = mutableMapOf(),
+    val state: SlotFillingState = SlotFillingState.IN_PROGRESS,
+    val turnCount: Int = 0  // 多轮次数，防止无限追问
+)
+
+enum class SlotFillingState {
+    IN_PROGRESS,  // 槽位填充中
+    COMPLETE,     // 槽位已满
+    EXPIRED       // 槽位过期（超过最大轮次）
+}
+
+/**
+ * 槽位定义
+ */
+data class SlotDefinition(
+    val name: String,
+    val type: SlotType,
+    val required: Boolean = true,
+    val prompt: String,  // 追问时的提示语
+    val maxTurns: Int = 3  // 最大追问轮次
+)
+
+enum class SlotType {
+    TIME,        // 时间
+    LOCATION,    // 地点
+    DEVICE,      // 设备
+    NUMBER,      // 数字
+    TEXT         // 通用文本
+}
+```
+
+### 多轮对话示例
+
+#### 示例1：设置闹钟
+
+```
+用户：设置闹钟
+    ↓ [槽位：TIME 未填充]
+小爱：请问你想设置几点的闹钟？
+    ↓ [AWAITING_SLOT]
+用户：下午3点
+    ↓ [槽位：TIME=下午3点 已填充]
+小爱：好的，已设置下午3点的闹钟，还有什么需要帮忙的吗？
+    ↓ [IDLE]
+```
+
+#### 示例2：智能家居控制
+
+```
+用户：打开灯
+    ↓ [槽位：DEVICE=LIGHT 已填充，ACTION=ON 已推断]
+小爱：好的，已打开灯。
+    ↓ [IDLE]
+```
+
+#### 示例3：带确认的设备控制
+
+```
+用户：把客厅灯调到最亮
+    ↓ [槽位完整]
+小爱：好的，把客厅灯调到最亮，确认吗？
+    ↓ [AWAITING_CONFIRM]
+用户：确认
+    ↓ [EXECUTING]
+小爱：已确认，客厅灯已调到最亮。
+```
+
+### 槽位管理器
+
+```kotlin
+class SlotFillingManager {
+    private val activeSlots = ConcurrentHashMap<String, SlotState>()
+
+    /**
+     * 开始槽位填充
+     */
+    fun startFilling(skillName: String, requiredSlots: Map<String, SlotDefinition>): SlotState {
+        val state = SlotState(skillName, requiredSlots)
+        activeSlots[skillName] = state
+        return state
+    }
+
+    /**
+     * 填充槽位
+     */
+    fun fillSlot(sessionId: String, slotName: String, value: String): SlotState? {
+        val state = activeSlots[sessionId] ?: return null
+
+        state.filledSlots[slotName] = value
+        state.turnCount++
+
+        // 检查是否所有必填槽位都已填充
+        val allFilled = state.requiredSlots.all { (name, def) ->
+            !def.required || state.filledSlots.containsKey(name)
+        }
+
+        if (allFilled) {
+            state.state = SlotFillingState.COMPLETE
+        } else if (state.turnCount >= 3) {
+            state.state = SlotFillingState.EXPIRED
+        }
+
+        return state
+    }
+
+    /**
+     * 获取追问提示
+     */
+    fun getPrompt(state: SlotState): String {
+        val missingSlot = state.requiredSlots.entries.find { (name, def) ->
+            def.required && !state.filledSlots.containsKey(name)
+        }
+        return missingSlot?.let { it.value.prompt }
+            ?: "无法理解，请再说一遍"
+    }
+
+    /**
+     * 清除槽位状态
+     */
+    fun clear(sessionId: String) {
+        activeSlots.remove(sessionId)
+    }
+}
+```
+
+### IntentRouter 多轮支持
+
+```kotlin
+suspend fun handle(text: String, sessionId: String): String {
+    // 1. 检查是否有进行中的槽位填充
+    val activeSlot = slotFillingManager.getActiveSlot(sessionId)
+
+    if (activeSlot != null && activeSlot.state == SlotFillingState.IN_PROGRESS) {
+        // 多轮对话：继续槽位填充
+        val skill = skills.find { it.name == activeSlot.skillName }
+        if (skill != null) {
+            val updatedState = slotFillingManager.fillSlot(sessionId, extractSlotName(text), text)
+            if (updatedState?.state == SlotFillingState.COMPLETE) {
+                // 槽位填充完成，执行技能
+                val context = buildSkillContext(updatedSlotToMap(updatedState))
+                val result = skill.execute(context)
+                slotFillingManager.clear(sessionId)
+                return result.response
+            } else if (updatedState?.state == SlotFillingState.EXPIRED) {
+                slotFillingManager.clear(sessionId)
+                return "太久了，我们换个话题吧~"
+            } else {
+                return slotFillingManager.getPrompt(updatedState!!)
+            }
+        }
+    }
+
+    // 2. 正常单轮处理
+    return handleSingleTurn(text)
+}
+```
+
+---
+
+## 3.14 边缘情况处理规范
+
+### 各技能边缘情况
+
+#### SmartHomeSkill 边缘情况
+
+```kotlin
+// 边缘情况矩阵
+val edgeCases = listOf(
+    EdgeCase(
+        input = "打开灯",
+        scenario = "用户家有多个灯，无房间信息",
+        expected = "追问"请问打开哪个房间的灯？""
+    ),
+    EdgeCase(
+        input = "把灯调到50%",
+        scenario = "灯不支持亮度调节",
+        expected = "提示"该灯不支持亮度调节""
+    ),
+    EdgeCase(
+        input = "打开电视",
+        scenario = "电视已打开",
+        expected = "提示"电视已经是打开状态了""
+    ),
+    EdgeCase(
+        input = "关闭不存在的设备",
+        scenario = "设备ID无效",
+        expected = "提示"没有找到这个设备""
+    ),
+    EdgeCase(
+        input = "把空调调到100度",
+        scenario = "参数超出范围",
+        expected = "提示"空调温度支持16-30度，请说一个范围内的温度""
+    )
+)
+```
+
+#### AlarmSkill 边缘情况
+
+```kotlin
+val alarmEdgeCases = listOf(
+    EdgeCase(
+        input = "设置明天下午3点的闹钟",
+        scenario = "现在是下午4点",
+        expected = "设置明天下午3点（自动推断到后天）"
+    ),
+    EdgeCase(
+        input = "设置凌晨2点的闹钟",
+        scenario = "用户说"凌晨"但没说哪天的",
+        expected = "追问"请问是今天还是明天的凌晨2点？""
+    ),
+    EdgeCase(
+        input = "设置闹钟到25:00",
+        scenario = "无效时间",
+        expected = "提示"时间格式不正确，请说几点几分""
+    ),
+    EdgeCase(
+        input = "设置100个闹钟",
+        scenario = "闹钟数量超限",
+        expected = "提示"闹钟数量已达上限，请先取消一些闹钟""
+    )
+)
+```
+
+#### WeatherSkill 边缘情况
+
+```kotlin
+val weatherEdgeCases = listOf(
+    EdgeCase(
+        input = "北京市的天气",
+        scenario = "城市名包含"市"",
+        expected = "自动去除"市"后查询"
+    ),
+    EdgeCase(
+        input = "火星的天气",
+        scenario = "不支持的地区",
+        expected = "提示"暂时不支持查询该地区的天气""
+    ),
+    EdgeCase(
+        input = "上周的天气",
+        scenario = "不支持的历史查询",
+        expected = "提示"天气查询只支持今天和未来7天""
+    ),
+    EdgeCase(
+        input = "下周3的天气",
+        scenario = "口语化日期",
+        expected = "转换为具体日期后查询"
+    )
+)
+```
+
+### 输入长度限制
+
+```kotlin
+object InputLimits {
+    const val MAX_TEXT_LENGTH = 500        // 最大文字输入
+    const val MAX_HISTORY_TURNS = 20       // 对话历史最大轮次
+    const val MAX_ALARM_COUNT = 10        // 最大闹钟数量
+    const val MAX_DEVICE_NAME_LENGTH = 50  // 设备名称最大长度
+    const val MAX_LOCATION_LENGTH = 100    // 地点字符串最大长度
+    const val MAX_PROMPT_TURNS = 3        // 槽位追问最大次数
+}
+```
+
+### 异常输入处理
+
+```kotlin
+/**
+ * 异常输入处理器
+ */
+object InputSanitizer {
+
+    fun sanitize(text: String): SanitizedResult {
+        return when {
+            text.isBlank() -> SanitizedResult.Invalid("输入不能为空")
+            text.length > InputLimits.MAX_TEXT_LENGTH ->
+                SanitizedResult.Invalid("输入过长，最大${InputLimits.MAX_TEXT_LENGTH}字")
+            containsEmoji(text) && !isValidEmoji(text) ->
+                SanitizedResult.Invalid("暂不支持该表情")
+            containsSpecialChars(text) ->
+                SanitizedResult.Sanitized(text.removeSpecialChars())
+            else ->
+                SanitizedResult.Valid(text.trim())
+        }
+    }
+
+    private fun String.removeSpecialChars(): String {
+        return this.filter { it.isLetterOrDigit() || it.isWhitespace() || isChinese(it) }
+    }
+
+    private fun isChinese(c: Char): Boolean {
+        return c.code in 0x4E00..0x9FFF
+    }
+}
+
+sealed class SanitizedResult {
+    data class Valid(val text: String) : SanitizedResult()
+    data class Sanitized(val text: String) : SanitizedResult()
+    data class Invalid(val reason: String) : SanitizedResult()
+}
+```
+
+---
+
+## 3.15 技能版本管理规范
+
+### 技能注册表
+
+```kotlin
+/**
+ * 技能注册表
+ * 用于管理所有可用技能及其版本
+ */
+class SkillRegistry {
+    private val skills = ConcurrentHashMap<String, SkillEntry>()
+
+    data class SkillEntry(
+        val skill: Skill,
+        val version: String,
+        val enabled: Boolean = true,
+        val loadedAt: Long = System.currentTimeMillis()
+    )
+
+    /**
+     * 注册技能
+     */
+    fun register(skill: Skill, version: String = "1.0.0") {
+        skills[skill.name] = SkillEntry(skill, version)
+        Timber.d("Skill registered: ${skill.name} v$version")
+    }
+
+    /**
+     * 获取启用的技能列表
+     */
+    fun getEnabledSkills(): List<Skill> {
+        return skills.values
+            .filter { it.enabled }
+            .map { it.skill }
+    }
+
+    /**
+     * 启用/禁用技能
+     */
+    fun setEnabled(skillName: String, enabled: Boolean) {
+        skills[skillName]?.let { entry ->
+            skills[skillName] = entry.copy(enabled = enabled)
+            Timber.d("Skill $skillName enabled=$enabled")
+        }
+    }
+
+    /**
+     * 获取技能版本
+     */
+    fun getVersion(skillName: String): String? {
+        return skills[skillName]?.version
+    }
+}
+```
+
+### 技能生命周期
+
+```kotlin
+/**
+ * 技能生命周期钩子
+ */
+interface SkillLifecycle {
+    /**
+     * 技能加载时调用
+     */
+    fun onLoad()
+
+    /**
+     * 技能卸载时调用
+     */
+    fun onUnload()
+
+    /**
+     * 技能更新时调用
+     */
+    fun onUpdate(oldVersion: String, newVersion: String)
+}
+
+/**
+ * 技能版本兼容性检查
+ */
+object SkillCompatibility {
+    fun isCompatible(currentVersion: String, requiredVersion: String): Boolean {
+        val current = parseVersion(currentVersion)
+        val required = parseVersion(requiredVersion)
+
+        // 主版本号相同则兼容
+        return current[0] == required[0]
+    }
+
+    private fun parseVersion(version: String): List<Int> {
+        return version.split(".").mapNotNull { it.toIntOrNull() }
+    }
+}
+```
+
+---
+
+## 3.16 性能基准规范
+
+### 性能指标目标
+
+| 指标 | 目标值 | 测量方法 |
+|------|--------|----------|
+| **语音唤醒延迟** | < 100ms | KWS检测到 → TTS开始 |
+| **语音识别延迟** | < 500ms | 语音结束 → 文字输出 |
+| **意图路由延迟** | < 50ms | 文字 → 匹配技能 |
+| **技能执行延迟** | < 200ms | 不含外部API调用 |
+| **TTS合成延迟** | < 1000ms | 文字 → 音频开始 |
+| **端到端响应延迟** | < 2000ms | 语音结束 → TTS开始播放 |
+
+### 技能性能预算
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      端到端响应时间预算 (2000ms)                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  VAD结束 → ASR → 意图路由 → 技能执行 → TTS → 开始播放              │
+│  100ms    500ms     50ms        200ms    1000ms   150ms           │
+│                                                                     │
+│  合计: 2000ms                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 性能监控
+
+```kotlin
+/**
+ * 技能性能监控器
+ */
+class SkillPerformanceMonitor {
+    private val executionTimes = ConcurrentHashMap<String, List<Long>>()
+
+    fun recordExecution(skillName: String, durationMs: Long) {
+        val times = executionTimes.computeIfAbsent(skillName) { mutableListOf() }
+        synchronized(times) {
+            (times as MutableList).add(durationMs)
+            // 只保留最近100次
+            if (times.size > 100) {
+                times.removeAt(0)
+            }
+        }
+    }
+
+    fun getStats(skillName: String): SkillPerformanceStats {
+        val times = executionTimes[skillName] ?: return SkillPerformanceStats(0, 0, 0)
+        synchronized(times) {
+            val sorted = times.sorted()
+            return SkillPerformanceStats(
+                count = times.size,
+                avgMs = times.average().toLong(),
+                p99Ms = sorted.getOrElse((sorted.size * 0.99).toInt()) { sorted.last() }
+            )
+        }
+    }
+
+    data class SkillPerformanceStats(
+        val count: Int,
+        val avgMs: Long,
+        val p99Ms: Long
+    )
+}
+
+object PerformanceBudget {
+    // 各阶段预算（毫秒）
+    const val VAD_BUDGET = 100
+    const val ASR_BUDGET = 500
+    const val ROUTING_BUDGET = 50
+    const val SKILL_BUDGET = 200
+    const val TTS_BUDGET = 1000
+    const val TOTAL_BUDGET = 2000
+}
+```
+
+### 内存占用预算
+
+| 组件 | 内存占用 | 说明 |
+|------|----------|------|
+| **Sherpa-ONNX 模型** | ~100MB | KWS + VAD + ASR |
+| **TTS 模型** | ~60MB | 花燕模型 |
+| **对话历史** | ~1MB | 20轮对话 |
+| **设备状态缓存** | ~100KB | 最多100个设备 |
+| **应用总内存** | < 300MB | 峰值 |
 
 ---
 

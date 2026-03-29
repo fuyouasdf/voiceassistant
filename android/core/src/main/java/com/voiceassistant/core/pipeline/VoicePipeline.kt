@@ -38,7 +38,9 @@ class VoicePipeline(
     private val intentRouter: IntentRouter,
     private val audioCapture: AudioCapture,
     private val audioPlayer: AudioPlayer = AudioPlayer(),
-    private val ttsEnabledProvider: () -> Boolean = { true }
+    private val ttsEnabledProvider: () -> Boolean = { true },
+    private val wakeSensitivityProvider: () -> Float = { 0.5f },
+    private val wakeWordManager: WakeWordManager? = null
 ) {
     private val _state = MutableStateFlow(StateInfo(PipelineState.IDLE))
     val state: StateFlow<StateInfo> = _state.asStateFlow()
@@ -106,6 +108,13 @@ class VoicePipeline(
                     val kwsResult = kws.initialize(config.modelPath + "/kws")
                     Timber.d("KWS initialized: $kwsResult")
                     kwsInitSuccess = kwsResult
+
+                    // Apply configured wake word sensitivity
+                    if (kwsResult) {
+                        val sensitivity = wakeSensitivityProvider()
+                        Timber.d("Applying wake sensitivity: $sensitivity")
+                        kws.setSensitivity(sensitivity)
+                    }
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to initialize KWS - continuing without wake word")
                 }
@@ -313,6 +322,40 @@ class VoicePipeline(
     }
 
     /**
+     * Reload wake words and hot-reload KWS.
+     * Called by SettingsActivity after wake words are changed and ConfigHolder is reloaded.
+     * @param wakeWords The new list of wake words to use
+     */
+    fun reloadWakeWords(wakeWords: List<WakeWord>) {
+        val wwm = wakeWordManager ?: run {
+            Timber.w("WakeWordManager not available, skipping wake words reload")
+            return
+        }
+        if (!isCoreInitialized) {
+            Timber.w("KWS not initialized yet, skipping wake words reload")
+            return
+        }
+
+        scope.launch {
+            try {
+                if (wakeWords.isNotEmpty()) {
+                    // Save to keywords file (this also updates wwm.wakeWords)
+                    wwm.saveWakeWords(wakeWords)
+                    // Hot reload KWS with new keywords
+                    val success = kws.reloadKeywords(wwm.getKeywordsFilePath())
+                    if (success) {
+                        Timber.d("Wake words reloaded successfully: ${wakeWords.size} words")
+                    } else {
+                        Timber.e("Failed to reload wake words")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error reloading wake words")
+            }
+        }
+    }
+
+    /**
      * Process text input directly (bypassing ASR)
      * Called when user types text instead of using voice
      */
@@ -389,8 +432,10 @@ class VoicePipeline(
     private fun onWakeWordDetected() {
         currentJob = scope.launch {
             Timber.d("Wake word detected")
+            // Get response from WakeWordManager (first wake word's response as default)
+            val response = wakeWordManager?.wakeWords?.firstOrNull()?.response ?: "我在"
             // Show wake word feedback
-            transitionTo(PipelineState.WAKEWORD_DETECTED, message = "我在听...")
+            transitionTo(PipelineState.WAKEWORD_DETECTED, message = "${response}...")
             // Short delay for visual feedback and audio system settle
             delay(500)
             transitionTo(PipelineState.LISTENING)
@@ -416,9 +461,38 @@ class VoicePipeline(
         audioBuffer.clear()
         silenceFrames = 0
 
+        // 5秒静默超时
+        val maxSilenceMs = 5000L
+        var recordingStartTime = System.currentTimeMillis()
+        var hasSpeech = false
+
         try {
             audioCapture.start { audioChunk ->
                 try {
+                    // 检查静默超时（5秒无声音则退出）
+                    val elapsed = System.currentTimeMillis() - recordingStartTime
+                    if (elapsed > maxSilenceMs && !hasSpeech) {
+                        Timber.d("Recording stopped: 5s silence timeout, audioSize=${audioBuffer.flattenToFloatArray().size}")
+                        scope.launch {
+                            val audioData = audioBuffer.flattenToFloatArray()
+                            if (audioData.isNotEmpty()) {
+                                startRecognition(audioData)
+                            } else {
+                                // 完全没有录音，返回IDLE
+                                transitionTo(PipelineState.IDLE, message = "未检测到语音")
+                                if (isCoreInitialized) startKWSListening()
+                            }
+                        }
+                        audioCapture.stop()
+                        return@start
+                    }
+
+                    // 检查是否有声音（通过音频能量判断）
+                    val energy = audioChunk.map { it * it }.average()
+                    if (energy > 0.001) { // 有声音
+                        hasSpeech = true
+                    }
+
                     // 收集音频用于最终识别
                     audioBuffer.add(audioChunk)
 

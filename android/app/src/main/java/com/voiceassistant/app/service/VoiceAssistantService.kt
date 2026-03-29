@@ -37,17 +37,17 @@ class VoiceAssistantService : Service() {
         isServiceRunning = true
 
         try {
-            // Step 1: Wake lock
-            acquireWakeLock()
-            Timber.d("Wake lock acquired")
-
-            // Step 2: Show notification
+            // Step 1: Show notification FIRST to avoid ANR
+            // Android requires startForeground() within ~5 seconds of startForegroundService()
             val notification = createNotification()
             startForeground(NOTIFICATION_ID, notification)
             Timber.d("Foreground started with notification")
 
+            // Step 2: Wake lock (non-blocking)
+            acquireWakeLock()
+            Timber.d("Wake lock acquired")
+
             // Step 3: Let MainActivity handle the voice pipeline
-            // The activity will observe service state and manage pipeline
             Timber.d("Service ready, MainActivity will manage voice pipeline")
 
         } catch (e: Exception) {
