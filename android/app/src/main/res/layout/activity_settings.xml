@@ -48,6 +48,31 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <!-- Jellyfin Online Status -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:id="@+id/jellyfinStatusDot"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/circle_status_offline" />
+
+                    <TextView
+                        android:id="@+id/tvJellyfinOnlineStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/settings_jellyfin_offline"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+
+                </LinearLayout>
+
                 <!-- Jellyfin URL -->
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"

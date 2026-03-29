@@ -313,6 +313,19 @@ class VoicePipeline(
     }
 
     /**
+     * Process text input directly (bypassing ASR)
+     * Called when user types text instead of using voice
+     */
+    fun processTextInput(text: String) {
+        if (text.isBlank()) return
+
+        currentJob?.cancel()
+        currentJob = scope.launch {
+            processIntent(text)
+        }
+    }
+
+    /**
      * Stop recording and start recognition with collected audio
      * Called when user releases the push-to-talk button
      */

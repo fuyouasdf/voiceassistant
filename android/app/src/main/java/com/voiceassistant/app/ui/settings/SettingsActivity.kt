@@ -39,6 +39,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etJellyfinUrl: TextInputEditText
     private lateinit var etJellyfinUsername: TextInputEditText
     private lateinit var etJellyfinPassword: TextInputEditText
+    private lateinit var jellyfinStatusDot: View
+    private lateinit var tvJellyfinOnlineStatus: TextView
     private lateinit var btnTestJellyfin: MaterialButton
     private lateinit var progressJellyfin: ProgressBar
     private lateinit var tvJellyfinStatus: TextView
@@ -92,6 +94,8 @@ class SettingsActivity : AppCompatActivity() {
         etJellyfinUrl = findViewById(R.id.etJellyfinUrl)
         etJellyfinUsername = findViewById(R.id.etJellyfinUsername)
         etJellyfinPassword = findViewById(R.id.etJellyfinPassword)
+        jellyfinStatusDot = findViewById(R.id.jellyfinStatusDot)
+        tvJellyfinOnlineStatus = findViewById(R.id.tvJellyfinOnlineStatus)
         btnTestJellyfin = findViewById(R.id.btnTestJellyfin)
         progressJellyfin = findViewById(R.id.progressJellyfin)
         tvJellyfinStatus = findViewById(R.id.tvJellyfinStatus)
@@ -163,6 +167,9 @@ class SettingsActivity : AppCompatActivity() {
             etJellyfinUsername.setText(settingsRepository.getJellyfinUsername())
             etJellyfinPassword.setText(settingsRepository.getJellyfinPassword())
 
+            // Test Jellyfin connection on load
+            testJellyfinConnectionOnLoad()
+
             // Load AI Service settings
             etLlmUrl.setText(settingsRepository.getLLMBaseUrl())
             etLlmApiKey.setText(settingsRepository.getLLMApiKey())
@@ -200,6 +207,7 @@ class SettingsActivity : AppCompatActivity() {
                     tvJellyfinStatus.text = getString(R.string.settings_jellyfin_offline)
                     tvJellyfinStatus.setTextColor(getColor(R.color.status_offline))
                     tvJellyfinStatus.visibility = View.VISIBLE
+                    updateJellyfinOnlineStatus(false)
                     Toast.makeText(this@SettingsActivity, "请填写完整的 Jellyfin 配置", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
@@ -213,11 +221,13 @@ class SettingsActivity : AppCompatActivity() {
                     tvJellyfinStatus.text = getString(R.string.settings_jellyfin_online)
                     tvJellyfinStatus.setTextColor(getColor(R.color.status_online))
                     tvJellyfinStatus.visibility = View.VISIBLE
+                    updateJellyfinOnlineStatus(true)
                     Toast.makeText(this@SettingsActivity, R.string.settings_jellyfin_online, Toast.LENGTH_SHORT).show()
                 } else {
                     tvJellyfinStatus.text = getString(R.string.settings_jellyfin_offline)
                     tvJellyfinStatus.setTextColor(getColor(R.color.status_offline))
                     tvJellyfinStatus.visibility = View.VISIBLE
+                    updateJellyfinOnlineStatus(false)
                     Toast.makeText(this@SettingsActivity, getString(R.string.settings_jellyfin_offline) + ": " + result.exceptionOrNull()?.message, Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -226,8 +236,52 @@ class SettingsActivity : AppCompatActivity() {
                 tvJellyfinStatus.text = getString(R.string.settings_jellyfin_offline)
                 tvJellyfinStatus.setTextColor(getColor(R.color.status_offline))
                 tvJellyfinStatus.visibility = View.VISIBLE
+                updateJellyfinOnlineStatus(false)
                 Toast.makeText(this@SettingsActivity, getString(R.string.settings_jellyfin_offline) + ": " + e.message, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    /**
+     * 测试 Jellyfin 连接（页面加载时静默执行）
+     */
+    private fun testJellyfinConnectionOnLoad() {
+        val url = etJellyfinUrl.text.toString()
+        val username = etJellyfinUsername.text.toString()
+        val password = etJellyfinPassword.text.toString()
+
+        if (url.isEmpty() || username.isEmpty() || password.isEmpty()) {
+            updateJellyfinOnlineStatus(false)
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                jellyfinClient.updateCredentials(username, password)
+                val result = jellyfinClient.testConnection()
+                updateJellyfinOnlineStatus(result.isSuccess)
+            } catch (e: Exception) {
+                updateJellyfinOnlineStatus(false)
+            }
+        }
+    }
+
+    /**
+     * 更新 Jellyfin 在线状态显示（顶部）
+     */
+    private fun updateJellyfinOnlineStatus(isOnline: Boolean) {
+        runOnUiThread {
+            jellyfinStatusDot.setBackgroundResource(
+                if (isOnline) R.drawable.circle_status_online else R.drawable.circle_status_offline
+            )
+            tvJellyfinOnlineStatus.text = if (isOnline) {
+                getString(R.string.settings_jellyfin_online)
+            } else {
+                getString(R.string.settings_jellyfin_offline)
+            }
+            tvJellyfinOnlineStatus.setTextColor(
+                if (isOnline) getColor(R.color.status_online) else getColor(R.color.status_offline)
+            )
         }
     }
 

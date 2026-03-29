@@ -225,11 +225,11 @@
                 </LinearLayout>
             </HorizontalScrollView>
 
-            <!-- Voice Input Bar -->
+            <!-- Text Input Bar -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/voiceInputCard"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="wrap_content"
                 android:layerType="software"
                 app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="28dp"
@@ -238,114 +238,41 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="8dp">
 
-                    <!-- Voice Indicator (Waveform) -->
-                    <FrameLayout
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp">
-
-                        <!-- Static Mic Icon -->
-                        <ImageView
-                            android:id="@+id/icMic"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:layout_gravity="center"
-                            android:src="@android:drawable/ic_btn_speak_now"
-                            app:tint="@color/text_secondary" />
-
-                        <!-- Recording Waveform (animated bars) -->
-                        <LinearLayout
-                            android:id="@+id/waveformContainer"
-                            android:layout_width="32dp"
-                            android:layout_height="24dp"
-                            android:layout_gravity="center"
-                            android:orientation="horizontal"
-                            android:gravity="center"
-                            android:visibility="invisible">
-
-                            <View
-                                android:id="@+id/waveBar1"
-                                android:layout_width="3dp"
-                                android:layout_height="8dp"
-                                android:background="@color/primary"
-                                android:layout_marginHorizontal="1dp" />
-
-                            <View
-                                android:id="@+id/waveBar2"
-                                android:layout_width="3dp"
-                                android:layout_height="16dp"
-                                android:background="@color/primary"
-                                android:layout_marginHorizontal="1dp" />
-
-                            <View
-                                android:id="@+id/waveBar3"
-                                android:layout_width="3dp"
-                                android:layout_height="12dp"
-                                android:background="@color/primary"
-                                android:layout_marginHorizontal="1dp" />
-
-                            <View
-                                android:id="@+id/waveBar4"
-                                android:layout_width="3dp"
-                                android:layout_height="20dp"
-                                android:background="@color/primary"
-                                android:layout_marginHorizontal="1dp" />
-
-                            <View
-                                android:id="@+id/waveBar5"
-                                android:layout_width="3dp"
-                                android:layout_height="10dp"
-                                android:background="@color/primary"
-                                android:layout_marginHorizontal="1dp" />
-                        </LinearLayout>
-
-                        <!-- Active Ring (shown when wake word detected) -->
-                        <View
-                            android:id="@+id/activeRing"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:layout_gravity="center"
-                            android:background="@drawable/circle_active_ring"
-                            android:visibility="invisible" />
-                    </FrameLayout>
-
-                    <!-- State Text / Input Hint -->
-                    <TextView
-                        android:id="@+id/tvInputState"
+                    <!-- Text Input -->
+                    <EditText
+                        android:id="@+id/etTextInput"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginHorizontal="12dp"
-                        android:text="按住说话"
-                        android:textColor="@color/text_secondary"
+                        android:background="@android:color/transparent"
+                        android:hint="输入文字..."
+                        android:imeOptions="actionSend"
+                        android:inputType="text"
+                        android:maxLines="3"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_tertiary"
                         android:textSize="15sp" />
 
-                    <!-- Send/Interrupt Button -->
+                    <!-- Send Button -->
                     <ImageButton
-                        android:id="@+id/btnInterrupt"
+                        android:id="@+id/btnSend"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        android:layout_marginEnd="8dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:src="@android:drawable/ic_media_pause"
-                        android:visibility="invisible"
-                        android:contentDescription="打断"
-                        app:tint="@color/text_secondary" />
+                        android:contentDescription="发送"
+                        android:src="@android:drawable/ic_menu_send"
+                        app:tint="@color/primary" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
-
-            <!-- Touch Area for Voice Input (overlay) -->
-            <View
-                android:id="@+id/voiceTouchArea"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginTop="-56dp"
-                android:background="@android:color/transparent" />
 
         </LinearLayout>
     </LinearLayout>
