@@ -813,9 +813,11 @@ class VoicePipeline(
         }
     }
 
-    private fun transitionTo(newState: PipelineState, message: String = "", wakeConfidence: Float = 0f) {
+    private fun transitionTo(newState: PipelineState, message: String = "", wakeConfidence: Float = 0f, recognizedText: String? = null) {
         val oldState = _state.value.state
-        _state.value = StateInfo(newState, message = message, recognizedText = "", wakeConfidence = wakeConfidence)
+        // Preserve recognizedText if provided, otherwise clear it
+        val finalRecognizedText = recognizedText ?: if (newState == PipelineState.THINKING) _state.value.recognizedText else ""
+        _state.value = StateInfo(newState, message = message, recognizedText = finalRecognizedText, wakeConfidence = wakeConfidence)
         Timber.d("State transition: $oldState -> $newState")
     }
 
