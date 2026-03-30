@@ -40,7 +40,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/searchInputLayout"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="56dp"
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
@@ -55,7 +55,7 @@
                 android:id="@+id/etSearch"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:hint="搜索歌曲..."
+                android:hint="搜索..."
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:maxLines="1"

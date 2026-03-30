@@ -64,6 +64,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etLlmApiKey: TextInputEditText
     private lateinit var etLlmModel: TextInputEditText
     private lateinit var etLlmSystemPrompt: TextInputEditText
+    private lateinit var llmStatusDot: View
+    private lateinit var tvLlmOnlineStatus: TextView
     private lateinit var btnTestLlm: MaterialButton
     private lateinit var progressLlm: ProgressBar
     private lateinit var tvLlmStatus: TextView
@@ -131,6 +133,8 @@ class SettingsActivity : AppCompatActivity() {
         etLlmApiKey = findViewById(R.id.etLlmApiKey)
         etLlmModel = findViewById(R.id.etLlmModel)
         etLlmSystemPrompt = findViewById(R.id.etLlmSystemPrompt)
+        llmStatusDot = findViewById(R.id.llmStatusDot)
+        tvLlmOnlineStatus = findViewById(R.id.tvLlmOnlineStatus)
         btnTestLlm = findViewById(R.id.btnTestLlm)
         progressLlm = findViewById(R.id.progressLlm)
         tvLlmStatus = findViewById(R.id.tvLlmStatus)
@@ -160,7 +164,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(rootScrollView) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            contentLayout.setPadding(16, 16, 16, insets.bottom + 16)
+            contentLayout.setPadding(16, insets.top + 16, 16, insets.bottom + 16)
             windowInsets
         }
     }
@@ -224,6 +228,9 @@ class SettingsActivity : AppCompatActivity() {
             etLlmApiKey.setText(settingsRepository.getLLMApiKey())
             etLlmModel.setText(settingsRepository.getLLMModel())
             etLlmSystemPrompt.setText(settingsRepository.getLLMSystemPrompt())
+
+            // Test LLM connection on load
+            testLlmConnectionOnLoad()
 
             // Load Voice Settings
             val wakeSensitivity = settingsRepository.getWakeSensitivity()
@@ -386,8 +393,96 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun testLlmConnection() {
-        // LLM 使用 API Key 方式，无需测试连接
-        Toast.makeText(this, "LLM 配置已保存", Toast.LENGTH_SHORT).show()
+        btnTestLlm.isEnabled = false
+        progressLlm.visibility = View.VISIBLE
+        tvLlmStatus.visibility = View.GONE
+
+        lifecycleScope.launch {
+            try {
+                val url = etLlmUrl.text.toString()
+                val apiKey = etLlmApiKey.text.toString()
+                val model = etLlmModel.text.toString()
+
+                if (url.isEmpty() || apiKey.isEmpty() || model.isEmpty()) {
+                    progressLlm.visibility = View.GONE
+                    btnTestLlm.isEnabled = true
+                    tvLlmStatus.text = getString(R.string.settings_llm_offline)
+                    tvLlmStatus.setTextColor(getColor(R.color.status_offline))
+                    tvLlmStatus.visibility = View.VISIBLE
+                    updateLlmOnlineStatus(false)
+                    Toast.makeText(this@SettingsActivity, "请填写完整的 LLM 配置", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val result = llmRepository.chat("Hello")
+                progressLlm.visibility = View.GONE
+                btnTestLlm.isEnabled = true
+
+                if (result.isSuccess) {
+                    tvLlmStatus.text = getString(R.string.settings_llm_online)
+                    tvLlmStatus.setTextColor(getColor(R.color.status_online))
+                    tvLlmStatus.visibility = View.VISIBLE
+                    updateLlmOnlineStatus(true)
+                    Toast.makeText(this@SettingsActivity, R.string.settings_llm_online, Toast.LENGTH_SHORT).show()
+                } else {
+                    tvLlmStatus.text = getString(R.string.settings_llm_offline)
+                    tvLlmStatus.setTextColor(getColor(R.color.status_offline))
+                    tvLlmStatus.visibility = View.VISIBLE
+                    updateLlmOnlineStatus(false)
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_llm_offline) + ": " + result.exceptionOrNull()?.message, Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                progressLlm.visibility = View.GONE
+                btnTestLlm.isEnabled = true
+                tvLlmStatus.text = getString(R.string.settings_llm_offline)
+                tvLlmStatus.setTextColor(getColor(R.color.status_offline))
+                tvLlmStatus.visibility = View.VISIBLE
+                updateLlmOnlineStatus(false)
+                Toast.makeText(this@SettingsActivity, getString(R.string.settings_llm_offline) + ": " + e.message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 测试 LLM 连接（页面加载时静默执行）
+     */
+    private fun testLlmConnectionOnLoad() {
+        val url = etLlmUrl.text.toString()
+        val apiKey = etLlmApiKey.text.toString()
+        val model = etLlmModel.text.toString()
+
+        if (url.isEmpty() || apiKey.isEmpty() || model.isEmpty()) {
+            updateLlmOnlineStatus(false)
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val result = llmRepository.chat("test")
+                updateLlmOnlineStatus(result.isSuccess)
+            } catch (e: Exception) {
+                updateLlmOnlineStatus(false)
+            }
+        }
+    }
+
+    /**
+     * 更新 LLM 在线状态显示（顶部）
+     */
+    private fun updateLlmOnlineStatus(isOnline: Boolean) {
+        runOnUiThread {
+            llmStatusDot.setBackgroundResource(
+                if (isOnline) R.drawable.circle_status_online else R.drawable.circle_status_offline
+            )
+            tvLlmOnlineStatus.text = if (isOnline) {
+                getString(R.string.settings_llm_online)
+            } else {
+                getString(R.string.settings_llm_offline)
+            }
+            tvLlmOnlineStatus.setTextColor(
+                if (isOnline) getColor(R.color.status_online) else getColor(R.color.status_offline)
+            )
+        }
     }
 
     private fun saveSettings() {
