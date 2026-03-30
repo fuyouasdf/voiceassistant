@@ -36,7 +36,8 @@ data class StateInfo(
     val state: PipelineState,
     val timestamp: Long = System.currentTimeMillis(),
     val message: String = "",  // Optional message, e.g., recognized text or AI response
-    val recognizedText: String = ""  // Final ASR result to add to conversation
+    val recognizedText: String = "",  // Final ASR result to add to conversation
+    val wakeConfidence: Float = 0f  // Confidence score for wake word detection
 ) {
     fun durationMs(): Long = System.currentTimeMillis() - timestamp
 }

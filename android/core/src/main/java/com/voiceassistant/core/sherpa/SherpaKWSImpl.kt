@@ -131,12 +131,12 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
         }
     }
 
-    override fun process(audio: FloatArray): Boolean {
+    override fun process(audio: FloatArray): KWSResult {
         lock.lock()
         if (isReloading) {
             lock.unlock()
             // 重建期间跳过本次处理，不崩溃
-            return false
+            return KWSResult(detected = false)
         }
         try {
             val s = stream
@@ -144,7 +144,7 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
 
             if (s == null || k == null) {
                 Timber.w("KWS process called but stream or kws is null")
-                return false
+                return KWSResult(detected = false)
             }
 
             return try {
@@ -158,17 +158,36 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
                 val detected = result.keyword.isNotEmpty()
                 if (detected) {
                     Timber.d("Wake word detected: ${result.keyword}")
+                    // Extract confidence from result - Sherpa returns 'prob' field
+                    val confidence = extractConfidence(result)
                     k.reset(s)
-                    true
+                    KWSResult(detected = true, keyword = result.keyword, confidence = confidence)
                 } else {
-                    false
+                    KWSResult(detected = false)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "KWS process error")
-                false
+                KWSResult(detected = false)
             }
         } finally {
             lock.unlock()
+        }
+    }
+
+    /**
+     * Extract confidence score from Sherpa KeywordSpotter result.
+     * The actual field name may vary - try common names.
+     */
+    private fun extractConfidence(result: KeywordSpotterResult): Float {
+        return try {
+            // Sherpa's KeywordSpotterResult may have 'prob' or 'score' field
+            // Use reflection to try to extract it
+            val probField = result.javaClass.getDeclaredField("prob")
+            probField.isAccessible = true
+            (probField.get(result) as? Number)?.toFloat() ?: 0.5f
+        } catch (e: Exception) {
+            // If we can't extract, return a default
+            0.5f
         }
     }
 

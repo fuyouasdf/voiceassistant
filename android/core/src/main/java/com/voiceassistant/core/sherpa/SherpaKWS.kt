@@ -1,6 +1,15 @@
 package com.voiceassistant.core.sherpa
 
 /**
+ * Result of KWS process() call
+ */
+data class KWSResult(
+    val detected: Boolean,
+    val keyword: String = "",
+    val confidence: Float = 0f
+)
+
+/**
  * Interface for Keyword Spotting (Wake Word) engine
  */
 interface SherpaKWS {
@@ -15,9 +24,9 @@ interface SherpaKWS {
     /**
      * Process audio chunk and detect wake word
      * @param audio Audio samples (16kHz, float)
-     * @return true if wake word detected
+     * @return KWSResult with detection status, keyword, and confidence
      */
-    fun process(audio: FloatArray): Boolean
+    fun process(audio: FloatArray): KWSResult
 
     /**
      * Set detection sensitivity (0.0 - 1.0)

@@ -31,6 +31,9 @@ class WakeWordManager(private val context: Context) {
     private val _wakeWords = mutableListOf<WakeWord>()
     val wakeWords: List<WakeWord> get() = _wakeWords.toList()
 
+    // Pinyin converter for dynamic pinyin generation
+    private val pinyinConverter = PinyinConverter()
+
     // Valid character tokens from tokens.txt (Chinese characters Sherpa can encode)
     private lateinit var validChars: Set<String>
 
@@ -206,10 +209,17 @@ class WakeWordManager(private val context: Context) {
     }
 
     /**
-     * Chinese to Pinyin conversion
-     * Only includes mappings for characters that are in tokens.txt
+     * Chinese to Pinyin conversion using dynamic PinyinConverter.
+     * Falls back to the original hardcoded map for compatibility.
      */
     private fun chineseToPinyin(chinese: String): String {
+        // First try dynamic converter
+        val dynamicPinyin = pinyinConverter.convert(chinese)
+        if (dynamicPinyin.isNotEmpty() && !dynamicPinyin.contains(chinese.first().toString())) {
+            return dynamicPinyin
+        }
+
+        // Fallback to hardcoded map for known wake words
         val pinyinMap = mapOf(
             "小爱同学" to "x iǎo ài tóng xué",
             "小爱" to "x iǎo ài",
@@ -222,7 +232,7 @@ class WakeWordManager(private val context: Context) {
             "你好西西" to "n ǐ h ǎo x ī x ī",
             "西西" to "x ī x ī"
         )
-        return pinyinMap[chinese] ?: ""
+        return pinyinMap[chinese] ?: dynamicPinyin
     }
 
     /**

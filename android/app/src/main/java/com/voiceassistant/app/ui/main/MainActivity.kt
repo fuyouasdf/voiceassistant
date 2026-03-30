@@ -266,7 +266,7 @@ class MainActivity : AppCompatActivity() {
     private fun observeVoicePipeline() {
         lifecycleScope.launch {
             voicePipeline.state.collectLatest { stateInfo ->
-                updateUIFromState(stateInfo.state, stateInfo.message, stateInfo.recognizedText)
+                updateUIFromState(stateInfo.state, stateInfo.message, stateInfo.recognizedText, stateInfo.wakeConfidence)
             }
         }
     }
@@ -285,7 +285,7 @@ class MainActivity : AppCompatActivity() {
         hideAsrCard()
     }
 
-    private fun updateUIFromState(state: PipelineState, message: String?, recognizedText: String = "") {
+    private fun updateUIFromState(state: PipelineState, message: String?, recognizedText: String = "", wakeConfidence: Float = 0f) {
         runOnUiThread {
             try {
                 when (state) {
@@ -305,8 +305,8 @@ class MainActivity : AppCompatActivity() {
                         btnSend.visibility = View.INVISIBLE
                         // Haptic feedback on wake word detection
                         triggerHapticFeedback()
-                        // Show wake success indicator
-                        showWakeSuccessIndicator(message ?: "唤醒成功")
+                        // Show wake success indicator with confidence
+                        showWakeSuccessIndicator(message ?: "唤醒成功", wakeConfidence)
                     }
                     PipelineState.LISTENING -> {
                         btnSend.visibility = View.INVISIBLE
@@ -414,9 +414,14 @@ class MainActivity : AppCompatActivity() {
         asrResultCard.visibility = View.GONE
     }
 
-    private fun showWakeSuccessIndicator(message: String) {
+    private fun showWakeSuccessIndicator(message: String, confidence: Float = 0f) {
         asrResultCard.visibility = View.VISIBLE
-        tvAsrResult.text = message
+        val displayMessage = if (confidence > 0) {
+            "$message (置信度: %.2f)".format(confidence)
+        } else {
+            message
+        }
+        tvAsrResult.text = displayMessage
         asrResultCard.alpha = 1f
         // Change card background to indicate success
         asrResultCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.primary))

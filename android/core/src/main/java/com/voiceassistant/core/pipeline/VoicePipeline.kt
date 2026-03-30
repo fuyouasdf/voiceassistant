@@ -2,10 +2,13 @@ package com.voiceassistant.core.pipeline
 
 import com.voiceassistant.core.audio.AudioCapture
 import com.voiceassistant.core.audio.AudioPlayer
+import com.voiceassistant.core.audio.AudioPreprocessor
+import com.voiceassistant.core.audio.RingBuffer
 import com.voiceassistant.core.intent.IntentRouter
 import com.voiceassistant.core.sherpa.SherpaASR
 import com.voiceassistant.core.sherpa.SherpaKWS
 import com.voiceassistant.core.sherpa.SherpaTTS
+import com.voiceassistant.core.sherpa.StatefulVad
 import com.voiceassistant.core.sherpa.SherpaVAD
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +43,8 @@ class VoicePipeline(
     private val audioPlayer: AudioPlayer = AudioPlayer(),
     private val ttsEnabledProvider: () -> Boolean = { true },
     private val wakeSensitivityProvider: () -> Float = { 0.5f },
-    private val wakeWordManager: WakeWordManager? = null
+    private val wakeWordManager: WakeWordManager? = null,
+    private val statefulVadFactory: (() -> StatefulVad)? = null
 ) {
     private val _state = MutableStateFlow(StateInfo(PipelineState.IDLE))
     val state: StateFlow<StateInfo> = _state.asStateFlow()
@@ -58,6 +62,25 @@ class VoicePipeline(
 
     // Flag to track if initialization failed
     private var initFailed = false
+
+    // Audio preprocessor for KWS (gain control + noise gate)
+    // noiseThreshold = 0f: KWS模型自带噪声过滤，禁用额外噪声门限
+    private val audioPreprocessor = AudioPreprocessor(
+        targetLevel = 0.5f,
+        noiseThreshold = 0f
+    )
+
+    // Ring buffer for pre-wake audio (500ms @ 16kHz = 8000 samples)
+    private val preWakeBuffer = RingBuffer(capacitySamples = 8000)
+
+    // Wake word detector with per-keyword thresholds and cooldown
+    private val wakeWordDetector = WakeWordDetector(
+        defaultThreshold = 0.5f,
+        defaultCooldownMs = 3000L
+    )
+
+    // Stateful VAD for speech endpoint detection (created lazily)
+    private var statefulVad: StatefulVad? = null
 
     fun start() {
         Timber.d("VoicePipeline starting")
@@ -124,6 +147,27 @@ class VoicePipeline(
                     val vadResult = vad.initialize(config.modelPath + "/vad")
                     Timber.d("VAD initialized: $vadResult")
                     vadInitSuccess = vadResult
+
+                    // Also initialize StatefulVad if factory is provided
+                    if (vadResult && statefulVadFactory != null) {
+                        try {
+                            val svad = statefulVadFactory.invoke()
+                            val vadConfig = com.voiceassistant.core.sherpa.VadConfig(
+                                minSpeechDurationMs = 250,
+                                maxSpeechDurationMs = 30000,
+                                minSilenceDurationMs = 500,
+                                silenceTimeoutMs = 5000
+                            )
+                            if (svad.initialize(config.modelPath + "/vad", vadConfig)) {
+                                statefulVad = svad
+                                Timber.d("StatefulVad initialized successfully")
+                            } else {
+                                Timber.w("StatefulVad initialization returned false")
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to initialize StatefulVad - continuing without it")
+                        }
+                    }
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to initialize VAD - continuing without VAD")
                 }
@@ -134,6 +178,14 @@ class VoicePipeline(
             if (kwsInitSuccess) {
                 isCoreInitialized = true
                 initJob = null
+
+                // Load wake words into WakeWordDetector for initial startup
+                wakeWordManager?.let { wwm ->
+                    val loadedWords = wwm.loadWakeWords()
+                    wakeWordDetector.loadDefaults(loadedWords)
+                    Timber.d("Loaded ${loadedWords.size} wake words into WakeWordDetector on startup")
+                }
+
                 Timber.d("Core voice pipeline components initialized successfully")
             } else {
                 // KWS failed - cannot use voice pipeline without wake word detection
@@ -344,6 +396,8 @@ class VoicePipeline(
                     // Hot reload KWS with new keywords
                     val success = kws.reloadKeywords(wwm.getKeywordsFilePath())
                     if (success) {
+                        // Also reload WakeWordDetector with new keywords
+                        wakeWordDetector.loadDefaults(wakeWords)
                         Timber.d("Wake words reloaded successfully: ${wakeWords.size} words")
                     } else {
                         Timber.e("Failed to reload wake words")
@@ -403,6 +457,10 @@ class VoicePipeline(
 
         transitionTo(PipelineState.IDLE)
 
+        // Reset preprocessor state for fresh listening
+        audioPreprocessor.reset()
+        preWakeBuffer.clear()
+
         // Start wake word detection
         try {
             var wakeWordTriggered = false
@@ -411,13 +469,29 @@ class VoicePipeline(
                     // Prevent processing after wake word detected
                     if (wakeWordTriggered) return@start
 
+                    // Write to pre-wake buffer for ASR context
+                    preWakeBuffer.write(audioChunk)
+
+                    // Process audio through preprocessor
+                    val processedAudio = audioPreprocessor.process(audioChunk)
+                    if (processedAudio == null) {
+                        // Audio below noise threshold, skip
+                        return@start
+                    }
+
                     // Process audio for wake word detection
-                    if (kws.process(audioChunk)) {
-                        // Wake word detected
+                    val kwsResult = kws.process(processedAudio)
+                    // KWS result only logged when detected
+                    if (kwsResult.detected) {
+                        Timber.d("KWS triggered: keyword='${kwsResult.keyword}', confidence=${kwsResult.confidence}")
+                    }
+
+                    // 先直接用 KWS 结果触发，绕过 WakeWordDetector 排查问题
+                    if (kwsResult.detected) {
                         wakeWordTriggered = true
-                        Timber.d("Wake word detected!")
+                        Timber.d("Wake word TRIGGERED (direct): keyword='${kwsResult.keyword}', confidence=${kwsResult.confidence}, PreWakeBuffer size: ${preWakeBuffer.availableSamples()}")
                         audioCapture.stop()
-                        onWakeWordDetected()
+                        onWakeWordDetected(kwsResult.keyword, kwsResult.confidence)
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "Error in KWS audio processing")
@@ -429,13 +503,11 @@ class VoicePipeline(
         }
     }
 
-    private fun onWakeWordDetected() {
+    private fun onWakeWordDetected(response: String, confidence: Float) {
         currentJob = scope.launch {
-            Timber.d("Wake word detected")
-            // Get response from WakeWordManager (first wake word's response as default)
-            val response = wakeWordManager?.wakeWords?.firstOrNull()?.response ?: "我在"
-            // Show wake word feedback
-            transitionTo(PipelineState.WAKEWORD_DETECTED, message = "${response}...")
+            Timber.d("Wake word detected: response='$response', confidence=$confidence")
+            // Show wake word feedback with confidence
+            transitionTo(PipelineState.WAKEWORD_DETECTED, message = "${response}...", wakeConfidence = confidence)
             // Short delay for visual feedback and audio system settle
             delay(500)
             transitionTo(PipelineState.LISTENING)
@@ -461,6 +533,10 @@ class VoicePipeline(
         audioBuffer.clear()
         silenceFrames = 0
 
+        // Get pre-wake audio to prepend to recording
+        val preWakeAudio = preWakeBuffer.read()
+        Timber.d("Pre-wake audio available: ${preWakeAudio.size} samples")
+
         // 5秒静默超时
         val maxSilenceMs = 5000L
         var recordingStartTime = System.currentTimeMillis()
@@ -472,9 +548,11 @@ class VoicePipeline(
                     // 检查静默超时（5秒无声音则退出）
                     val elapsed = System.currentTimeMillis() - recordingStartTime
                     if (elapsed > maxSilenceMs && !hasSpeech) {
-                        Timber.d("Recording stopped: 5s silence timeout, audioSize=${audioBuffer.flattenToFloatArray().size}")
                         scope.launch {
-                            val audioData = audioBuffer.flattenToFloatArray()
+                            // Combine pre-wake audio with recorded audio
+                            val recordedAudio = audioBuffer.flattenToFloatArray()
+                            val audioData = combineAudio(preWakeAudio, recordedAudio)
+                            Timber.d("Recording stopped: 5s silence timeout, totalAudioSize=${audioData.size}")
                             if (audioData.isNotEmpty()) {
                                 startRecognition(audioData)
                             } else {
@@ -499,7 +577,8 @@ class VoicePipeline(
                     // Simple timeout based on audio buffer size (~5 seconds max)
                     val maxBufferSize = config.sampleRate * 5 / config.frameSize // 5 seconds
                     if (audioBuffer.size > maxBufferSize) {
-                        val speechAudio = audioBuffer.flattenToFloatArray()
+                        val recordedAudio = audioBuffer.flattenToFloatArray()
+                        val speechAudio = combineAudio(preWakeAudio, recordedAudio)
                         Timber.d("Recording stopped: max duration reached, audioSize=${speechAudio.size}")
                         scope.launch {
                             startRecognition(speechAudio)
@@ -513,6 +592,18 @@ class VoicePipeline(
         } catch (e: Exception) {
             Timber.e(e, "Failed to start recording")
             transitionTo(PipelineState.IDLE)
+        }
+    }
+
+    /**
+     * Combine pre-wake audio with recorded audio.
+     */
+    private fun combineAudio(preWake: FloatArray, recorded: FloatArray): FloatArray {
+        if (preWake.isEmpty()) return recorded
+        if (recorded.isEmpty()) return preWake
+        return FloatArray(preWake.size + recorded.size).also {
+            System.arraycopy(preWake, 0, it, 0, preWake.size)
+            System.arraycopy(recorded, 0, it, preWake.size, recorded.size)
         }
     }
 
@@ -722,9 +813,9 @@ class VoicePipeline(
         }
     }
 
-    private fun transitionTo(newState: PipelineState, message: String = "") {
+    private fun transitionTo(newState: PipelineState, message: String = "", wakeConfidence: Float = 0f) {
         val oldState = _state.value.state
-        _state.value = StateInfo(newState, message = message, recognizedText = "")
+        _state.value = StateInfo(newState, message = message, recognizedText = "", wakeConfidence = wakeConfidence)
         Timber.d("State transition: $oldState -> $newState")
     }
 

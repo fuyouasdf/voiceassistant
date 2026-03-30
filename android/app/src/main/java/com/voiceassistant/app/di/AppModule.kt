@@ -22,6 +22,8 @@ import com.voiceassistant.core.sherpa.SherpaTTS
 import com.voiceassistant.core.sherpa.SherpaTTSImpl
 import com.voiceassistant.core.sherpa.SherpaVAD
 import com.voiceassistant.core.sherpa.SherpaVADImpl
+import com.voiceassistant.core.sherpa.StatefulVad
+import com.voiceassistant.core.sherpa.StatefulVadImpl
 import com.voiceassistant.data.local.AppDatabase
 import com.voiceassistant.data.local.ConfigDao
 import com.voiceassistant.data.local.PlaylistDao
@@ -264,6 +266,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideVoicePipeline(
+        @ApplicationContext context: Context,
         kws: SherpaKWS,
         vad: SherpaVAD,
         asrManager: ASRManager,
@@ -285,7 +288,8 @@ object AppModule {
             audioPlayer = audioPlayer,
             ttsEnabledProvider = { configHolder.ttsEnabled },
             wakeSensitivityProvider = { configHolder.wakeSensitivity },
-            wakeWordManager = wakeWordManager
+            wakeWordManager = wakeWordManager,
+            statefulVadFactory = { StatefulVadImpl(context) }
         )
     }
 }
