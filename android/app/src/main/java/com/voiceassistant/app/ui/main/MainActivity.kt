@@ -589,6 +589,9 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
+            // 重新加载 Jellyfin 配置，确保使用最新地址
+            jellyfinClient.reload(configHolder.jellyfinUrl, configHolder.jellyfinApiKey)
+
             tvJellyfinStatus.text = "Jellyfin: 连接中..."
             try {
                 val result = jellyfinClient.testConnection()

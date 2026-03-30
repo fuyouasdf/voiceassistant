@@ -248,9 +248,11 @@ object AppModule {
         musicRepository: MusicRepository?,
         llmRepository: LLMRepository?,
         playerRepository: PlayerRepository?,
-        playlistRepository: PlaylistRepository?
+        playlistRepository: PlaylistRepository?,
+        sharedPreferences: SharedPreferences,
+        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase
     ): IntentRouter {
-        return IntentRouter(musicRepository, llmRepository, playerRepository, playlistRepository)
+        return IntentRouter(musicRepository, llmRepository, playerRepository, playlistRepository, sharedPreferences, handleChatUseCase)
     }
 
     @Provides

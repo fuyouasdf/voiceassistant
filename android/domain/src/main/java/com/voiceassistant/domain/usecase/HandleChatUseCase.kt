@@ -1,6 +1,7 @@
 package com.voiceassistant.domain.usecase
 
 import com.voiceassistant.domain.model.Intent
+import com.voiceassistant.domain.repository.ModelNotFoundException
 import com.voiceassistant.domain.repository.LLMRepository
 import timber.log.Timber
 import java.net.SocketTimeoutException
@@ -32,6 +33,7 @@ class HandleChatUseCase @Inject constructor(
 
     private fun getFriendlyErrorMessage(e: Exception): String {
         return when (e) {
+            is ModelNotFoundException -> "模型 ${e.modelName} 不存在，请到设置中更换模型"
             is SocketTimeoutException -> "连接超时，请检查网络或 LLM 服务是否可用"
             is UnknownHostException -> "无法连接到 LLM 服务，请检查服务地址是否正确"
             is java.net.ConnectException -> "无法连接 LLM 服务，请检查服务是否启动"

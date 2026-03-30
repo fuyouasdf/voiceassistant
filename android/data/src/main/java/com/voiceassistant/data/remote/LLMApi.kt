@@ -41,3 +41,13 @@ data class Usage(
     val completion_tokens: Int,
     val total_tokens: Int
 )
+
+data class ErrorResponse(
+    val error: ErrorDetail?
+)
+
+data class ErrorDetail(
+    val message: String?,
+    val type: String?,
+    val code: String?
+)

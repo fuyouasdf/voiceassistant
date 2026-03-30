@@ -11,3 +11,8 @@ interface LLMRepository {
      */
     suspend fun chat(message: String): Result<String>
 }
+
+/**
+ * Exception thrown when the configured LLM model does not exist
+ */
+class ModelNotFoundException(val modelName: String) : Exception("Model not found: $modelName")

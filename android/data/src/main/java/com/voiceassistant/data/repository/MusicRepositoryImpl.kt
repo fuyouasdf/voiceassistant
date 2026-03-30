@@ -31,6 +31,10 @@ class MusicRepositoryImpl(
         return jellyfinClient.getStreamUrl(songId)
     }
 
+    override suspend fun playItem(sessionId: String, itemId: String): Result<Boolean> {
+        return jellyfinClient.playItem(sessionId, itemId)
+    }
+
     private fun JellyfinSong.toDomainModel(): Song {
         return Song(
             id = id,

@@ -5,7 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -146,16 +148,19 @@ class DLNAPlayer @Inject constructor(
             return device
         }
 
-        // Start discovery and wait briefly
+        // Start discovery and wait for devices using flow-based approach
+        // DLNAManager.startDiscovery() takes ~8 seconds, so we need to wait that long
         dlnaManager.startDiscovery()
-        kotlinx.coroutines.delay(3000) // Wait for discovery
 
-        val discoveredDevices = dlnaManager.devices.value
-        if (discoveredDevices.isNotEmpty()) {
-            val device = discoveredDevices.first()
-            _currentDevice.value = device
-            Timber.d("Discovered and using DLNA device: ${device.name}")
-            return device
+        // Wait for first device from discovery, with timeout
+        val discoveredDevice = withTimeoutOrNull(10000) {
+            dlnaManager.devices.first { it.isNotEmpty() }.firstOrNull()
+        }
+
+        if (discoveredDevice != null) {
+            _currentDevice.value = discoveredDevice
+            Timber.d("Discovered and using DLNA device: ${discoveredDevice.name}")
+            return discoveredDevice
         }
 
         return null

@@ -21,10 +21,13 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Jellyfin 客户端 - 使用 Retrofit 直接调用 REST API
+ *
+ * 支持动态配置更新：通过 reload() 方法可以更新 baseUrl 和 apiKey，
+ * 使配置变更立即生效，不需要重启应用。
  */
 class JellyfinClient(
-    private val baseUrl: String,
-    private val apiKey: String = "",
+    private var baseUrl: String,
+    private var apiKey: String = "",
     private val deviceId: String = "voice-assistant-android"
 ) {
 
@@ -57,7 +60,7 @@ class JellyfinClient(
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val retrofit = Retrofit.Builder()
+    private var retrofit = Retrofit.Builder()
         .baseUrl(normalizeUrl(baseUrl))
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create(gson))
@@ -68,6 +71,27 @@ class JellyfinClient(
 
     init {
         Timber.d("JellyfinClient初始化: baseUrl=$baseUrl, apiKey=${if (apiKey.isNotEmpty()) "已设置" else "未设置"}")
+    }
+
+    /**
+     * 重新加载配置，更新 baseUrl 和 apiKey，并重建 HTTP 客户端
+     * 调用此方法后，新配置立即生效
+     */
+    fun reload(newBaseUrl: String, newApiKey: String) {
+        Timber.d("JellyfinClient.reload: newBaseUrl=$newBaseUrl")
+        baseUrl = newBaseUrl
+        apiKey = newApiKey
+
+        // 清除缓存的 userId，因为服务器变了
+        cachedUserId = null
+        cachedAccessToken = null
+
+        // 重建 HTTP 客户端
+        retrofit = Retrofit.Builder()
+            .baseUrl(normalizeUrl(baseUrl))
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
     }
 
     private fun normalizeUrl(url: String): String {
@@ -82,9 +106,6 @@ class JellyfinClient(
         return normalized
     }
 
-    /**
-     * 获取默认用户 ID
-     */
     /**
      * 获取默认用户 ID，支持自动重试
      * 当缓存的 userId 失效（服务器返回 404）时，会自动清除缓存并重新获取

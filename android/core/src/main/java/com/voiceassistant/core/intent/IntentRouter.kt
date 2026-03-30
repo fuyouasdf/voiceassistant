@@ -1,10 +1,14 @@
 package com.voiceassistant.core.intent
 
+import android.content.SharedPreferences
+import com.voiceassistant.domain.model.Intent as DomainIntent
 import com.voiceassistant.domain.model.Song
+import com.voiceassistant.domain.model.IntentType as DomainIntentType
 import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.PlayerRepository
 import com.voiceassistant.domain.repository.PlaylistRepository
+import com.voiceassistant.domain.usecase.HandleChatUseCase
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
@@ -34,16 +38,23 @@ data class Intent(
 
 /**
  * Routes voice commands to appropriate handlers
- * @param musicRepository For music playback
+ * @param musicRepository For music playback (includes playItem for Jellyfin Session API)
  * @param llmRepository For chat functionality
  * @param playerRepository For DLNA playback
+ * @param sharedPreferences For storing last used session ID
  */
 class IntentRouter @Inject constructor(
     private val musicRepository: MusicRepository?,
     private val llmRepository: LLMRepository?,
     private val playerRepository: PlayerRepository?,
-    private val playlistRepository: PlaylistRepository?
+    private val playlistRepository: PlaylistRepository?,
+    private val sharedPreferences: SharedPreferences,
+    private val handleChatUseCase: HandleChatUseCase
 ) {
+    companion object {
+        private const val PREF_LAST_SESSION_ID = "jellyfin_selected_device_id"
+    }
+
     // Play queue for next/previous functionality
     private val playQueue = mutableListOf<Song>()
     private var currentIndex: Int = -1
@@ -298,6 +309,7 @@ class IntentRouter @Inject constructor(
         }
 
         val randomSong = songs.random()
+
         val song = Song(
             id = randomSong.songId,
             title = randomSong.title,
@@ -313,7 +325,63 @@ class IntentRouter @Inject constructor(
         playQueue.add(song)
         currentIndex = 0
 
-        return playSong(musicRepo, player, song)
+        // 优先使用 Jellyfin Session API 播放
+        val sessionId = sharedPreferences.getString(PREF_LAST_SESSION_ID, null)
+        if (sessionId != null) {
+            Timber.d("playRandomFromPlaylist: trying Jellyfin Session API with sessionId=$sessionId")
+            val sessionResult = musicRepo.playItem(sessionId, randomSong.songId)
+            if (sessionResult.isSuccess) {
+                Timber.d("playRandomFromPlaylist: Jellyfin Session API success")
+                return "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+            } else {
+                Timber.w("playRandomFromPlaylist: Jellyfin Session API failed: ${sessionResult.exceptionOrNull()?.message}")
+            }
+        } else {
+            Timber.d("playRandomFromPlaylist: no saved session ID found")
+        }
+
+        // 回退到 DLNA 直接控制
+        val streamUrl = if (randomSong.streamUrl.isNotEmpty()) {
+            randomSong.streamUrl
+        } else {
+            Timber.d("playRandomFromPlaylist: streamUrl is empty, fetching from musicRepo")
+            musicRepo.getStreamUrl(randomSong.songId)
+        }
+
+        if (streamUrl.isEmpty()) {
+            Timber.e("playRandomFromPlaylist: failed to get streamUrl for songId=${randomSong.songId}")
+            return "获取播放链接失败，请检查网络或歌曲是否可用"
+        }
+
+        return playSongWithUrl(musicRepo, player, song, streamUrl)
+    }
+
+    /**
+     * Play a song with a pre-fetched stream URL
+     */
+    private suspend fun playSongWithUrl(
+        musicRepo: MusicRepository,
+        player: PlayerRepository?,
+        song: Song,
+        streamUrl: String
+    ): String {
+        return try {
+            if (player != null) {
+                val playResult = player.play(streamUrl, song.title, song.artist ?: "未知艺术家")
+                if (playResult.isSuccess) {
+                    "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+                } else {
+                    val error = playResult.exceptionOrNull()?.message ?: "播放失败"
+                    Timber.e("Play failed: $error")
+                    "播放失败：$error"
+                }
+            } else {
+                "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "playSongWithUrl failed")
+            "播放失败：${e.message ?: "未知错误"}"
+        }
     }
 
     private suspend fun handleVolume(intent: Intent): String {
@@ -451,14 +519,13 @@ class IntentRouter @Inject constructor(
     }
 
     private suspend fun handleChat(intent: Intent): String {
-        val llm = llmRepository
-        if (llm == null) {
-            return "需要联网才能聊天，请配置 LLM API"
-        }
-
-        return llm.chat(intent.query ?: "").fold(
-            onSuccess = { it },
-            onFailure = { "抱歉，聊天服务暂时不可用" }
+        val domainIntent = DomainIntent(
+            type = DomainIntentType.valueOf(intent.type.name),
+            action = intent.action,
+            query = intent.query,
+            value = intent.value,
+            song = intent.song
         )
+        return handleChatUseCase.execute(domainIntent)
     }
 }

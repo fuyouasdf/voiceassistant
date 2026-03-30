@@ -13,7 +13,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.voiceassistant.app.databinding.ActivityPlaylistBinding
+import com.voiceassistant.core.music.MusicItem
+import com.voiceassistant.core.music.MusicPlayer
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -24,6 +27,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class PlaylistActivity : AppCompatActivity() {
 
+    @Inject lateinit var musicPlayer: MusicPlayer
     private val viewModel: PlaylistViewModel by viewModels()
     private lateinit var binding: ActivityPlaylistBinding
     private lateinit var songAdapter: PlaylistAdapter
@@ -64,8 +68,16 @@ class PlaylistActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         songAdapter = PlaylistAdapter(
             onSongClick = { song ->
-                // TODO: 播放歌曲
-                Toast.makeText(this, "播放: ${song.title}", Toast.LENGTH_SHORT).show()
+                val musicItem = MusicItem(
+                    id = song.songId,
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    duration = song.duration,
+                    streamUrl = song.streamUrl,
+                    coverUrl = song.coverUrl
+                )
+                musicPlayer.play(musicItem)
             },
             onDeleteClick = { song ->
                 showDeleteSongDialog(song.songId, song.title)

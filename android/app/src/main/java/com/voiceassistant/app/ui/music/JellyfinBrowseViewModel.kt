@@ -323,13 +323,16 @@ class JellyfinBrowseViewModel @Inject constructor(
     fun addToPlaylist(playlistId: Long, song: JellyfinSong) {
         viewModelScope.launch {
             try {
+                // 获取流 URL 以便离线播放
+                val streamUrl = jellyfinClient.getStreamUrl(song.id)
+                Timber.d("addToPlaylist: song.id=${song.id}, streamUrl=$streamUrl")
                 val domainSong = Song(
                     id = song.id,
                     title = song.title,
                     artist = song.artist,
                     album = song.album,
                     duration = song.duration,
-                    url = null,
+                    url = streamUrl,
                     coverUrl = song.coverUrl
                 )
                 playlistRepository.addSongToPlaylist(playlistId, domainSong)
