@@ -25,6 +25,8 @@ object ConfigKeys {
     const val LLM_API_KEY = "llm_api_key"
     const val LLM_MODEL = "llm_model"
     const val LLM_SYSTEM_PROMPT = "llm_system_prompt"
+    const val LLM_ROUTER_PROMPT = "llm_router_prompt"
+    const val LLM_COMMAND_PROMPT = "llm_command_prompt"
 
     const val OPENCLAW_URL = "openclaw_url"
     const val OPENCLAW_TOKEN = "openclaw_token"

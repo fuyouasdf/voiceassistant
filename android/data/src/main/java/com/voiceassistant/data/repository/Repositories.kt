@@ -5,14 +5,15 @@ import com.voiceassistant.data.remote.ChatMessage
 import com.voiceassistant.data.remote.ChatRequest
 import com.voiceassistant.data.remote.ErrorResponse
 import com.voiceassistant.data.remote.LLMApi
-import com.voiceassistant.domain.model.Song
+import com.voiceassistant.domain.repository.LLMParsedIntent
 import com.voiceassistant.domain.repository.LLMRepository
+import com.voiceassistant.domain.repository.LLMRouteDecision
+import com.voiceassistant.domain.repository.LLMRouteMode
 import com.voiceassistant.domain.repository.ModelNotFoundException
-import com.voiceassistant.domain.repository.MusicRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import timber.log.Timber
-import java.security.MessageDigest
 
 /**
  * Implementation of LLMRepository
@@ -25,10 +26,39 @@ class LLMRepositoryImpl(
 ) : LLMRepository {
 
     override suspend fun chat(message: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
+        val systemPrompt = settingsRepository.getLLMSystemPrompt()
+        requestChat(message = message, systemPrompt = systemPrompt, temperature = 0.7, maxTokens = 1024)
+    }
+
+    override suspend fun routeIntent(message: String): Result<LLMRouteDecision> = withContext(Dispatchers.IO) {
+        val systemPrompt = settingsRepository.getLLMRouterPrompt()
+        requestChat(message = message, systemPrompt = systemPrompt, temperature = 0.0, maxTokens = 256).fold(
+            onSuccess = { content ->
+                parseRouteDecision(content)
+            },
+            onFailure = { Result.failure(it) }
+        )
+    }
+
+    override suspend fun parseCommandIntent(message: String): Result<LLMParsedIntent> = withContext(Dispatchers.IO) {
+        val systemPrompt = settingsRepository.getLLMCommandPrompt()
+        requestChat(message = message, systemPrompt = systemPrompt, temperature = 0.0, maxTokens = 256).fold(
+            onSuccess = { content ->
+                parseCommand(content)
+            },
+            onFailure = { Result.failure(it) }
+        )
+    }
+
+    private suspend fun requestChat(
+        message: String,
+        systemPrompt: String,
+        temperature: Double,
+        maxTokens: Int
+    ): Result<String> {
+        return try {
             // Read config from settings at runtime
             val model = settingsRepository.getLLMModel()
-            val systemPrompt = settingsRepository.getLLMSystemPrompt()
 
             val request = ChatRequest(
                 model = model,
@@ -36,8 +66,8 @@ class LLMRepositoryImpl(
                     ChatMessage(role = "system", content = systemPrompt),
                     ChatMessage(role = "user", content = message)
                 ),
-                temperature = 0.7,
-                max_tokens = 1024
+                temperature = temperature,
+                max_tokens = maxTokens
             )
 
             val response = api.chat(request)
@@ -83,5 +113,65 @@ class LLMRepositoryImpl(
             Timber.e(e, "LLM chat failed")
             Result.failure(e)
         }
+    }
+
+    private fun parseRouteDecision(content: String): Result<LLMRouteDecision> {
+        return try {
+            val json = extractJson(content)
+            val mode = when (json.optString("mode").uppercase()) {
+                "COMMAND" -> LLMRouteMode.COMMAND
+                else -> LLMRouteMode.CHAT
+            }
+            Result.success(
+                LLMRouteDecision(
+                    mode = mode,
+                    reason = json.optString("reason").ifBlank { null }
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(Exception("路由解析失败: ${e.message}", e))
+        }
+    }
+
+    private fun parseCommand(content: String): Result<LLMParsedIntent> {
+        return try {
+            val json = extractJson(content)
+            val type = json.optString("type").uppercase().ifBlank { "UNKNOWN" }
+            val action = json.optString("action").ifBlank { null }
+            val query = json.optString("query").ifBlank { null }
+            val value = if (json.has("value") && !json.isNull("value")) {
+                when (val raw = json.get("value")) {
+                    is Number -> raw.toInt()
+                    is String -> raw.toIntOrNull()
+                    else -> null
+                }
+            } else {
+                null
+            }
+            Result.success(
+                LLMParsedIntent(
+                    type = type,
+                    action = action,
+                    query = query,
+                    value = value
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(Exception("命令解析失败: ${e.message}", e))
+        }
+    }
+
+    private fun extractJson(content: String): JSONObject {
+        val trimmed = content.trim()
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            return JSONObject(trimmed)
+        }
+
+        val start = trimmed.indexOf('{')
+        val end = trimmed.lastIndexOf('}')
+        if (start >= 0 && end > start) {
+            return JSONObject(trimmed.substring(start, end + 1))
+        }
+        throw IllegalArgumentException("LLM 返回中未找到 JSON 对象")
     }
 }

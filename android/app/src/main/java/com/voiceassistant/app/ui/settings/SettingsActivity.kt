@@ -67,6 +67,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etLlmApiKey: TextInputEditText
     private lateinit var etLlmModel: TextInputEditText
     private lateinit var etLlmSystemPrompt: TextInputEditText
+    private lateinit var etLlmRouterPrompt: TextInputEditText
+    private lateinit var etLlmCommandPrompt: TextInputEditText
     private lateinit var llmStatusDot: View
     private lateinit var tvLlmOnlineStatus: TextView
     private lateinit var btnTestLlm: MaterialButton
@@ -138,6 +140,8 @@ class SettingsActivity : AppCompatActivity() {
         etLlmApiKey = findViewById(R.id.etLlmApiKey)
         etLlmModel = findViewById(R.id.etLlmModel)
         etLlmSystemPrompt = findViewById(R.id.etLlmSystemPrompt)
+        etLlmRouterPrompt = findViewById(R.id.etLlmRouterPrompt)
+        etLlmCommandPrompt = findViewById(R.id.etLlmCommandPrompt)
         llmStatusDot = findViewById(R.id.llmStatusDot)
         tvLlmOnlineStatus = findViewById(R.id.tvLlmOnlineStatus)
         btnTestLlm = findViewById(R.id.btnTestLlm)
@@ -240,6 +244,8 @@ class SettingsActivity : AppCompatActivity() {
             etLlmApiKey.setText(settingsRepository.getLLMApiKey())
             etLlmModel.setText(settingsRepository.getLLMModel())
             etLlmSystemPrompt.setText(settingsRepository.getLLMSystemPrompt())
+            etLlmRouterPrompt.setText(settingsRepository.getLLMRouterPrompt())
+            etLlmCommandPrompt.setText(settingsRepository.getLLMCommandPrompt())
 
             // Test LLM connection on load
             testLlmConnectionOnLoad()
@@ -529,6 +535,8 @@ class SettingsActivity : AppCompatActivity() {
                 settingsRepository.setLLMApiKey(etLlmApiKey.text.toString())
                 settingsRepository.setLLMModel(etLlmModel.text.toString())
                 settingsRepository.setLLMSystemPrompt(etLlmSystemPrompt.text.toString())
+                settingsRepository.setLLMRouterPrompt(etLlmRouterPrompt.text.toString())
+                settingsRepository.setLLMCommandPrompt(etLlmCommandPrompt.text.toString())
 
                 // Save Voice Settings
                 settingsRepository.setWakeSensitivity(sliderWakeSensitivity.value)

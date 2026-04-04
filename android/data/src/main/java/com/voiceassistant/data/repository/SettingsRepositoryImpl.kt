@@ -16,6 +16,33 @@ private const val DEFAULT_SYSTEM_PROMPT = """你的默认身份是家居场景�
 - 不使用复杂符号、表格或大段文本
 - 除非用户要求，否则不展开专业分析"""
 
+private const val DEFAULT_ROUTER_PROMPT = """你是语音助手路由器，只做模式判断。
+根据用户输入，判断 mode：
+- COMMAND: 需要执行设备/音乐/音量控制
+- CHAT: 普通问答、闲聊、解释
+
+必须只输出 JSON，不要输出其它内容。
+输出格式：
+{"mode":"COMMAND|CHAT","reason":"简短中文原因"}"""
+
+private const val DEFAULT_COMMAND_PROMPT = """你是语音助手命令解析器。
+把用户输入解析成结构化命令，仅输出 JSON，不要解释。
+
+type 只能是：MUSIC, VOLUME, DEVICE, QUERY, UNKNOWN
+action 参考：
+- MUSIC: play, pause, resume, next, previous, stop
+- VOLUME: set, up, down, mute
+- DEVICE: on, off, toggle
+- QUERY: ask
+- UNKNOWN: null
+
+字段说明：
+- query: 播放搜索词或查询内容
+- value: 音量值(0-100)或增减值
+
+输出格式：
+{"type":"MUSIC|VOLUME|DEVICE|QUERY|UNKNOWN","action":"...","query":"...","value":10}"""
+
 // Default wake words in format "keyword:response"
 private val DEFAULT_WAKE_WORDS = listOf(
     "小爱同学:我在",
@@ -62,8 +89,15 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setLLMApiKey(key: String) = setString(ConfigKeys.LLM_API_KEY, key)
     override suspend fun getLLMModel(): String = getString(ConfigKeys.LLM_MODEL, "deepseek-chat")
     override suspend fun setLLMModel(model: String) = setString(ConfigKeys.LLM_MODEL, model)
-    override suspend fun getLLMSystemPrompt(): String = getString(ConfigKeys.LLM_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT)
+    override suspend fun getLLMSystemPrompt(): String =
+        getString(ConfigKeys.LLM_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT).ifBlank { DEFAULT_SYSTEM_PROMPT }
     override suspend fun setLLMSystemPrompt(prompt: String) = setString(ConfigKeys.LLM_SYSTEM_PROMPT, prompt)
+    override suspend fun getLLMRouterPrompt(): String =
+        getString(ConfigKeys.LLM_ROUTER_PROMPT, DEFAULT_ROUTER_PROMPT).ifBlank { DEFAULT_ROUTER_PROMPT }
+    override suspend fun setLLMRouterPrompt(prompt: String) = setString(ConfigKeys.LLM_ROUTER_PROMPT, prompt)
+    override suspend fun getLLMCommandPrompt(): String =
+        getString(ConfigKeys.LLM_COMMAND_PROMPT, DEFAULT_COMMAND_PROMPT).ifBlank { DEFAULT_COMMAND_PROMPT }
+    override suspend fun setLLMCommandPrompt(prompt: String) = setString(ConfigKeys.LLM_COMMAND_PROMPT, prompt)
 
     // Voice Settings
     override suspend fun getWakeSensitivity(): Float = getString(ConfigKeys.WAKE_SENSITIVITY, "0.5").toFloatOrNull() ?: 0.5f
@@ -114,6 +148,10 @@ interface SettingsRepository {
     suspend fun setLLMModel(model: String)
     suspend fun getLLMSystemPrompt(): String
     suspend fun setLLMSystemPrompt(prompt: String)
+    suspend fun getLLMRouterPrompt(): String
+    suspend fun setLLMRouterPrompt(prompt: String)
+    suspend fun getLLMCommandPrompt(): String
+    suspend fun setLLMCommandPrompt(prompt: String)
 
     // Voice Settings
     suspend fun getWakeSensitivity(): Float

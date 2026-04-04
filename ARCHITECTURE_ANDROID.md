@@ -332,6 +332,23 @@ Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传�
   - 最近触发词、触发时间、触发置信度
 - 诊断数据由 `VoicePipeline.getKwsDiagnostics()` 提供，便于快速判断“模型已加载但未触发”与“初始化失败”这两类问题。
 
+## LLM 双通道意图协同（2026-04）
+
+- `IntentRouter.handle(text)` 采用混合路由：
+  - 本地快速规则先处理高确定性控制指令（`MUSIC/VOLUME/DEVICE`）。
+  - 其余输入交给 LLM 路由为 `CHAT` 或 `COMMAND`。
+  - `COMMAND` 模式下，LLM 再输出结构化 JSON，由 `IntentRouter` 转换为内部 `Intent` 并执行。
+  - `CHAT` 模式下走普通助手对话回复。
+- 设置页新增 3 套可配置提示词（都有默认值）：
+  - 助手提示词：`llm_system_prompt`
+  - 路由提示词：`llm_router_prompt`
+  - 命令解析提示词：`llm_command_prompt`
+- `LLMRepository` 新增：
+  - `routeIntent(message)`：返回 `CHAT/COMMAND`
+  - `parseCommandIntent(message)`：返回结构化命令（`type/action/query/value`）
+- 解析层容错：
+  - 允许 LLM 返回包含附加文本，仓库层会抽取首个 JSON 对象再解析，避免因格式噪音直接失败。
+
 ---
 
 ## 核心组件代码

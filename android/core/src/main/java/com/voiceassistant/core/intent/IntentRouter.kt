@@ -6,6 +6,7 @@ import com.voiceassistant.domain.model.Song
 import com.voiceassistant.domain.model.IntentType as DomainIntentType
 import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.LLMRepository
+import com.voiceassistant.domain.repository.LLMRouteMode
 import com.voiceassistant.domain.repository.PlaylistRepository
 import com.voiceassistant.domain.usecase.HandleChatUseCase
 import kotlinx.coroutines.flow.first
@@ -87,8 +88,95 @@ class IntentRouter @Inject constructor(
      * This is a suspend function that handles actual operations
      */
     suspend fun handle(text: String): String {
-        val intent = parse(text)
-        return handleIntent(intent)
+        val normalizedText = text.trim()
+        if (normalizedText.isEmpty()) {
+            return "没听懂，请再说一遍"
+        }
+
+        // Fast local path for deterministic commands
+        val localIntent = parse(normalizedText)
+        if (shouldUseLocalIntent(localIntent)) {
+            return handleIntent(localIntent)
+        }
+
+        val llm = llmRepository
+        if (llm == null) {
+            return handleIntent(localIntent)
+        }
+
+        val routedMode = llm.routeIntent(normalizedText).fold(
+            onSuccess = { it.mode },
+            onFailure = {
+                Timber.w(it, "LLM routing failed, fallback to local intent")
+                return@fold null
+            }
+        )
+
+        if (routedMode == null) {
+            return handleIntent(localIntent)
+        }
+
+        if (routedMode == LLMRouteMode.CHAT) {
+            return handleChat(Intent(IntentType.CHAT, query = normalizedText))
+        }
+
+        val llmIntent = llm.parseCommandIntent(normalizedText).fold(
+            onSuccess = { toIntent(it, normalizedText) },
+            onFailure = {
+                Timber.w(it, "LLM command parsing failed, fallback to local intent")
+                localIntent
+            }
+        )
+
+        return if (llmIntent.type == IntentType.UNKNOWN) {
+            handleChat(Intent(IntentType.CHAT, query = normalizedText))
+        } else {
+            handleIntent(llmIntent)
+        }
+    }
+
+    private fun shouldUseLocalIntent(intent: Intent): Boolean {
+        return intent.type == IntentType.MUSIC ||
+            intent.type == IntentType.VOLUME ||
+            intent.type == IntentType.DEVICE
+    }
+
+    private fun toIntent(parsed: com.voiceassistant.domain.repository.LLMParsedIntent, originalText: String): Intent {
+        val type = try {
+            IntentType.valueOf(parsed.type)
+        } catch (_: IllegalArgumentException) {
+            IntentType.UNKNOWN
+        }
+
+        return when (type) {
+            IntentType.MUSIC -> Intent(
+                type = IntentType.MUSIC,
+                action = parsed.action ?: "play",
+                query = parsed.query
+            )
+            IntentType.VOLUME -> Intent(
+                type = IntentType.VOLUME,
+                action = parsed.action ?: "set",
+                value = parsed.value
+            )
+            IntentType.DEVICE -> Intent(
+                type = IntentType.DEVICE,
+                action = parsed.action ?: "toggle"
+            )
+            IntentType.QUERY -> Intent(
+                type = IntentType.QUERY,
+                action = parsed.action ?: "ask",
+                query = parsed.query ?: originalText
+            )
+            IntentType.CHAT -> Intent(
+                type = IntentType.CHAT,
+                query = parsed.query ?: originalText
+            )
+            IntentType.UNKNOWN -> Intent(
+                type = IntentType.UNKNOWN,
+                query = parsed.query ?: originalText
+            )
+        }
     }
 
     /**
