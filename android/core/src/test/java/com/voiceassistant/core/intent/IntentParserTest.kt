@@ -100,6 +100,13 @@ class IntentParserTest {
     }
 
     @Test
+    fun `parse music - 停止播放`() {
+        val result = parser.parse("停止播放")
+        assertEquals(IntentType.MUSIC, result.type)
+        assertEquals("stop", result.action)
+    }
+
+    @Test
     fun `parse music - 听歌`() {
         val result = parser.parse("听歌")
         assertEquals(IntentType.MUSIC, result.type)

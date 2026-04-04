@@ -114,15 +114,15 @@ class IntentRouter @Inject constructor(
 
     private fun parseMusicIntent(text: String): Intent {
         return when {
-            text.contains("播放") || text.contains("来一首") || text.contains("放歌") -> {
-                val query = text.replace(Regex("(播放|来一首|放一首|放歌|听|我想听)"), "").trim()
-                Intent(IntentType.MUSIC, action = "play", query = query)
-            }
+            text.contains("停止") -> Intent(IntentType.MUSIC, action = "stop")
             text.contains("暂停") -> Intent(IntentType.MUSIC, action = "pause")
             text.contains("继续") -> Intent(IntentType.MUSIC, action = "resume")
             text.contains("下一首") || text.contains("换一首") || text.contains("切歌") -> Intent(IntentType.MUSIC, action = "next")
             text.contains("上一首") -> Intent(IntentType.MUSIC, action = "previous")
-            text.contains("停止") -> Intent(IntentType.MUSIC, action = "stop")
+            text.contains("播放") || text.contains("来一首") || text.contains("放歌") -> {
+                val query = text.replace(Regex("(播放|来一首|放一首|放歌|听|我想听)"), "").trim()
+                Intent(IntentType.MUSIC, action = "play", query = query)
+            }
             else -> Intent(IntentType.MUSIC, action = "play")
         }
     }
