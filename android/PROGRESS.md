@@ -1,91 +1,53 @@
 # 项目进度报告
 
 ## 当前版本
-**版本**: 1.3
-**日期**: 2026-03-22
-**minSdk**: 23 (Android 6.0)
-**targetSdk**: 34
-**Sherpa-ONNX**: v1.12.32 (最新)
+**版本**: 1.4  
+**日期**: 2026-04-04  
+**minSdk**: 26 (Android 8.0)  
+**targetSdk**: 35  
+**compileSdk**: 36  
+**Sherpa-ONNX**: 本地模块集成（`sherpa-onnx-aar:sherpa_onnx`）
+
+---
+
+## 构建与测试基线（2026-04-04）
+
+| 检查项 | 结果 | 备注 |
+|------|------|------|
+| `:app:assembleDebug` | ✅ 通过 | 调试包可编译 |
+| `:core:testDebugUnitTest` | ✅ 通过 | 现有 core 单测通过 |
+| `:domain:testDebugUnitTest` | ✅ 通过 | 当前为 `NO-SOURCE` |
 
 ---
 
 ## 已完成模块
 
 ### 1. app 模块 ✅
-- VoiceAssistantApp (Application)
-- VoiceAssistantService (前台服务)
-- MainActivity + 布局
-- ModelDownloadActivity (模型初始化)
-- AndroidManifest (权限 + 服务声明)
-- AppModule (Hilt 依赖注入)
-- ModelInitializer (从 assets 复制模型)
-- ModelInfo / ModelType / ModelStatus
+- `VoiceAssistantApp`（应用初始化）
+- `VoiceAssistantService`（前台服务）
+- `MainActivity`（主界面与状态展示）
+- `SettingsActivity`（Jellyfin/LLM/语音参数配置）
+- `AppModule`（Hilt 依赖注入）
 
 ### 2. core 模块 ✅
-- VoicePipeline (状态机 + AudioPlayer 集成)
-- PipelineState (6 种状态)
-- AudioCapture (API 23/26 兼容)
-- AudioPlayer (TTS 音频播放) ⭐ 新增
-- SherpaKWS / SherpaASR / SherpaVAD / SherpaTTS (完整实现)
-- IntentRouter (支持 Music/LLM) ⭐ 更新
+- `VoicePipeline`（状态机 + 管线编排）
+- `PipelineState`（含 `INITIALIZING` 与 `WAKEWORD_DETECTED`）
+- `AudioCapture`（16kHz、mono、PCM_FLOAT）
+- `AudioPlayer`（FloatArray -> PCM_16BIT 播放）
+- Sherpa KWS / VAD / ASR / TTS 实现
+- `IntentRouter`（音乐、问答、闲聊、音量、设备意图）
 
 ### 3. data 模块 ✅
-- AppDatabase (Room)
-- ConfigEntity + ConfigDao
-- SettingsRepositoryImpl
-- NavidromeApi (Retrofit)
-- LLMApi (DeepSeek API) ⭐ 新增
-- MusicRepositoryImpl ⭐ 新增
-- LLMRepositoryImpl ⭐ 新增
+- `AppDatabase`（Room，版本 3）
+- `SettingsRepositoryImpl`（配置持久化）
+- `PlaylistRepositoryImpl`（播放列表 JSON 持久化）
+- `JellyfinClient`（检索、流地址、播放上报）
+- `LLMApi` + `LLMRepositoryImpl`
 
 ### 4. domain 模块 ✅
-- ConfigModels
-- StartVoicePipelineUseCase
-- MusicRepository 接口 ⭐ 新增
-- LLMRepository 接口 ⭐ 新增
-
----
-
-## 项目结构
-```
-android/
-├── app/          # UI + Service + 模型初始化
-├── core/         # 语音管道核心
-├── data/         # 数据层
-├── domain/       # 领域层
-└── build.gradle  # 根构建
-```
-
----
-
-## 本次更新 (v1.2)
-
-### 新增功能 ✅
-
-1. **AudioPlayer** - TTS 音频播放
-   - 文件: `core/audio/AudioPlayer.kt`
-   - 使用 AudioTrack 流式播放 FloatArray 音频
-   - 支持暂停/停止
-
-2. **Silero VAD** - 端点检测
-   - 文件: `core/sherpa/SherpaVADImpl.kt`
-   - 优先尝试加载 Silero VAD 模型
-   - 降级到能量阈值检测（备选方案）
-
-3. **MusicRepository** - Navidrome 音乐服务
-   - 文件: `data/repository/Repositories.kt`
-   - 搜索歌曲
-   - 获取播放 URL
-
-4. **LLMRepository** - 智能对话
-   - 文件: `data/repository/Repositories.kt`
-   - 接入 DeepSeek API
-   - 支持系统提示词
-
-5. **IntentRouter 更新** - 实际执行功能
-   - 调用 Navidrome API 搜索歌曲
-   - 调用 LLM API 进行对话
-   - 支持 MUSIC/QUERY/CHAT 意图处理
+- 领域模型（Intent / Song / Playlist）
+- Repository 接口定义
+- UseCase 集合（聊天、音乐、设备、音量等）
 
 ---
 
@@ -93,31 +55,20 @@ android/
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| 模型初始化 | ✅ 完成 | 从 assets 复制，无需下载 |
-| 语音管道 | ✅ 完成 | 6 状态流转正常 |
-| 唤醒词检测 | ✅ 完成 | 8 个唤醒词可用 |
-| 语音识别 | ✅ 完成 | Sherpa ASR 集成 |
-| 语音合成 | ✅ 完成 | Sherpa TTS 集成 |
-| TTS 播放 | ✅ 完成 | AudioPlayer 流式播放 |
-| VAD 端点检测 | ✅ 完成 | Silero VAD + 能量阈值 |
-| 意图路由 | ✅ 完成 | 音乐搜索 + LLM 对话 |
-| Navidrome 音乐 | ✅ 完成 | 搜索歌曲获取 URL |
-| LLM 对话 | ⚠️ 待配置 | 需要 API 密钥 |
-| DLNA 控制 | ⏸️ 待实现 | 需要 DLNA 库 |
+| 模型初始化 | ✅ 完成 | 模型随仓库 assets 提供 |
+| 语音管道状态流转 | ✅ 完成 | 初始化/唤醒/录音/识别/播报 |
+| 唤醒词检测 | ✅ 完成 | 支持动态唤醒词与灵敏度 |
+| 语音识别 | ✅ 完成 | Sherpa 流式 ASR |
+| 语音合成 | ✅ 完成 | Sherpa TTS + PCM16 播放 |
+| 意图路由 | ✅ 完成 | 音乐与 LLM 问答链路打通 |
+| Jellyfin 控制 | ✅ 完成 | 搜索、流地址、会话上报 |
+| DLNA 播放 | ⚠️ 进行中 | 依赖设备环境验证 |
+| 自动化测试覆盖 | ⚠️ 不足 | 仅 core 有少量单测 |
 
 ---
 
-## 技术栈
-- Kotlin 1.9.20
-- Hilt 2.50 (DI)
-- Room 2.6 (DB)
-- Retrofit 2.9 (HTTP)
-- Sherpa-ONNX (语音识别/合成)
-- ConstraintLayout (UI)
+## 近期重点
 
----
-
-## 下一步计划
-1. 配置 LLM API 密钥
-2. 实现 DLNA 设备控制
-3. 测试完整语音交互流程
+1. 提升测试覆盖（`data` 与 `app` 关键路径）
+2. 继续验证 DLNA 多设备兼容性
+3. 提升配置异常场景的用户提示质量

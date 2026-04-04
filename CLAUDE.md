@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-Voice Assistant - 将旧 Android 手机变成离线语音控制中枢，支持多模型 API 接入、Navidrome/DLNA 音乐控制。
+Voice Assistant - 将旧 Android 手机变成离线语音控制中枢，支持多模型 API 接入、Jellyfin/DLNA 音乐控制。
 
 **技术栈**: Kotlin + MVVM + Clean Architecture + Sherpa-ONNX + Hilt
-**minSdk**: 26 | **targetSdk**: 34
+**minSdk**: 26 | **targetSdk**: 35 | **compileSdk**: 36
 
 ---
 
@@ -24,9 +24,6 @@ cd android
 
 # 安装到设备
 ./gradlew installDebug
-
-# 下载模型文件 (首次构建前必须)
-./gradlew :app:downloadModels
 
 # 构建 Sherpa-ONNX AAR (需要 NDK/CMake)
 ./gradlew :sherpa-onnx-aar:sherpa_onnx:assembleRelease
@@ -46,14 +43,13 @@ voice-assistant/
 ├── core/             # 语音管道核心 (KWS/VAD/ASR/TTS)
 ├── data/             # 数据层 (Room/Retrofit/Jellyfin)
 ├── domain/           # 领域层 (UseCases/Repository接口)
-├── sherpa-onnx-aar/  # Sherpa-ONNX 本地 AAR 模块 (语音部分参考)
-└── jellyfin-android/ # Jellyfin Android SDK (经过验证，直接使用)
+└── sherpa-onnx-aar/  # Sherpa-ONNX 本地 AAR 模块 (语音部分参考)
 ```
 
 ---
 
 ## 代码优先级 (重要)
-Room 数据库 schema 变了，需要增加版本号。
+Room 数据库 schema 变更时，必须同步增加版本号并补 migration。
 ### sherpa-onnx-aar/ - 语音部分参考
 
 `android/sherpa-onnx-aar/` 目录包含 **Sherpa-ONNX 本地库**，语音管道部分可参考：
@@ -71,7 +67,7 @@ Room 数据库 schema 变了，需要增加版本号。
 
 ## 关键路径
 
-- 模型目录: `android/app/src/main/assets/models/`
+- 模型目录: `android/app/src/main/assets/`
 - 主服务: `VoiceAssistantService.kt`
 - 管道控制器: `VoicePipeline.kt`
 - 音频捕获: `AudioCapture.kt` (16kHz, mono, PCM_FLOAT)
@@ -83,7 +79,7 @@ Room 数据库 schema 变了，需要增加版本号。
 ### 语音管道状态机
 
 ```
-IDLE → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → IDLE
+INITIALIZING → IDLE → WAKEWORD_DETECTED → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → IDLE
 ```
 
 **核心组件**:

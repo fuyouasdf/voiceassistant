@@ -256,9 +256,11 @@ Headers:
 
 #### 播放流程
 1. 用户选择歌曲 → MusicViewModel.playSong()
-2. JellyfinClient.getStreamUrl(songId) 获取流地址
-3. MusicPlayer 播放音频流
+2. 使用 Jellyfin Session API（`playItem(sessionId, songId)`）投放到已选设备
+3. 播放/暂停/继续/停止/上一首/下一首/音量统一通过同一 `sessionId` 调用 Session 命令
 4. UI 通过 StateFlow 观察播放状态
+
+语音指令与文本指令（`IntentRouter`）与手动点击播放统一走 Session API，不再回退 DLNA SOAP 控制，避免 `Failed to get control URL`。
 
 ### 音乐库浏览
 支持多级浏览：
@@ -308,6 +310,27 @@ val url = "$baseUrl/Audio/$songId/stream?$apiKeyParam&Container=mp4&AudioCodec=a
 
 #### 3. mediaSourceId 必须移除 dashes
 Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传递无 dashes 的 ID
+
+---
+
+## 首页状态指示逻辑
+
+- 首页顶部 `statusDot/tvStatus` 表示 **LLM 实际连通性**，不再由语音管道状态（IDLE/LISTENING/THINKING）驱动。
+- `MainActivity.testLlmConnection()` 在 `onResume` 和页面初始化时执行：
+  - 未配置（URL/API Key 为空）=> `LLM: 未配置` + 离线指示。
+  - 已配置 => 发起一次真实 LLM 请求探测，成功显示 `LLM: 已连接`，失败显示 `LLM: 未连接`。
+- 首页前台期间每 30 秒自动轮询一次 LLM 连通状态；页面进入后台时停止轮询。
+- 麦克风权限被拒绝仅影响语音功能，不再覆盖 LLM 在线状态指示。
+
+## 设置页 KWS 自检
+
+- 设置页新增 `KWS 自检` 按钮，显示当前 KWS 运行诊断：
+  - 是否已初始化 (`isInitialized`)
+  - 是否已启动 (`isStarted`)
+  - 是否初始化失败 (`initFailed`)
+  - 当前阈值 (`currentThreshold`)
+  - 最近触发词、触发时间、触发置信度
+- 诊断数据由 `VoicePipeline.getKwsDiagnostics()` 提供，便于快速判断“模型已加载但未触发”与“初始化失败”这两类问题。
 
 ---
 

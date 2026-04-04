@@ -37,7 +37,10 @@ import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
 import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -96,12 +99,14 @@ class MainActivity : AppCompatActivity() {
     // State
     private var lastRecognizedText = ""
     private var lastResponseText = ""
+    private var llmConnectionCheckJob: Job? = null
+    private var llmStatusPollingJob: Job? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.RECORD_AUDIO] != true) {
-            updateStatus(false)
+            Toast.makeText(this, "未授予麦克风权限，语音功能不可用", Toast.LENGTH_SHORT).show()
         } else {
             startVoiceService()
         }
@@ -126,6 +131,17 @@ class MainActivity : AppCompatActivity() {
         // 每次返回主页时重新检测 LLM 和 Jellyfin 连接状态
         testLlmConnection()
         testJellyfinConnection()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        startLlmStatusPolling()
+    }
+
+    override fun onStop() {
+        llmStatusPollingJob?.cancel()
+        llmStatusPollingJob = null
+        super.onStop()
     }
 
     private fun initViews() {
@@ -295,7 +311,6 @@ class MainActivity : AppCompatActivity() {
                     PipelineState.IDLE -> {
                         resetUI()
                         stopAsrPulseAnimation()
-                        updateStatus(true)
                         // Show toast if init failed (message indicates failure)
                         if (message?.contains("暂不可用") == true || message?.contains("初始化") == true) {
                             Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
@@ -351,8 +366,6 @@ class MainActivity : AppCompatActivity() {
                         else -> {}
                     }
                 }
-
-                updateStatus(state != PipelineState.IDLE || lastRecognizedText.isNotBlank())
             } catch (e: Exception) {
                 Timber.e(e, "Error updating UI for state $state")
             }
@@ -553,11 +566,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startVoiceService() {
-        val intent = Intent(this, VoiceAssistantService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
+        if (!VoiceAssistantService.isServiceRunning) {
+            val intent = Intent(this, VoiceAssistantService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
         } else {
-            startService(intent)
+            Timber.d("VoiceAssistantService already running, skip duplicate start")
         }
 
         // Start KWS listening for wake word detection
@@ -574,11 +591,34 @@ class MainActivity : AppCompatActivity() {
         val llmConfigured = configHolder.llmBaseUrl.isNotEmpty() && configHolder.llmApiKey.isNotEmpty()
         if (!llmConfigured) {
             tvProvider.text = "LLM: 未配置"
+            updateStatus(false)
             return
         }
 
-        tvProvider.text = "LLM: 已配置"
-        updateStatus(true) // LLM 配置时更新主页状态为在线
+        tvProvider.text = "LLM: 检测中..."
+        llmConnectionCheckJob?.cancel()
+        llmConnectionCheckJob = lifecycleScope.launch {
+            try {
+                val result = llmRepository.chat("ping")
+                val isOnline = result.isSuccess
+                tvProvider.text = if (isOnline) "LLM: 已连接" else "LLM: 未连接"
+                updateStatus(isOnline)
+            } catch (e: Exception) {
+                Timber.e(e, "LLM connection test failed")
+                tvProvider.text = "LLM: 未连接"
+                updateStatus(false)
+            }
+        }
+    }
+
+    private fun startLlmStatusPolling() {
+        llmStatusPollingJob?.cancel()
+        llmStatusPollingJob = lifecycleScope.launch {
+            while (isActive) {
+                testLlmConnection()
+                delay(30_000)
+            }
+        }
     }
 
     /**

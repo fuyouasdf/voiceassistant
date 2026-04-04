@@ -180,14 +180,41 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
      */
     private fun extractConfidence(result: KeywordSpotterResult): Float {
         return try {
-            // Sherpa's KeywordSpotterResult may have 'prob' or 'score' field
-            // Use reflection to try to extract it
-            val probField = result.javaClass.getDeclaredField("prob")
-            probField.isAccessible = true
-            (probField.get(result) as? Number)?.toFloat() ?: 0.5f
+            // Sherpa's KeywordSpotterResult structure may vary across versions.
+            // Try field first.
+            val fieldNames = listOf("prob", "score", "confidence")
+            for (name in fieldNames) {
+                try {
+                    val field = result.javaClass.getDeclaredField(name)
+                    field.isAccessible = true
+                    val value = (field.get(result) as? Number)?.toFloat()
+                    if (value != null && value > 0f) {
+                        return value.coerceIn(0f, 1f)
+                    }
+                } catch (_: Exception) {
+                    // Try next candidate
+                }
+            }
+
+            // Then try getter methods.
+            val methodNames = listOf("getProb", "getScore", "getConfidence")
+            for (name in methodNames) {
+                try {
+                    val method = result.javaClass.getMethod(name)
+                    val value = (method.invoke(result) as? Number)?.toFloat()
+                    if (value != null && value > 0f) {
+                        return value.coerceIn(0f, 1f)
+                    }
+                } catch (_: Exception) {
+                    // Try next candidate
+                }
+            }
+
+            // If confidence is unavailable, avoid false negative blocking in upper layers.
+            1.0f
         } catch (e: Exception) {
-            // If we can't extract, return a default
-            0.5f
+            // If we can't extract, return a permissive default.
+            1.0f
         }
     }
 

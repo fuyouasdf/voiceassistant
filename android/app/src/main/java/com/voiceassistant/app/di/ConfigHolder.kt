@@ -16,9 +16,9 @@ class ConfigHolder @Inject constructor() {
     // Cached values updated on app start
     var jellyfinUrl: String = ""
     var jellyfinApiKey: String = ""
-    var llmBaseUrl: String = "http://192.168.31.244:20034"
-    var llmApiKey: String = "sk-lm-gqABXq7E:Gi6jm1G0BCyrVhhHcTEl"
-    var llmModel: String = "unsloth/Qwen3.5-35B-A3B-no"
+    var llmBaseUrl: String = ""
+    var llmApiKey: String = ""
+    var llmModel: String = "deepseek-chat"
     var ttsEnabled: Boolean = true
     var wakeSensitivity: Float = 0.5f  // 唤醒灵敏度，默认 0.5
     var wakeWords: List<WakeWord> = emptyList()  // 唤醒词列表

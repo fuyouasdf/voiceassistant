@@ -267,8 +267,8 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
 - 从 assets 复制到内部存储使用
 
 ### 6.2 ASR 模型
-- 目录: `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/`
-- 必含文件: encoder-epoch-99-avg-1.int8.onnx, decoder-epoch-99-avg-1.onnx, joiner-epoch-99-avg-1.onnx, tokens.txt
+- 目录: `sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30/`
+- 必含文件: encoder.int8.onnx, decoder.onnx, joiner.int8.onnx, tokens.txt
 - 直接从 assets 加载
 
 ### 6.3 VAD 模型
@@ -286,9 +286,6 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
 
 ```bash
 cd android
-
-# 下载语音模型（约 298 MB）
-./gradlew :app:downloadModels
 
 # 构建 AAR（如尚未构建）
 ./gradlew :sherpa-onnx-aar:sherpa_onnx:assembleRelease

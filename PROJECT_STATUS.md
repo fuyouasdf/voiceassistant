@@ -2,11 +2,24 @@
 
 ## 更新记录
 
-### 2026-03-22: Sherpa-ONNX 更新到 v1.12.32 ✅
-- 下载了最新的 AAR 文件
-- 更新 `app/libs/sherpa-onnx-android.aar`
-- 更新 `core/libs/sherpa-onnx-android.aar`
-- 构建验证成功
+### 2026-04-04: 文档与构建基线同步 ✅
+- 确认 `:app:assembleDebug` 构建成功
+- 确认 `:core:testDebugUnitTest` 通过
+- 同步文档中的 SDK 与模型说明（移除 `downloadModels` 旧描述）
+
+### 2026-04-04: 默认敏感配置清理 ✅
+- 清理默认 LLM Base URL（改为空）
+- 清理默认 LLM API Key（改为空）
+- 默认模型改为通用值 `deepseek-chat`
+
+### 2026-04-04: 前台服务启动入口收敛 ✅
+- 移除 `VoiceAssistantApp` 中的服务自动拉起
+- 保留 `MainActivity` 作为服务启动入口
+- 增加“服务已运行则跳过重复启动”保护逻辑
+
+### 2026-04-04: VoicePipeline 启动幂等优化 ✅
+- `VoicePipeline.start()` 增加重复调用保护
+- 初始化失败/超时场景下可恢复为可重试状态
 
 ## 当前状态
 
@@ -15,29 +28,13 @@
 | 应用启动 | ✅ 正常 | BUILD SUCCESSFUL |
 | UI 界面 | ✅ 正常 | - |
 | KWS 唤醒 | ✅ 正常 | sherpa-onnx-kws-zipformer |
-| VAD 端点检测 | ✅ 正常 | Silero VAD |
-| ASR 语音识别 | ⚠️ 待测试 | 需要验证元数据问题 |
-| TTS 语音合成 | ⚠️ 待测试 | vits-piper 模型 |
-
-## ASR 元数据问题 (待解决)
-
-**现象**: 日志警告
-```
-'window_size' does not exist in the metadata
-'encoder_output_size' does not exist in the metadata
-```
-
-**分析**:
-- 代码使用 `OnlineTransducerModelConfig` + `modelType = "zipformer"`
-- 模型文件: `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20`
-- 错误中的字段 (`window_size`, `encoder_output_size`) 是 **Paraformer** 模型专用的
-- 可能原因: 模型文件元数据不完整，或库版本验证变化
-
-**建议解决方案**:
-1. 重新下载官方模型文件
-2. 或使用 Paraformer 模型替代
+| VAD 端点检测 | ✅ 正常 | Silero VAD + 兜底能量阈值 |
+| ASR 语音识别 | ✅ 正常 | streaming zipformer zh int8 |
+| TTS 语音合成 | ✅ 正常 | vits-piper-zh_CN-huayan-medium |
+| Jellyfin 音乐 | ✅ 正常 | 搜索/浏览/播放链路可用 |
+| DLNA 控制 | ⚠️ 联调中 | 需实机设备验证稳定性 |
 
 ## 下一步
-1. 安装应用到设备测试
-2. 验证 ASR 识别是否正常工作
-3. 如仍有问题，重新下载 ASR 模型文件
+1. 补齐 `domain`/`data` 模块测试覆盖
+2. 完成 DLNA 多设备稳定性联调
+3. 继续完善异常提示与可观测性日志

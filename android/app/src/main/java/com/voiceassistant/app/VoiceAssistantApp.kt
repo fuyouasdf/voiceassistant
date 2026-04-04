@@ -1,13 +1,9 @@
 package com.voiceassistant.app
 
 import android.app.Application
-import android.content.Intent
-import android.os.Build
 import com.voiceassistant.app.di.ConfigHolder
-import com.voiceassistant.app.service.VoiceAssistantService
 import com.voiceassistant.data.repository.SettingsRepository
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -31,14 +27,6 @@ class VoiceAssistantApp : Application() {
         // Load config from database to ConfigHolder for runtime use
         configHolder.settingsRepository = settingsRepository
         configHolder.reload()
-
-        // Start background service
-        val intent = Intent(this, VoiceAssistantService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
 
         Timber.d("VoiceAssistantApp started, config loaded: jellyfin=${configHolder.jellyfinUrl}, llm=${configHolder.llmBaseUrl}")
     }

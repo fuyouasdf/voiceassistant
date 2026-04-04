@@ -110,6 +110,18 @@
 | `THINKING` | 意图路由（本地规则） | `SPEAKING`, `IDLE`(打断) |
 | `SPEAKING` | TTS播报 | `IDLE`, `LISTENING`(打断) |
 
+### 初始化就绪判定
+
+- `start()` 的“核心就绪”判定以 **KWS 初始化成功** 为准，避免在 VAD/StatefulVAD 尚在初始化时误报“初始化超时”。
+- `start()` 在进入待机前会等待核心初始化最多 **30 秒**（`delay(100ms) * 300`），超时后返回“初始化超时，请重试”。
+- VAD 与 StatefulVAD 属于增强能力，继续在后台完成初始化；其失败不会阻断唤醒待机进入 `IDLE`。
+
+### 录音结束策略
+
+- `RECORDING` 阶段优先使用 `StatefulVad` 进行端点检测：检测到“语音结束”后立即进入 `RECOGNIZING`。
+- 保留“最大录音时长”作为兜底，防止极端环境下无法检测端点导致长时间不返回。
+- 唤醒词触发后会清空 pre-wake 缓冲，避免唤醒词本身被带入 ASR 文本。
+
 ---
 
 ## 核心类设计
@@ -1041,6 +1053,33 @@ tts:
   model: "piper-zh_CN-huayan-medium"
   speed: 1.0
 ```
+
+---
+
+## 唤醒灵敏度优化（2026-04-04）
+
+### 1. 灵敏度语义统一
+
+- UI 暴露 `wakeSensitivity`（0.0~1.0），语义为“数值越大越灵敏”。
+- 运行时映射为 KWS 阈值：`threshold = 0.85 - sensitivity * 0.7`，并限制到 `[0.15, 0.85]`。
+- 目的：避免过去“数值越大越迟钝”的反直觉行为，同时避免极端阈值。
+
+### 2. 保存后立即生效
+
+- 设置页保存后调用 `VoicePipeline.applyWakeSensitivity()`，不再依赖重启语音管线。
+- `ConfigHolder.reload()` 后可直接热更新 KWS 阈值。
+
+### 3. 检测链路恢复二次过滤
+
+- KWS 原始结果不再直接触发。
+- 现在统一经过 `WakeWordDetector.process()`，启用：
+  - 阈值过滤
+  - cooldown 防抖（防止短时间重复触发）
+
+### 4. 唤醒词热重载与阈值一致
+
+- `reloadWakeWords()` 时显式传入当前灵敏度映射阈值。
+- 保证“换唤醒词”不会覆盖或丢失当前灵敏度配置。
 
 ---
 

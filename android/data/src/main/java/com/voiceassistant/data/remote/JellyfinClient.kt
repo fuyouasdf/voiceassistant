@@ -1145,6 +1145,15 @@ class JellyfinClient(
      * 上一曲
      */
     suspend fun previousTrack(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "PreviousTrack")
+
+    /**
+     * 设置会话音量
+     * Jellyfin Session Command: SetVolume, arguments: { Volume: 0-100 }
+     */
+    suspend fun setVolume(sessionId: String, volume: Int): Result<Boolean> {
+        val normalized = volume.coerceIn(0, 100)
+        return sendSessionCommand(sessionId, "SetVolume", mapOf("Volume" to normalized))
+    }
 }
 
 // SessionDto 扩展函数

@@ -30,12 +30,13 @@ data class WakeWordConfig(
  * - Confidence filtering
  */
 class WakeWordDetector(
-    private val defaultThreshold: Float = 0.5f,
+    defaultThreshold: Float = 0.5f,
     private val defaultCooldownMs: Long = 3000L
 ) {
     private val keywordConfigs = mutableMapOf<String, WakeWordConfig>()
     private var lastTriggeredTime = 0L
     private var lastTriggeredKeyword = ""
+    private var currentDefaultThreshold = defaultThreshold
 
     /**
      * Add or update a wake word configuration.
@@ -76,7 +77,7 @@ class WakeWordDetector(
 
         // Get config for this keyword, or use defaults
         val config = keywordConfigs[keyword]
-        val threshold = config?.threshold ?: defaultThreshold
+        val threshold = config?.threshold ?: currentDefaultThreshold
         val cooldownMs = config?.cooldownMs ?: defaultCooldownMs
         val response = config?.response ?: "我在"
 
@@ -114,7 +115,7 @@ class WakeWordDetector(
             setKeyword(
                 WakeWordConfig(
                     keyword = ww.keyword,
-                    threshold = defaultThreshold,
+                    threshold = currentDefaultThreshold,
                     response = ww.response,
                     cooldownMs = defaultCooldownMs
                 )
@@ -122,6 +123,16 @@ class WakeWordDetector(
         }
         Timber.d("WakeWordDetector: loaded ${wakeWords.size} default wake words")
     }
+
+    /**
+     * Update default threshold used by keywords that don't have a custom value.
+     */
+    fun setDefaultThreshold(threshold: Float) {
+        currentDefaultThreshold = threshold.coerceIn(0f, 1f)
+        Timber.d("WakeWordDetector: default threshold updated to $currentDefaultThreshold")
+    }
+
+    fun getDefaultThreshold(): Float = currentDefaultThreshold
 
     /**
      * Get number of registered keywords.

@@ -2,14 +2,14 @@
 # 🤖 Voice Assistant
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Android-6.0%2B-blue.svg" alt="Android Version">
+  <img src="https://img.shields.io/badge/Android-8.0%2B-blue.svg" alt="Android Version">
   <img src="https://img.shields.io/badge/Kotlin-1.9-orange.svg" alt="Language">
   <img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License">
 </p>
 
 > 🇨🇳 中文 | [English](README_EN.md)
 
-将旧 Android 手机变成离线语音控制中枢，替代小爱同学，支持多模型 API 接入、Navidrome/DLNA 音乐控制。
+将旧 Android 手机变成离线语音控制中枢，替代小爱同学，支持多模型 API 接入、Jellyfin/DLNA 音乐控制。
 
 <!-- PROJECT_NAME_END -->
 
@@ -30,7 +30,7 @@
 ## ✨ 特性
 
 - 🔇 **完全离线** - 语音识别、唤醒词、TTS 全部本地运行
-- 🎵 **音乐控制** - 支持 Navidrome + DLNA 推送播放
+- 🎵 **音乐控制** - 支持 Jellyfin + DLNA 推送播放
 - 🧠 **意图路由** - 本地规则匹配 + LLM 对话
 - 🎤 **多模型支持** - 基于 Sherpa-ONNX，一站式语音方案
 - 📱 **后台运行** - 前台服务 + 电池优化白名单
@@ -65,7 +65,7 @@
 ├─────────────────────────────────────────────────────────────┤
 │  Skills                                                   │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │Navidrome │  │ DLNA控制 │  │LLM对话   │  │OpenClaw │  │
+│  │Jellyfin  │  │ DLNA控制 │  │LLM对话   │  │OpenClaw │  │
 │  │  Subsonic│  │  UPnP    │  │ (可选)   │  │消息推送 │  │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
 └─────────────────────────────────────────────────────────────┘
@@ -74,7 +74,7 @@
 ### 语音管道状态机
 
 ```
-IDLE → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → IDLE
+INITIALIZING → IDLE → WAKEWORD_DETECTED → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → IDLE
 ```
 
 详细状态机说明见 [语音管道文档](ARCHITECTURE_VOICE_PIPELINE.md)
@@ -89,8 +89,9 @@ IDLE → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → I
 |------|------|
 | Android Studio | Hedgehog (2023.1.1)+ |
 | JDK | 17 |
-| Android SDK | 34 |
-| 测试设备 | Android 6.0+ (API 23) |
+| Android SDK | 36 (compileSdk) |
+| targetSdk | 35 |
+| 测试设备 | Android 8.0+ (API 26) |
 
 ### 构建步骤
 
@@ -99,18 +100,14 @@ IDLE → LISTENING → RECORDING → RECOGNIZING → THINKING → SPEAKING → I
 git clone https://github.com/your-repo/voice-assistant.git
 cd voice-assistant
 
-# 2. 下载模型文件
+# 2. 进入 Android 工程
 cd android
-./gradlew :app:downloadModels
 
 # 3. 打开项目
 # Android Studio -> Open -> 选择 android/ 目录
 
-# 4. 配置 Navidrome (可选)
-# 修改 app/build.gradle.kts 中的配置
-buildConfigField("String", "NAVIDROME_URL", "\"http://192.168.1.x:4533/\"")
-buildConfigField("String", "NAVIDROME_USERNAME", "\"admin\"")
-buildConfigField("String", "NAVIDROME_PASSWORD", "\"password\"")
+# 4. 编译调试版
+./gradlew :app:assembleDebug
 
 # 5. 运行
 # 连接 Android 设备，Run -> Run 'app'
@@ -188,14 +185,14 @@ voice-assistant/
 
 ---
 
-## 📦 模型下载
+## 📦 模型资源
 
-通过 Gradle 任务预下载（详见 [快速开始](android/QUICKSTART.md)）:
+当前仓库已包含语音模型资源（位于 `android/app/src/main/assets/`），无需额外执行下载任务:
 
 | 模型 | 大小 | 用途 |
 |------|------|------|
 | sherpa-onnx-kws-zipformer-wenetspeech-3.3M | ~35MB | 唤醒词检测 |
-| sherpa-onnx-streaming-zipformer-bilingual-zh-en | ~200MB | 语音识别 |
+| sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30 | ~200MB | 语音识别 |
 | silero_vad.onnx | ~2MB | 端点检测 |
 | vits-piper-zh_CN-huayan-medium | ~61MB | 语音合成 |
 

@@ -30,6 +30,9 @@ import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.domain.repository.LLMRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -78,6 +81,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvTtsSpeed: TextView
     private lateinit var rvWakeWords: RecyclerView
     private lateinit var btnAddWakeWord: MaterialButton
+    private lateinit var btnTestKws: MaterialButton
+    private lateinit var tvKwsStatus: TextView
 
     private lateinit var btnSave: MaterialButton
     private lateinit var rootScrollView: ScrollView
@@ -147,6 +152,8 @@ class SettingsActivity : AppCompatActivity() {
         tvTtsSpeed = findViewById(R.id.tvTtsSpeed)
         rvWakeWords = findViewById(R.id.rvWakeWords)
         btnAddWakeWord = findViewById(R.id.btnAddWakeWord)
+        btnTestKws = findViewById(R.id.btnTestKws)
+        tvKwsStatus = findViewById(R.id.tvKwsStatus)
 
         // Initialize wake words RecyclerView
         wakeWordAdapter = WakeWordAdapter(
@@ -204,6 +211,11 @@ class SettingsActivity : AppCompatActivity() {
             showAddWakeWordDialog()
         }
 
+        // KWS self test button
+        btnTestKws.setOnClickListener {
+            showKwsDiagnostics()
+        }
+
         // Save button
         btnSave.setOnClickListener {
             if (isLoading) {
@@ -254,7 +266,27 @@ class SettingsActivity : AppCompatActivity() {
                 ))
             }
             wakeWordAdapter.notifyDataSetChanged()
+
+            // Show initial KWS diagnostics
+            showKwsDiagnostics()
         }
+    }
+
+    private fun showKwsDiagnostics() {
+        val diagnostics = voicePipeline.getKwsDiagnostics()
+        val timeText = diagnostics.lastWakeTimestampMs?.let {
+            SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(it))
+        } ?: "无"
+        val confidenceText = diagnostics.lastWakeConfidence?.let { String.format("%.2f", it) } ?: "无"
+        val keywordText = diagnostics.lastWakeKeyword.ifBlank { "无" }
+        val initText = if (diagnostics.isInitialized) "已初始化" else "未初始化"
+        val startText = if (diagnostics.isStarted) "已启动" else "未启动"
+        val failedText = if (diagnostics.initFailed) "是" else "否"
+
+        tvKwsStatus.text = "KWS状态: $initText, $startText, 初始化失败: $failedText\n" +
+            "阈值: ${String.format("%.2f", diagnostics.currentThreshold)}, 最近触发词: $keywordText\n" +
+            "最近触发时间: $timeText, 最近置信度: $confidenceText"
+        tvKwsStatus.visibility = View.VISIBLE
     }
 
     private fun showAddWakeWordDialog() {
@@ -510,6 +542,9 @@ class SettingsActivity : AppCompatActivity() {
                 // Update ConfigHolder for immediate use
                 configHolder.settingsRepository = settingsRepository
                 configHolder.reload()
+
+                // Hot apply wake sensitivity immediately (no restart required)
+                voicePipeline.applyWakeSensitivity(sliderWakeSensitivity.value)
 
                 // Reload KWS with new wake words
                 voicePipeline.reloadWakeWords(wakeWordsList)

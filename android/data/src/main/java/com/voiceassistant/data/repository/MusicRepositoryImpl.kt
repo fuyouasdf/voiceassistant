@@ -35,6 +35,30 @@ class MusicRepositoryImpl(
         return jellyfinClient.playItem(sessionId, itemId)
     }
 
+    override suspend fun pause(sessionId: String): Result<Boolean> {
+        return jellyfinClient.pause(sessionId)
+    }
+
+    override suspend fun unpause(sessionId: String): Result<Boolean> {
+        return jellyfinClient.unpause(sessionId)
+    }
+
+    override suspend fun stop(sessionId: String): Result<Boolean> {
+        return jellyfinClient.stop(sessionId)
+    }
+
+    override suspend fun nextTrack(sessionId: String): Result<Boolean> {
+        return jellyfinClient.nextTrack(sessionId)
+    }
+
+    override suspend fun previousTrack(sessionId: String): Result<Boolean> {
+        return jellyfinClient.previousTrack(sessionId)
+    }
+
+    override suspend fun setVolume(sessionId: String, volume: Int): Result<Boolean> {
+        return jellyfinClient.setVolume(sessionId, volume)
+    }
+
     private fun JellyfinSong.toDomainModel(): Song {
         return Song(
             id = id,

@@ -65,6 +65,7 @@
     <string name="settings_wake_words">唤醒词管理</string>
     <string name="settings_wake_words_hint">每行一个唤醒词，可选冒号分隔回应语</string>
     <string name="settings_wake_words_add">添加唤醒词</string>
+    <string name="settings_test_kws">KWS 自检</string>
     <string name="settings_wake_words_edit">编辑唤醒词</string>
     <string name="settings_wake_words_delete">删除</string>
     <string name="settings_wake_words_empty">暂无唤醒词</string>
