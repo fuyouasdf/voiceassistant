@@ -55,7 +55,7 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
                 keywordsFile = File(modelDir, "keywords.txt").absolutePath,
                 keywordsScore = 1.0f,
                 keywordsThreshold = threshold,
-                numTrailingBlanks = 0
+                numTrailingBlanks = 1
             )
 
             kws = KeywordSpotter(assetManager = null, config = config)
@@ -113,7 +113,7 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
                 keywordsFile = File(modelDir, "keywords.txt").absolutePath,
                 keywordsScore = 1.0f,
                 keywordsThreshold = threshold,
-                numTrailingBlanks = 0
+                numTrailingBlanks = 1
             )
 
             kws = KeywordSpotter(assetManager = null, config = config)
@@ -260,7 +260,7 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
                 keywordsFile = keywordsFilePath,
                 keywordsScore = 1.0f,
                 keywordsThreshold = newThreshold,
-                numTrailingBlanks = 0
+                numTrailingBlanks = 1
             )
 
             kws = KeywordSpotter(assetManager = null, config = config)

@@ -250,10 +250,6 @@ class MainActivity : AppCompatActivity() {
         val text = etTextInput.text.toString().trim()
         if (text.isBlank()) return
 
-        // Add user message to conversation
-        addMessage(text, true)
-        lastRecognizedText = text
-
         // Clear input
         etTextInput.text.clear()
 
@@ -269,8 +265,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun triggerQuickAction(text: String) {
-        addMessage(text, true)
-        lastRecognizedText = text
         updateUIFromState(PipelineState.THINKING, "思考中...")
         try {
             voicePipeline.processTextInput(text)

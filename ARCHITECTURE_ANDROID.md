@@ -332,6 +332,13 @@ Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传�
   - 最近触发词、触发时间、触发置信度
 - 诊断数据由 `VoicePipeline.getKwsDiagnostics()` 提供，便于快速判断“模型已加载但未触发”与“初始化失败”这两类问题。
 
+## 设置页唤醒词限制（2026-04）
+
+- 由于当前 Sherpa KWS 模型不支持在应用内自由添加任意中文唤醒词，设置页对唤醒词输入增加白名单限制。
+- 白名单来源：模型内置 `assets/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01/keywords.txt` 中的关键词列表。
+- 新增、编辑、保存时都会校验关键词；不在白名单内的词会被拒绝并提示仅支持内置词。
+- 设置页仍允许编辑每个唤醒词对应的回应语（如“我在”）。
+
 ## LLM 双通道意图协同（2026-04）
 
 - `IntentRouter.handle(text)` 采用混合路由：

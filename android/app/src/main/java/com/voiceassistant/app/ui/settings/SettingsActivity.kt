@@ -37,6 +37,10 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class SettingsActivity : AppCompatActivity() {
+    companion object {
+        private const val KWS_KEYWORDS_ASSET_PATH =
+            "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01/keywords.txt"
+    }
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
@@ -92,6 +96,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private var isLoading = false
     private val wakeWordsList = mutableListOf<WakeWord>()
+    private val supportedWakeWords: Set<String> by lazy { loadSupportedWakeWords() }
     private lateinit var wakeWordAdapter: WakeWordAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -306,9 +311,11 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val keyword = etKeyword.text.toString().trim()
                 val response = etResponse.text.toString().trim().ifEmpty { "我在" }
-                if (keyword.isNotEmpty()) {
+                if (keyword.isNotEmpty() && isSupportedWakeWord(keyword)) {
                     wakeWordsList.add(WakeWord(keyword, response))
                     wakeWordAdapter.notifyItemInserted(wakeWordsList.size - 1)
+                } else if (keyword.isNotEmpty()) {
+                    showUnsupportedWakeWordMessage(keyword)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -328,13 +335,50 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val keyword = etKeyword.text.toString().trim()
                 val response = etResponse.text.toString().trim().ifEmpty { "我在" }
-                if (keyword.isNotEmpty()) {
+                if (keyword.isNotEmpty() && isSupportedWakeWord(keyword)) {
                     wakeWordsList[position] = WakeWord(keyword, response)
                     wakeWordAdapter.notifyItemChanged(position)
+                } else if (keyword.isNotEmpty()) {
+                    showUnsupportedWakeWordMessage(keyword)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun isSupportedWakeWord(keyword: String): Boolean {
+        return supportedWakeWords.contains(keyword)
+    }
+
+    private fun showUnsupportedWakeWordMessage(keyword: String) {
+        val supportedText = supportedWakeWords.sorted().joinToString("、")
+        Toast.makeText(
+            this,
+            "当前模型不支持自定义唤醒词：$keyword。仅支持：$supportedText",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun loadSupportedWakeWords(): Set<String> {
+        return try {
+            assets.open(KWS_KEYWORDS_ASSET_PATH).bufferedReader().use { reader ->
+                reader.lineSequence()
+                    .map { it.substringAfter("@", "").trim() }
+                    .filter { it.isNotBlank() }
+                    .toSet()
+            }
+        } catch (_: Exception) {
+            setOf(
+                "你好军哥",
+                "蛋哥蛋哥",
+                "小爱同学",
+                "你好问问",
+                "小艺小艺",
+                "小米小米",
+                "林美丽",
+                "你好西西"
+            )
+        }
     }
 
     private fun testJellyfinConnection() {
@@ -542,6 +586,15 @@ class SettingsActivity : AppCompatActivity() {
                 settingsRepository.setWakeSensitivity(sliderWakeSensitivity.value)
                 settingsRepository.setTtsSpeed(sliderTtsSpeed.value)
                 settingsRepository.setTtsEnabled(switchTtsEnabled.isChecked)
+
+                val unsupportedWords = wakeWordsList
+                    .map { it.keyword }
+                    .filterNot { isSupportedWakeWord(it) }
+                if (unsupportedWords.isNotEmpty()) {
+                    val unsupported = unsupportedWords.joinToString("、")
+                    showUnsupportedWakeWordMessage(unsupported)
+                    return@launch
+                }
 
                 // Save Wake Words
                 val wakeWordsLines = wakeWordsList.map { "${it.keyword}:${it.response}" }

@@ -788,7 +788,7 @@ class VoicePipeline(
     }
 
     private suspend fun processIntent(text: String) {
-        transitionTo(PipelineState.THINKING, message = text)
+        transitionTo(PipelineState.THINKING, message = text, recognizedText = text)
 
         try {
             val response = intentRouter.handle(text)
