@@ -316,11 +316,26 @@ Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传�
 ## 首页状态指示逻辑
 
 - 首页顶部 `statusDot/tvStatus` 表示 **LLM 实际连通性**，不再由语音管道状态（IDLE/LISTENING/THINKING）驱动。
+- 首页状态栏新增已选投屏设备名称展示（`设备: xxx`），读取 `SharedPreferences` 中 Jellyfin 设备选择结果。
 - `MainActivity.testLlmConnection()` 在 `onResume` 和页面初始化时执行：
   - 未配置（URL/API Key 为空）=> `LLM: 未配置` + 离线指示。
   - 已配置 => 发起一次真实 LLM 请求探测，成功显示 `LLM: 已连接`，失败显示 `LLM: 未连接`。
 - 首页前台期间每 30 秒自动轮询一次 LLM 连通状态；页面进入后台时停止轮询。
 - 麦克风权限被拒绝仅影响语音功能，不再覆盖 LLM 在线状态指示。
+
+## 首页聊天历史分页（2026-04）
+
+- 聊天记录持久化到 Room 新表 `chat_messages`，字段：
+  - `id`（自增主键）
+  - `text`（消息内容）
+  - `isUser`（用户/助手）
+  - `createdAt`（时间戳）
+- 首页首次进入时仅加载**最新 20 条**（`ORDER BY createdAt DESC, id DESC LIMIT 20`），渲染时按时间正序显示。
+- 上滑到顶部时触发分页加载更早记录，使用 keyset 条件：
+  - `createdAt < oldest.createdAt OR (createdAt = oldest.createdAt AND id < oldest.id)`
+  - 每页 20 条，避免 offset 在新消息插入后出现跳页/重复。
+- 历史消息前插时会保持当前视觉位置，避免加载后列表跳动。
+- 数据库版本升级到 `v4`，新增 `MIGRATION_3_4` 创建 `chat_messages` 表和 `(createdAt, id)` 索引。
 
 ## 设置页 KWS 自检
 

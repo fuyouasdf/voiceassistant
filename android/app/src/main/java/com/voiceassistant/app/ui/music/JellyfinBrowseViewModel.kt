@@ -20,6 +20,7 @@ import timber.log.Timber
 import javax.inject.Inject
 
 private const val PREF_SELECTED_DEVICE_ID = "jellyfin_selected_device_id"
+private const val PREF_SELECTED_DEVICE_NAME = "jellyfin_selected_device_name"
 
 /**
  * Jellyfin 浏览页面状态
@@ -251,8 +252,11 @@ class JellyfinBrowseViewModel @Inject constructor(
      */
     fun selectDlnaDevice(device: SessionInfo) {
         _uiState.value = _uiState.value.copy(selectedDlnaDevice = device)
-        // 保存设备ID
-        sharedPreferences.edit().putString(PREF_SELECTED_DEVICE_ID, device.id).apply()
+        // 保存设备ID和设备名称，供首页展示
+        sharedPreferences.edit()
+            .putString(PREF_SELECTED_DEVICE_ID, device.id)
+            .putString(PREF_SELECTED_DEVICE_NAME, device.deviceName)
+            .apply()
         Timber.d("已保存投屏设备: ${device.deviceName} (${device.id})")
     }
 

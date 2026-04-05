@@ -31,6 +31,8 @@ import com.voiceassistant.app.R
 import com.voiceassistant.app.di.ConfigHolder
 import com.voiceassistant.app.service.VoiceAssistantService
 import com.voiceassistant.data.remote.JellyfinClient
+import com.voiceassistant.data.local.ChatMessageDao
+import com.voiceassistant.data.local.ChatMessageEntity
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.app.ui.settings.SettingsActivity
 import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
@@ -38,10 +40,12 @@ import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -51,6 +55,10 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
+    companion object {
+        private const val PREF_SELECTED_DEVICE_NAME = "jellyfin_selected_device_name"
+        private const val HISTORY_PAGE_SIZE = 20
+    }
 
     @Inject
     lateinit var voicePipeline: VoicePipeline
@@ -64,6 +72,9 @@ class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var jellyfinClient: JellyfinClient
 
+    @Inject
+    lateinit var chatMessageDao: ChatMessageDao
+
     // UI Components
     private lateinit var statusBarArea: LinearLayout
     private lateinit var statusDot: View
@@ -71,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvProvider: TextView
     private lateinit var jellyfinStatusDot: View
     private lateinit var tvJellyfinStatus: TextView
+    private lateinit var tvSelectedDlnaDevice: TextView
     private lateinit var btnSettings: ImageButton
 
     // Conversation
@@ -101,6 +113,10 @@ class MainActivity : AppCompatActivity() {
     private var lastResponseText = ""
     private var llmConnectionCheckJob: Job? = null
     private var llmStatusPollingJob: Job? = null
+    private var isLoadingHistory = false
+    private var hasMoreHistory = true
+    private var oldestLoadedMessageId: Long? = null
+    private var oldestLoadedMessageCreatedAt: Long? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -122,6 +138,8 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupInsets()
         setupListeners()
+        setupConversationPagination()
+        loadInitialConversationHistory()
         observeVoicePipeline()
         checkPermissions()
     }
@@ -131,6 +149,7 @@ class MainActivity : AppCompatActivity() {
         // 每次返回主页时重新检测 LLM 和 Jellyfin 连接状态
         testLlmConnection()
         testJellyfinConnection()
+        refreshSelectedDlnaDeviceDisplay()
     }
 
     override fun onStart() {
@@ -152,6 +171,7 @@ class MainActivity : AppCompatActivity() {
         tvProvider = findViewById(R.id.tvProvider)
         jellyfinStatusDot = findViewById(R.id.jellyfinStatusDot)
         tvJellyfinStatus = findViewById(R.id.tvJellyfinStatus)
+        tvSelectedDlnaDevice = findViewById(R.id.tvSelectedDlnaDevice)
         btnSettings = findViewById(R.id.btnSettings)
 
         // 测试 LLM 连接状态
@@ -159,6 +179,7 @@ class MainActivity : AppCompatActivity() {
 
         // 测试 Jellyfin 连接状态
         testJellyfinConnection()
+        refreshSelectedDlnaDeviceDisplay()
 
         // Conversation
         tvEmptyHint = findViewById(R.id.tvEmptyHint)
@@ -442,63 +463,191 @@ class MainActivity : AppCompatActivity() {
 
     // ==================== Message Handling ====================
 
+    private fun setupConversationPagination() {
+        conversationScroll.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            if (scrollY == 0 && oldScrollY > scrollY) {
+                loadMoreConversationHistory()
+            }
+        }
+    }
+
+    private fun loadInitialConversationHistory() {
+        lifecycleScope.launch {
+            isLoadingHistory = true
+            try {
+                val latestMessages = withContext(Dispatchers.IO) {
+                    chatMessageDao.getLatestMessages(HISTORY_PAGE_SIZE)
+                }
+
+                conversationContainer.removeAllViews()
+                if (latestMessages.isEmpty()) {
+                    tvEmptyHint.visibility = View.VISIBLE
+                    conversationScroll.visibility = View.GONE
+                    hasMoreHistory = false
+                    oldestLoadedMessageId = null
+                    oldestLoadedMessageCreatedAt = null
+                    return@launch
+                }
+
+                tvEmptyHint.visibility = View.GONE
+                conversationScroll.visibility = View.VISIBLE
+
+                latestMessages.asReversed().forEach { message ->
+                    appendMessageToConversation(message.text, message.isUser, message.createdAt, autoScroll = false)
+                }
+
+                val oldestMessage = latestMessages.last()
+                oldestLoadedMessageId = oldestMessage.id
+                oldestLoadedMessageCreatedAt = oldestMessage.createdAt
+                hasMoreHistory = latestMessages.size >= HISTORY_PAGE_SIZE
+
+                conversationScroll.post {
+                    conversationScroll.fullScroll(ScrollView.FOCUS_DOWN)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load initial conversation history")
+                Toast.makeText(this@MainActivity, "聊天记录加载失败", Toast.LENGTH_SHORT).show()
+            } finally {
+                isLoadingHistory = false
+            }
+        }
+    }
+
+    private fun loadMoreConversationHistory() {
+        val oldestId = oldestLoadedMessageId ?: return
+        val oldestCreatedAt = oldestLoadedMessageCreatedAt ?: return
+        if (isLoadingHistory || !hasMoreHistory) return
+
+        lifecycleScope.launch {
+            isLoadingHistory = true
+            try {
+                val previousHeight = conversationContainer.height
+                val olderMessages = withContext(Dispatchers.IO) {
+                    chatMessageDao.getMessagesBefore(
+                        beforeCreatedAt = oldestCreatedAt,
+                        beforeId = oldestId,
+                        limit = HISTORY_PAGE_SIZE
+                    )
+                }
+
+                if (olderMessages.isEmpty()) {
+                    hasMoreHistory = false
+                    return@launch
+                }
+
+                olderMessages.asReversed().forEach { message ->
+                    prependMessageToConversation(message.text, message.isUser, message.createdAt)
+                }
+
+                val newOldest = olderMessages.last()
+                oldestLoadedMessageId = newOldest.id
+                oldestLoadedMessageCreatedAt = newOldest.createdAt
+                hasMoreHistory = olderMessages.size >= HISTORY_PAGE_SIZE
+
+                conversationScroll.post {
+                    val newHeight = conversationContainer.height
+                    conversationScroll.scrollTo(0, newHeight - previousHeight)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load more conversation history")
+                Toast.makeText(this@MainActivity, "加载历史记录失败", Toast.LENGTH_SHORT).show()
+            } finally {
+                isLoadingHistory = false
+            }
+        }
+    }
+
     private fun addMessage(text: String, isUser: Boolean) {
-        // Hide empty hint
+        val createdAt = System.currentTimeMillis()
+        lifecycleScope.launch {
+            try {
+                val newId = withContext(Dispatchers.IO) {
+                    chatMessageDao.insertMessage(
+                        ChatMessageEntity(
+                            text = text,
+                            isUser = isUser,
+                            createdAt = createdAt
+                        )
+                    )
+                }
+
+                if (oldestLoadedMessageId == null || oldestLoadedMessageCreatedAt == null) {
+                    oldestLoadedMessageId = newId
+                    oldestLoadedMessageCreatedAt = createdAt
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to persist chat message")
+                Toast.makeText(this@MainActivity, "聊天记录保存失败", Toast.LENGTH_SHORT).show()
+            } finally {
+                appendMessageToConversation(text, isUser, createdAt)
+            }
+        }
+    }
+
+    private fun appendMessageToConversation(
+        text: String,
+        isUser: Boolean,
+        createdAt: Long,
+        autoScroll: Boolean = true
+    ) {
         tvEmptyHint.visibility = View.GONE
         conversationScroll.visibility = View.VISIBLE
+        conversationContainer.addView(createMessageItemView(text, isUser, createdAt))
 
-        // Get current time for timestamp
+        if (autoScroll) {
+            conversationScroll.post {
+                conversationScroll.fullScroll(ScrollView.FOCUS_DOWN)
+            }
+        }
+    }
+
+    private fun prependMessageToConversation(text: String, isUser: Boolean, createdAt: Long) {
+        tvEmptyHint.visibility = View.GONE
+        conversationScroll.visibility = View.VISIBLE
+        conversationContainer.addView(createMessageItemView(text, isUser, createdAt), 0)
+    }
+
+    private fun createMessageItemView(text: String, isUser: Boolean, createdAt: Long): LinearLayout {
         val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        val timestamp = timeFormat.format(java.util.Date())
+        val timestamp = timeFormat.format(java.util.Date(createdAt))
 
-        // Create message container with timestamp
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, 8, 0, 8)
-
-            if (isUser) {
-                gravity = android.view.Gravity.END
-            } else {
-                gravity = android.view.Gravity.START
-            }
+            gravity = if (isUser) android.view.Gravity.END else android.view.Gravity.START
         }
 
-        // Add timestamp (small and subtle)
         val timestampView = TextView(this).apply {
             this.text = timestamp
             this.textSize = 10f
             setTextColor(ContextCompat.getColor(context, R.color.text_tertiary))
-            val params = LinearLayout.LayoutParams(
+            layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            if (isUser) {
-                params.setMargins(0, 0, 16, 4)
-            } else {
-                params.setMargins(16, 0, 0, 4)
+            ).apply {
+                if (isUser) {
+                    setMargins(0, 0, 16, 4)
+                } else {
+                    setMargins(16, 0, 0, 4)
+                }
             }
-            layoutParams = params
         }
 
-        // Create message view
         val messageView = TextView(this).apply {
             this.text = text
             this.textSize = 16f
             setPadding(24, 16, 24, 16)
-
-            if (isUser) {
-                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
-            } else {
-                setTextColor(ContextCompat.getColor(context, R.color.on_primary))
-            }
-
-            // Rounded corners
+            setTextColor(
+                ContextCompat.getColor(
+                    context,
+                    if (isUser) R.color.text_primary else R.color.on_primary
+                )
+            )
             background = androidx.core.content.res.ResourcesCompat.getDrawable(
                 resources,
                 if (isUser) R.drawable.bg_message_user else R.drawable.bg_message_ai,
                 null
             )
-
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -507,15 +656,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Add timestamp and message to container
         container.addView(timestampView)
         container.addView(messageView)
 
-        // Create outer container for alignment
-        val outerContainer = LinearLayout(this).apply {
+        return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 0, 0, 0)
-
             if (isUser) {
                 gravity = android.view.Gravity.END
                 addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
@@ -526,13 +671,6 @@ class MainActivity : AppCompatActivity() {
             if (!isUser) {
                 addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
             }
-        }
-
-        conversationContainer.addView(outerContainer)
-
-        // Scroll to bottom
-        conversationScroll.post {
-            conversationScroll.fullScroll(ScrollView.FOCUS_DOWN)
         }
     }
 
@@ -644,6 +782,16 @@ class MainActivity : AppCompatActivity() {
                 tvJellyfinStatus.text = "Jellyfin: 未连接"
                 jellyfinStatusDot.setBackgroundResource(R.drawable.circle_status_offline)
             }
+        }
+    }
+
+    private fun refreshSelectedDlnaDeviceDisplay() {
+        val prefs = getSharedPreferences("voice_assistant_prefs", Context.MODE_PRIVATE)
+        val deviceName = prefs.getString(PREF_SELECTED_DEVICE_NAME, null)
+        tvSelectedDlnaDevice.text = if (deviceName.isNullOrBlank()) {
+            "设备: 未选择"
+        } else {
+            "设备: $deviceName"
         }
     }
 }

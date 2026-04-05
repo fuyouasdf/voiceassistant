@@ -25,6 +25,7 @@ import com.voiceassistant.core.sherpa.SherpaVADImpl
 import com.voiceassistant.core.sherpa.StatefulVad
 import com.voiceassistant.core.sherpa.StatefulVadImpl
 import com.voiceassistant.data.local.AppDatabase
+import com.voiceassistant.data.local.ChatMessageDao
 import com.voiceassistant.data.local.ConfigDao
 import com.voiceassistant.data.local.PlaylistDao
 import com.voiceassistant.data.remote.JellyfinClient
@@ -59,7 +60,9 @@ object AppModule {
             AppDatabase::class.java,
             "voice_assistant.db"
         )
+            .addMigrations(AppDatabase.MIGRATION_1_2)
             .addMigrations(AppDatabase.MIGRATION_2_3)
+            .addMigrations(AppDatabase.MIGRATION_3_4)
             .build()
     }
 
@@ -73,6 +76,12 @@ object AppModule {
     @Singleton
     fun providePlaylistDao(database: AppDatabase): PlaylistDao {
         return database.playlistDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideChatMessageDao(database: AppDatabase): ChatMessageDao {
+        return database.chatMessageDao()
     }
 
     @Provides
