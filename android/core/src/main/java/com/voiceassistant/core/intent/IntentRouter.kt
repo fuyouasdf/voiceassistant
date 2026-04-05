@@ -9,6 +9,8 @@ import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.LLMRouteMode
 import com.voiceassistant.domain.repository.PlaylistRepository
 import com.voiceassistant.domain.usecase.HandleChatUseCase
+import java.time.LocalDate
+import java.time.LocalDateTime
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
@@ -92,6 +94,8 @@ class IntentRouter @Inject constructor(
         if (normalizedText.isEmpty()) {
             return "没听懂，请再说一遍"
         }
+
+        getTimeQueryResponse(normalizedText)?.let { return it }
 
         // Fast local path for deterministic commands
         val localIntent = parse(normalizedText)
@@ -519,6 +523,48 @@ class IntentRouter @Inject constructor(
             onSuccess = { it },
             onFailure = { "查询失败，请稍后重试" }
         )
+    }
+
+    private fun getTimeQueryResponse(rawText: String): String? {
+        val text = rawText.lowercase().trim()
+        if (text.isEmpty()) return null
+
+        val now = LocalDateTime.now()
+
+        if (text.contains("几点") || text.contains("几时") || text.contains("当前时间") ||
+            (text.contains("现在") && text.contains("时间"))) {
+            return "现在是${now.hour}点${now.minute}分"
+        }
+
+        if (text.contains("星期几") || text.contains("周几")) {
+            return "今天是${weekdayToChinese(now.dayOfWeek.value)}"
+        }
+
+        val askDate = text.contains("几号") || text.contains("几月几号") || text.contains("日期")
+        if (!askDate) return null
+
+        val offset = when {
+            text.contains("前天") -> -2L
+            text.contains("昨天") -> -1L
+            text.contains("明天") -> 1L
+            text.contains("后天") -> 2L
+            else -> 0L
+        }
+        val date = now.toLocalDate().plusDays(offset)
+        return "${date.monthValue}月${date.dayOfMonth}号，${weekdayToChinese(date.dayOfWeek.value)}"
+    }
+
+    private fun weekdayToChinese(dayOfWeek: Int): String {
+        return when (dayOfWeek) {
+            1 -> "星期一"
+            2 -> "星期二"
+            3 -> "星期三"
+            4 -> "星期四"
+            5 -> "星期五"
+            6 -> "星期六"
+            7 -> "星期日"
+            else -> "未知"
+        }
     }
 
     private suspend fun handleChat(intent: Intent): String {
