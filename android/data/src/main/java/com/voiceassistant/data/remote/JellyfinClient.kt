@@ -15,6 +15,7 @@ import retrofit2.http.POST
 import retrofit2.http.DELETE
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.QueryMap
 import timber.log.Timber
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
@@ -1076,8 +1077,12 @@ class JellyfinClient(
     suspend fun sendSessionCommand(sessionId: String, command: String, arguments: Map<String, Any>? = null): Result<Boolean> = withContext(Dispatchers.IO) {
         Timber.d("sendSessionCommand: sessionId=$sessionId, command=$command, arguments=$arguments")
         try {
-            val request = SessionCommandRequest(cmd = command, arguments = arguments)
-            val response = sessionApi.sendCommand(sessionId, request)
+            val queryArgs = arguments?.mapValues { (_, value) -> value.toString() } ?: emptyMap()
+            val response = if (PLAYSTATE_COMMANDS.contains(command)) {
+                sessionApi.sendPlaystateCommand(sessionId, command, queryArgs)
+            } else {
+                sessionApi.sendGeneralCommand(sessionId, command, queryArgs)
+            }
             if (response.isSuccessful || response.code() == 204) {
                 Timber.d("sendSessionCommand成功: $command")
                 Result.success(true)
@@ -1153,6 +1158,18 @@ class JellyfinClient(
     suspend fun setVolume(sessionId: String, volume: Int): Result<Boolean> {
         val normalized = volume.coerceIn(0, 100)
         return sendSessionCommand(sessionId, "SetVolume", mapOf("Volume" to normalized))
+    }
+
+    companion object {
+        private val PLAYSTATE_COMMANDS = setOf(
+            "Stop",
+            "Pause",
+            "Unpause",
+            "NextTrack",
+            "PreviousTrack",
+            "Seek",
+            "SetVolume"
+        )
     }
 }
 
@@ -1271,11 +1288,20 @@ interface JellyfinSessionApi {
     @GET("Sessions")
     suspend fun getSessions(): Response<List<SessionDto>>
 
-    // 发送播放命令（通过 Command 端点）
-    @POST("Sessions/{sessionId}/Command")
-    suspend fun sendCommand(
+    // 发送通用命令（Command 端点）
+    @POST("Sessions/{sessionId}/Command/{command}")
+    suspend fun sendGeneralCommand(
         @Path("sessionId") sessionId: String,
-        @Body request: SessionCommandRequest
+        @Path("command") command: String,
+        @QueryMap query: Map<String, String>
+    ): Response<Unit>
+
+    // 发送播放状态命令（Playstate 端点）
+    @POST("Sessions/{sessionId}/Playing/{command}")
+    suspend fun sendPlaystateCommand(
+        @Path("sessionId") sessionId: String,
+        @Path("command") command: String,
+        @QueryMap query: Map<String, String>
     ): Response<Unit>
 
     // 播放到指定会话（通过 Playing 端点）
@@ -1568,14 +1594,6 @@ data class SessionNowPlayingItem(
     val artists: List<String>,
     val durationTicks: Long,
     val mediaType: String
-)
-
-/**
- * Session 命令请求
- */
-data class SessionCommandRequest(
-    @SerializedName("Cmd") val cmd: String,
-    @SerializedName("Arguments") val arguments: Map<String, @JvmSuppressWildcards Any>? = null
 )
 
 /**

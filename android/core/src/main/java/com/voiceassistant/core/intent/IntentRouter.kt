@@ -200,7 +200,7 @@ class IntentRouter @Inject constructor(
     }
 
     private fun isMusicIntent(text: String): Boolean {
-        val keywords = listOf("播放", "暂停", "继续", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌")
+        val keywords = listOf("播放", "暂停", "继续", "停止", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌")
         return keywords.any { text.contains(it) }
     }
 

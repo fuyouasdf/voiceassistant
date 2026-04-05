@@ -81,7 +81,7 @@ class IntentParser {
         NUMBER_REGEX.find(text)?.value?.toIntOrNull()
 
     companion object {
-        private val KEYWORDS_MUSIC = listOf("播放", "暂停", "继续", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌")
+        private val KEYWORDS_MUSIC = listOf("播放", "暂停", "继续", "停止", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌")
         private val KEYWORDS_VOLUME = listOf("音量", "声音", "大声", "小声", "静音")
         private val KEYWORDS_DEVICE = listOf("打开", "关闭", "开关")
         private val KEYWORDS_QUERY = listOf("天气", "时间", "日期", "查询", "搜索", "是什么", "在哪里")

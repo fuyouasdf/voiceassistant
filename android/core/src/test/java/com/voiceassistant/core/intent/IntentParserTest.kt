@@ -93,10 +93,9 @@ class IntentParserTest {
 
     @Test
     fun `parse music - 停止`() {
-        // "停止" is NOT in KEYWORDS_MUSIC, so it falls to CHAT
         val result = parser.parse("停止")
-        assertEquals(IntentType.CHAT, result.type)
-        assertEquals("停止", result.query)
+        assertEquals(IntentType.MUSIC, result.type)
+        assertEquals("stop", result.action)
     }
 
     @Test

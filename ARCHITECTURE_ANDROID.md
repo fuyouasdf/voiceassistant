@@ -258,6 +258,7 @@ Headers:
 1. 用户选择歌曲 → MusicViewModel.playSong()
 2. 使用 Jellyfin Session API（`playItem(sessionId, songId)`）投放到已选设备
 3. 播放/暂停/继续/停止/上一首/下一首/音量统一通过同一 `sessionId` 调用 Session 命令
+   - 播放态命令使用 `POST /Sessions/{sessionId}/Playing/{command}`（如 `Stop/Pause/Unpause/NextTrack/PreviousTrack/Seek/SetVolume`）
 4. UI 通过 StateFlow 观察播放状态
 
 语音指令与文本指令（`IntentRouter`）与手动点击播放统一走 Session API，不再回退 DLNA SOAP 控制，避免 `Failed to get control URL`。
@@ -358,6 +359,7 @@ Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传�
 
 - `IntentRouter.handle(text)` 采用混合路由：
   - 本地快速规则先处理高确定性控制指令（`MUSIC/VOLUME/DEVICE`）。
+  - `MUSIC` 本地关键词包含 `停止`，因此“停止/停止播放”会直接路由到 `stop`，不会落入聊天分支。
   - 其余输入交给 LLM 路由为 `CHAT` 或 `COMMAND`。
   - `COMMAND` 模式下，LLM 再输出结构化 JSON，由 `IntentRouter` 转换为内部 `Intent` 并执行。
   - `CHAT` 模式下走普通助手对话回复。
