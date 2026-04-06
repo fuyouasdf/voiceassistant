@@ -34,4 +34,10 @@ interface ChatMessageDao {
         beforeId: Long,
         limit: Int
     ): List<ChatMessageEntity>
+
+    @Query("DELETE FROM chat_messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: Long)
+
+    @Query("DELETE FROM chat_messages")
+    suspend fun deleteAllMessages()
 }

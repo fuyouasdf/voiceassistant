@@ -266,6 +266,9 @@ Headers:
 - 选择远程设备时，走 Jellyfin Session API。
 - 不再回退 DLNA SOAP 控制，避免 `Failed to get control URL`。
 - 播放列表页点击歌曲时，不直接复用数据库缓存的 `streamUrl`；会先按 `songId` 调 `JellyfinClient.getStreamInfo()` 获取最新 `url/playSessionId/mediaSourceId`，再交给 `MusicPlayer`，避免缓存播放参数过期导致本机不播放。
+- 本机播放入队规则统一为“当前列表即当前队列”：浏览页点击歌曲时，会将当前可见歌曲列表整体入队；播放列表页点击歌曲时，会将该播放列表全部歌曲入队，并从点击项开始播放。
+- 本机完整播放页采用独立 `NowPlayingActivity`，展示封面、队列位置、流状态、进度条和常用控制（上一首/播放暂停/下一首/随机/循环/队列/收藏）；通知栏点击进入该页面。
+- `QueueActivity` 负责展示当前播放队列，支持查看当前曲目、点击切歌、长按拖拽排序，以及将歌曲从当前本机队列移除；该操作只影响当前播放队列，不修改用户保存的播放列表。
 - `MusicPlayer` 对同一首歌的点击去重仅在“当前已处于实际播放态”时生效；如果同曲同 URL 但播放器已暂停、报错或停住，再次点击会强制重新拉起播放。
 - `MusicPlayer` 使用较低的启动缓冲门槛（低延迟 `LoadControl`）以缩短进入 `STATE_READY` 的时间；播放列表页加载后会预热前 3 首歌的 `PlaybackInfo`，减少点击时的冷启动等待。
 - 音频项构建流地址时统一使用 `/Audio/{id}/stream`，本机播放默认追加 `Container=mp4&AudioCodec=aac` 强制转码；已验证当前 Jellyfin 服务端的部分 `DIRECT_PLAY` 音频直链会返回 `200` 但空 body，导致 ExoPlayer 无法识别输入流。

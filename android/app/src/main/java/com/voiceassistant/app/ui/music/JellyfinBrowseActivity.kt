@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.chip.Chip
 import com.voiceassistant.app.R
+import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.remote.SessionInfo
@@ -35,6 +36,9 @@ import kotlinx.coroutines.launch
  */
 @AndroidEntryPoint
 class JellyfinBrowseActivity : AppCompatActivity() {
+
+    @javax.inject.Inject
+    lateinit var musicPlayer: MusicPlayer
 
     private val viewModel: JellyfinBrowseViewModel by viewModels()
     private lateinit var binding: ActivityJellyfinBrowseBinding
@@ -100,7 +104,9 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         // Song list - playlist click shows add-to-playlist dialog
         songAdapter = SongAdapter(
-            onSongClick = { song -> viewModel.playSong(song) },
+            onSongClick = { song ->
+                viewModel.playSong(song)
+            },
             onAddToPlaylistClick = { song -> showAddToPlaylistDialog(song) }
         )
         binding.recyclerSongs.apply {
@@ -133,9 +139,19 @@ class JellyfinBrowseActivity : AppCompatActivity() {
         binding.btnPlayPause.setOnClickListener {
             viewModel.togglePlayPause()
         }
+        binding.btnPreviousMini.setOnClickListener {
+            musicPlayer.playPrevious()
+        }
+        binding.btnNextMini.setOnClickListener {
+            musicPlayer.playNext()
+        }
 
         binding.btnStop.setOnClickListener {
             viewModel.stopPlayback()
+        }
+
+        binding.cardNowPlaying.setOnClickListener {
+            openNowPlayingIfLocalSelected()
         }
     }
 
@@ -167,7 +183,9 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 state.currentSong?.let { song ->
                     binding.cardNowPlaying.visibility = View.VISIBLE
                     binding.tvNowPlayingTitle.text = song.title
-                    binding.tvNowPlayingArtist.text = song.artist ?: "未知艺术家"
+                    val playbackState = if (state.isPlaying) "播放中" else "已暂停"
+                    val artist = song.artist ?: "未知艺术家"
+                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
                 } ?: run {
                     binding.cardNowPlaying.visibility = View.GONE
                 }
@@ -201,6 +219,32 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
                 // Back button for album view
                 binding.btnBack.visibility = if (state.isViewingAlbum || state.isSearching) View.VISIBLE else View.GONE
+            }
+        }
+
+        lifecycleScope.launch {
+            musicPlayer.state.collectLatest { playerState ->
+                val currentItem = playerState.playlist.getOrNull(playerState.currentIndex)
+                if (currentItem != null) {
+                    binding.cardNowPlaying.visibility = View.VISIBLE
+                    binding.tvNowPlayingStatus.text = buildMiniPlayerStatus(currentItem)
+                    val progress = if (playerState.duration > 0) {
+                        ((playerState.currentPosition * 1000) / playerState.duration).toInt().coerceIn(0, 1000)
+                    } else {
+                        0
+                    }
+                    binding.progressNowPlaying.progress = progress
+                    binding.tvNowPlayingTime.text =
+                        "${formatTime(playerState.currentPosition)} / ${formatTime(playerState.duration)}"
+                    binding.btnPreviousMini.isEnabled = playerState.playlist.isNotEmpty()
+                    binding.btnNextMini.isEnabled = playerState.playlist.isNotEmpty()
+                } else {
+                    binding.tvNowPlayingStatus.text = "当前没有播放内容"
+                    binding.progressNowPlaying.progress = 0
+                    binding.tvNowPlayingTime.text = "00:00 / 00:00"
+                    binding.btnPreviousMini.isEnabled = false
+                    binding.btnNextMini.isEnabled = false
+                }
             }
         }
     }
@@ -415,5 +459,28 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 ).show()
             }
         }
+    }
+
+    private fun openNowPlayingIfLocalSelected() {
+        val selectedDevice = viewModel.uiState.value.selectedDlnaDevice ?: return
+        if (selectedDevice.id != "__local_device_session__") return
+        startActivity(Intent(this, NowPlayingActivity::class.java))
+    }
+
+    private fun buildMiniPlayerStatus(currentItem: com.voiceassistant.core.music.MusicItem): String {
+        val container = currentItem.streamContainer?.uppercase() ?: "未知格式"
+        return if (currentItem.isTranscoding) {
+            "$container，正在服务器转码为 AAC"
+        } else {
+            "$container，本机直连播放"
+        }
+    }
+
+    private fun formatTime(positionMs: Long): String {
+        if (positionMs <= 0L) return "00:00"
+        val totalSeconds = positionMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return "%02d:%02d".format(minutes, seconds)
     }
 }

@@ -223,22 +223,21 @@ class JellyfinBrowseViewModel @Inject constructor(
 
             try {
                 if (session.id == LOCAL_DEVICE_SESSION_ID) {
-                    val streamInfo = jellyfinClient.getStreamInfo(song.id)
+                    val visibleSongs = _uiState.value.songs
+                    val playlistSongs = if (visibleSongs.any { it.id == song.id }) visibleSongs else listOf(song)
+                    val startIndex = playlistSongs.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                    val musicItems = buildMusicItems(playlistSongs)
+                    if (musicItems.isEmpty()) {
+                        _uiState.value = _uiState.value.copy(error = "播放失败: 当前列表没有可播放歌曲")
+                        return@launch
+                    }
+
+                    val actualStartIndex = musicItems.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                    val currentItem = musicItems.getOrNull(actualStartIndex)
                     Timber.d(
-                        "本机播放: songId=${song.id}, playMethod=${streamInfo.playMethod}, container=${streamInfo.container}, transcoding=${streamInfo.isTranscoding}"
+                        "本机播放列表: size=${musicItems.size}, startIndex=$actualStartIndex, songId=${song.id}, playMethod=${currentItem?.streamPlayMethod}, container=${currentItem?.streamContainer}, transcoding=${currentItem?.isTranscoding}"
                     )
-                    val musicItem = MusicItem(
-                        id = song.id,
-                        title = song.title,
-                        artist = song.artist,
-                        album = song.album,
-                        duration = song.duration,
-                        streamUrl = streamInfo.url,
-                        coverUrl = song.coverUrl,
-                        playbackSessionId = streamInfo.playSessionId,
-                        mediaSourceId = streamInfo.mediaSourceId
-                    )
-                    musicPlayer.play(musicItem)
+                    musicPlayer.playPlaylist(musicItems, actualStartIndex.takeIf { it < musicItems.size } ?: startIndex)
                     _uiState.value = _uiState.value.copy(isPlaying = true)
                 } else {
                     // 使用Jellyfin Session API 播放到目标设备
@@ -254,6 +253,36 @@ class JellyfinBrowseViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "播放失败")
                 _uiState.value = _uiState.value.copy(error = "播放失败: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun buildMusicItems(songs: List<JellyfinSong>): List<MusicItem> {
+        return songs.mapNotNull { listSong ->
+            try {
+                val streamInfo = jellyfinClient.getStreamInfo(listSong.id)
+                if (streamInfo.url.isBlank()) {
+                    Timber.w("跳过无可用播放地址的歌曲: songId=${listSong.id}")
+                    null
+                } else {
+                    MusicItem(
+                        id = listSong.id,
+                        title = listSong.title,
+                        artist = listSong.artist,
+                        album = listSong.album,
+                        duration = listSong.duration,
+                        streamUrl = streamInfo.url,
+                        coverUrl = listSong.coverUrl,
+                        playbackSessionId = streamInfo.playSessionId,
+                        mediaSourceId = streamInfo.mediaSourceId,
+                        streamContainer = streamInfo.container,
+                        streamPlayMethod = streamInfo.playMethod?.name,
+                        isTranscoding = streamInfo.isTranscoding
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "构建本机播放列表失败，跳过歌曲: songId=${listSong.id}")
+                null
             }
         }
     }

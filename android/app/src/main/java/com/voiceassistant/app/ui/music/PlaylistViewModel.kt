@@ -118,28 +118,53 @@ class PlaylistViewModel @Inject constructor(
     fun playSong(song: PlaylistSong) {
         viewModelScope.launch {
             try {
-                val streamInfo = jellyfinClient.getStreamInfo(song.songId)
-                Timber.d("playlist playSong: songId=${song.songId}, url=${streamInfo.url}, playMethod=${streamInfo.playMethod}, container=${streamInfo.container}")
-                if (streamInfo.url.isBlank()) {
-                    _uiState.value = _uiState.value.copy(error = "播放失败: 无法获取可用的播放地址")
+                val playlistSongs = _uiState.value.songs
+                val songsToPlay = if (playlistSongs.any { it.songId == song.songId }) playlistSongs else listOf(song)
+                val musicItems = buildMusicItems(songsToPlay)
+                if (musicItems.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(error = "播放失败: 当前播放列表没有可播放歌曲")
                     return@launch
                 }
 
-                val musicItem = MusicItem(
-                    id = song.songId,
-                    title = song.title,
-                    artist = song.artist,
-                    album = song.album,
-                    duration = song.duration,
-                    streamUrl = streamInfo.url,
-                    coverUrl = song.coverUrl,
-                    playbackSessionId = streamInfo.playSessionId,
-                    mediaSourceId = streamInfo.mediaSourceId
+                val startIndex = musicItems.indexOfFirst { it.id == song.songId }.coerceAtLeast(0)
+                val currentItem = musicItems.getOrNull(startIndex)
+                Timber.d(
+                    "playlist playSong: queueSize=${musicItems.size}, startIndex=$startIndex, songId=${song.songId}, playMethod=${currentItem?.streamPlayMethod}, container=${currentItem?.streamContainer}"
                 )
-                musicPlayer.play(musicItem)
+                musicPlayer.playPlaylist(musicItems, startIndex)
             } catch (e: Exception) {
                 Timber.e(e, "播放播放列表歌曲失败")
                 _uiState.value = _uiState.value.copy(error = "播放失败: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun buildMusicItems(songs: List<PlaylistSong>): List<MusicItem> {
+        return songs.mapNotNull { playlistSong ->
+            try {
+                val streamInfo = jellyfinClient.getStreamInfo(playlistSong.songId)
+                if (streamInfo.url.isBlank()) {
+                    Timber.w("跳过无可用播放地址的播放列表歌曲: songId=${playlistSong.songId}")
+                    null
+                } else {
+                    MusicItem(
+                        id = playlistSong.songId,
+                        title = playlistSong.title,
+                        artist = playlistSong.artist,
+                        album = playlistSong.album,
+                        duration = playlistSong.duration,
+                        streamUrl = streamInfo.url,
+                        coverUrl = playlistSong.coverUrl,
+                        playbackSessionId = streamInfo.playSessionId,
+                        mediaSourceId = streamInfo.mediaSourceId,
+                        streamContainer = streamInfo.container,
+                        streamPlayMethod = streamInfo.playMethod?.name,
+                        isTranscoding = streamInfo.isTranscoding
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "构建播放列表队列失败，跳过歌曲: songId=${playlistSong.songId}")
+                null
             }
         }
     }

@@ -71,7 +71,10 @@ data class MusicItem(
     val coverUrl: String? = null,
     // Jellyfin 播放会话信息
     val playbackSessionId: String? = null,
-    val mediaSourceId: String? = null
+    val mediaSourceId: String? = null,
+    val streamContainer: String? = null,
+    val streamPlayMethod: String? = null,
+    val isTranscoding: Boolean = false
 )
 
 /**
@@ -87,6 +90,7 @@ class MusicPlayer @Inject constructor(
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "music_player_channel"
         const val CHANNEL_NAME = "音乐播放"
+        private const val NOW_PLAYING_ACTIVITY_CLASS = "com.voiceassistant.app.ui.music.NowPlayingActivity"
 
         const val ACTION_PLAY = "com.voiceassistant.app.ACTION_PLAY"
         const val ACTION_PAUSE = "com.voiceassistant.app.ACTION_PAUSE"
@@ -430,6 +434,143 @@ class MusicPlayer @Inject constructor(
         }
         player.seekTo(index, 0)
         Timber.d("MusicPlayer: seek to index $index")
+    }
+
+    /**
+     * 从当前播放队列移除歌曲。
+     * 如果移除的是当前歌曲，则自动切到下一首；如果队列清空，则停止播放并清空状态。
+     */
+    fun removeFromQueue(index: Int): Boolean {
+        val player = exoPlayer ?: return false
+        if (index !in playlist.indices) {
+            Timber.w("removeFromQueue: index $index out of range")
+            return false
+        }
+
+        val currentIndex = player.currentMediaItemIndex.coerceAtLeast(_state.value.currentIndex)
+        val wasPlaying = player.isPlaying
+        val newPlaylist = playlist.toMutableList().apply { removeAt(index) }
+
+        if (shuffleMode) {
+            originalPlaylist = originalPlaylist.toMutableList().apply {
+                val originalIndex = indexOfFirst { it.id == playlist[index].id }
+                if (originalIndex >= 0) {
+                    removeAt(originalIndex)
+                }
+            }
+        }
+
+        if (newPlaylist.isEmpty()) {
+            player.stop()
+            player.clearMediaItems()
+            stopProgressUpdates()
+            dismissNotification()
+            playlist = emptyList()
+            originalPlaylist = emptyList()
+            shuffleMode = false
+            updateState {
+                it.copy(
+                    isPlaying = false,
+                    currentSongId = null,
+                    currentSongTitle = null,
+                    currentPosition = 0,
+                    duration = 0,
+                    playlist = emptyList(),
+                    currentIndex = -1,
+                    isShuffleEnabled = false
+                )
+            }
+            return true
+        }
+
+        val targetIndex = when {
+            index < currentIndex -> currentIndex - 1
+            index > currentIndex -> currentIndex
+            else -> index.coerceAtMost(newPlaylist.lastIndex)
+        }.coerceIn(0, newPlaylist.lastIndex)
+
+        val startPositionMs = if (index == currentIndex) 0L else player.currentPosition
+        playlist = newPlaylist
+
+        player.stop()
+        player.clearMediaItems()
+        player.setMediaItems(newPlaylist.map { MediaItem.fromUri(it.streamUrl) }, targetIndex, startPositionMs)
+        player.prepare()
+        if (wasPlaying) {
+            player.play()
+        }
+
+        val currentItem = newPlaylist.getOrNull(targetIndex)
+        updateState {
+            it.copy(
+                isPlaying = wasPlaying,
+                currentSongId = currentItem?.id,
+                currentSongTitle = currentItem?.title,
+                currentPosition = startPositionMs,
+                duration = (currentItem?.duration ?: 0) * 1000L,
+                playlist = newPlaylist,
+                currentIndex = targetIndex,
+                isShuffleEnabled = shuffleMode
+            )
+        }
+        updateMediaSessionPlaybackState()
+        updateNotification()
+        return true
+    }
+
+    /**
+     * 调整当前播放队列顺序。
+     * from/to 基于当前展示的播放队列索引。
+     */
+    fun moveQueueItem(fromIndex: Int, toIndex: Int): Boolean {
+        val player = exoPlayer ?: return false
+        if (fromIndex !in playlist.indices || toIndex !in playlist.indices) {
+            Timber.w("moveQueueItem: from=$fromIndex or to=$toIndex out of range")
+            return false
+        }
+        if (fromIndex == toIndex) {
+            return true
+        }
+
+        val currentItem = playlist.getOrNull(player.currentMediaItemIndex.coerceAtLeast(_state.value.currentIndex))
+        val wasPlaying = player.isPlaying
+        val currentPosition = player.currentPosition
+        val reordered = playlist.toMutableList().apply {
+            val movedItem = removeAt(fromIndex)
+            add(toIndex, movedItem)
+        }
+
+        playlist = reordered
+        originalPlaylist = reordered.toList()
+
+        val targetIndex = currentItem?.let { item ->
+            reordered.indexOfFirst { it.id == item.id }
+        }?.takeIf { it >= 0 } ?: toIndex
+
+        player.stop()
+        player.clearMediaItems()
+        player.setMediaItems(reordered.map { MediaItem.fromUri(it.streamUrl) }, targetIndex, currentPosition)
+        player.prepare()
+        if (wasPlaying) {
+            player.play()
+        }
+
+        val activeItem = reordered.getOrNull(targetIndex)
+        updateState {
+            it.copy(
+                isPlaying = wasPlaying,
+                currentSongId = activeItem?.id,
+                currentSongTitle = activeItem?.title,
+                currentPosition = currentPosition,
+                duration = (activeItem?.duration ?: 0) * 1000L,
+                playlist = reordered,
+                currentIndex = targetIndex,
+                isShuffleEnabled = shuffleMode
+            )
+        }
+        updateMediaSessionPlaybackState()
+        updateNotification()
+        return true
     }
 
     /**
@@ -902,6 +1043,7 @@ class MusicPlayer @Inject constructor(
         builder.setSubText(item.album ?: "")
         builder.setVisibility(Notification.VISIBILITY_PUBLIC)
         builder.setOngoing(player.isPlaying)
+        builder.setContentIntent(createActivityPendingIntent())
 
         // Previous button
         builder.addAction(
@@ -966,6 +1108,13 @@ class MusicPlayer @Inject constructor(
             setPackage(context.packageName)
         }
         return PendingIntent.getBroadcast(context, 0, intent, PENDING_INTENT_FLAGS)
+    }
+
+    private fun createActivityPendingIntent(): PendingIntent {
+        val intent = Intent().setClassName(context.packageName, NOW_PLAYING_ACTIVITY_CLASS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        return PendingIntent.getActivity(context, 1, intent, PENDING_INTENT_FLAGS)
     }
 
     /**

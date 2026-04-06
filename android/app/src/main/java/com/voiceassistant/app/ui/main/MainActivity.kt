@@ -493,7 +493,7 @@ class MainActivity : AppCompatActivity() {
                 conversationScroll.visibility = View.VISIBLE
 
                 latestMessages.asReversed().forEach { message ->
-                    appendMessageToConversation(message.text, message.isUser, message.createdAt, autoScroll = false)
+                    appendMessageToConversation(message.id, message.text, message.isUser, message.createdAt, autoScroll = false)
                 }
 
                 val oldestMessage = latestMessages.last()
@@ -536,7 +536,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 olderMessages.asReversed().forEach { message ->
-                    prependMessageToConversation(message.text, message.isUser, message.createdAt)
+                    prependMessageToConversation(message.id, message.text, message.isUser, message.createdAt)
                 }
 
                 val newOldest = olderMessages.last()
@@ -559,9 +559,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun addMessage(text: String, isUser: Boolean) {
         val createdAt = System.currentTimeMillis()
+        var newId: Long = 0L
         lifecycleScope.launch {
             try {
-                val newId = withContext(Dispatchers.IO) {
+                newId = withContext(Dispatchers.IO) {
                     chatMessageDao.insertMessage(
                         ChatMessageEntity(
                             text = text,
@@ -579,12 +580,13 @@ class MainActivity : AppCompatActivity() {
                 Timber.e(e, "Failed to persist chat message")
                 Toast.makeText(this@MainActivity, "聊天记录保存失败", Toast.LENGTH_SHORT).show()
             } finally {
-                appendMessageToConversation(text, isUser, createdAt)
+                appendMessageToConversation(newId, text, isUser, createdAt)
             }
         }
     }
 
     private fun appendMessageToConversation(
+        messageId: Long,
         text: String,
         isUser: Boolean,
         createdAt: Long,
@@ -592,7 +594,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         tvEmptyHint.visibility = View.GONE
         conversationScroll.visibility = View.VISIBLE
-        conversationContainer.addView(createMessageItemView(text, isUser, createdAt))
+        conversationContainer.addView(createMessageItemView(messageId, text, isUser, createdAt))
 
         if (autoScroll) {
             conversationScroll.post {
@@ -601,13 +603,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun prependMessageToConversation(text: String, isUser: Boolean, createdAt: Long) {
+    private fun prependMessageToConversation(messageId: Long, text: String, isUser: Boolean, createdAt: Long) {
         tvEmptyHint.visibility = View.GONE
         conversationScroll.visibility = View.VISIBLE
-        conversationContainer.addView(createMessageItemView(text, isUser, createdAt), 0)
+        conversationContainer.addView(createMessageItemView(messageId, text, isUser, createdAt), 0)
     }
 
-    private fun createMessageItemView(text: String, isUser: Boolean, createdAt: Long): LinearLayout {
+    private fun createMessageItemView(messageId: Long, text: String, isUser: Boolean, createdAt: Long): LinearLayout {
         val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
         val timestamp = timeFormat.format(java.util.Date(createdAt))
 
@@ -661,6 +663,13 @@ class MainActivity : AppCompatActivity() {
 
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            tag = messageId
+            isClickable = true
+            isFocusable = true
+            setOnLongClickListener { view ->
+                showDeleteMessageDialog(messageId, view)
+                true
+            }
             if (isUser) {
                 gravity = android.view.Gravity.END
                 addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
@@ -670,6 +679,41 @@ class MainActivity : AppCompatActivity() {
 
             if (!isUser) {
                 addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
+            }
+        }
+    }
+
+    private fun showDeleteMessageDialog(messageId: Long, messageView: View) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("删除消息")
+            .setMessage("确定要删除这条消息吗？")
+            .setPositiveButton("删除") { _, _ ->
+                deleteMessage(messageId, messageView)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun deleteMessage(messageId: Long, messageView: View) {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    chatMessageDao.deleteMessage(messageId)
+                }
+                // 从 UI 移除消息视图
+                conversationContainer.removeView(messageView)
+                // 检查是否为空
+                if (conversationContainer.childCount == 0) {
+                    tvEmptyHint.visibility = View.VISIBLE
+                    conversationScroll.visibility = View.GONE
+                    hasMoreHistory = true
+                    oldestLoadedMessageId = null
+                    oldestLoadedMessageCreatedAt = null
+                }
+                Toast.makeText(this@MainActivity, "消息已删除", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to delete message")
+                Toast.makeText(this@MainActivity, "删除失败", Toast.LENGTH_SHORT).show()
             }
         }
     }

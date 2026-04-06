@@ -125,82 +125,149 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- Album Art / Now Playing Icon -->
-            <ImageView
-                android:id="@+id/ivNowPlayingCover"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:src="@android:drawable/ic_menu_slideshow"
-                android:scaleType="centerCrop"
-                android:background="@color/surface" />
-
-            <!-- Song Info -->
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginHorizontal="12dp"
-                android:orientation="vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/tvNowPlayingTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    tools:text="Song Title" />
+                <!-- Album Art / Now Playing Icon -->
+                <ImageView
+                    android:id="@+id/ivNowPlayingCover"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@android:drawable/ic_menu_slideshow"
+                    android:scaleType="centerCrop"
+                    android:background="@color/surface" />
 
-                <TextView
-                    android:id="@+id/tvNowPlayingArtist"
-                    android:layout_width="match_parent"
+                <!-- Song Info -->
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    tools:text="Artist Name" />
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="12dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvNowPlayingTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="Song Title" />
+
+                    <TextView
+                        android:id="@+id/tvNowPlayingArtist"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        tools:text="Artist Name" />
+
+                    <TextView
+                        android:id="@+id/tvNowPlayingStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/secondary"
+                        android:textSize="11sp"
+                        tools:text="WMA/ASF，正在服务器转码为 AAC" />
+
+                </LinearLayout>
+
+                <!-- DLNA Device Chip -->
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipDlnaDevice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="选择设备"
+                    android:textSize="11sp"
+                    app:chipBackgroundColor="@color/primary"
+                    app:chipStrokeWidth="0dp"
+                    app:chipIcon="@drawable/ic_remote_play"
+                    app:chipIconTint="@color/on_primary"
+                    app:chipIconVisible="true" />
 
             </LinearLayout>
 
-            <!-- DLNA Device Chip -->
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipDlnaDevice"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="选择设备"
-                android:textSize="11sp"
-                app:chipBackgroundColor="@color/primary"
-                app:chipStrokeWidth="0dp"
-                app:chipIcon="@drawable/ic_remote_play"
-                app:chipIconTint="@color/on_primary"
-                app:chipIconVisible="true" />
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progressNowPlaying"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:max="1000"
+                android:progress="0"
+                android:indeterminate="false"
+                app:indicatorColor="@color/primary"
+                app:trackColor="@color/text_tertiary" />
 
             <!-- Play Controls -->
-            <ImageButton
-                android:id="@+id/btnPlayPause"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_play"
-                android:contentDescription="播放"
-                app:tint="@color/primary" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <ImageButton
-                android:id="@+id/btnStop"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:contentDescription="停止"
-                app:tint="@color/text_secondary" />
+                <ImageButton
+                    android:id="@+id/btnPreviousMini"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_previous"
+                    android:contentDescription="上一首"
+                    app:tint="@color/text_secondary" />
+
+                <ImageButton
+                    android:id="@+id/btnPlayPause"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_play"
+                    android:contentDescription="播放"
+                    app:tint="@color/primary" />
+
+                <ImageButton
+                    android:id="@+id/btnNextMini"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_next"
+                    android:contentDescription="下一首"
+                    app:tint="@color/text_secondary" />
+
+                <ImageButton
+                    android:id="@+id/btnStop"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:contentDescription="停止"
+                    app:tint="@color/text_secondary" />
+
+                <TextView
+                    android:id="@+id/tvNowPlayingTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="00:00 / 00:00"
+                    android:textColor="@color/text_tertiary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
