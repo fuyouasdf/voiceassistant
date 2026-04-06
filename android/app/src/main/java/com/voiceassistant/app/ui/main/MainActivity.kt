@@ -492,10 +492,10 @@ class MainActivity : AppCompatActivity() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 // 向上滚动时检查是否到达顶部
-                if (dy < 0) {
+                if (dy < 0 && !chatMessageAdapter.isLoadingMore) {
                     val layoutManager = recyclerView.layoutManager as LinearLayoutManager
                     val firstVisible = layoutManager.findFirstVisibleItemPosition()
-                    if (firstVisible == 0) {
+                    if (firstVisible <= 1) { // <=1 因为可能有 loading 占位符
                         loadMoreConversationHistory()
                     }
                 }
@@ -538,6 +538,9 @@ class MainActivity : AppCompatActivity() {
                 oldestLoadedMessageId = oldestMessage.id
                 oldestLoadedMessageCreatedAt = oldestMessage.createdAt
                 hasMoreHistory = latestMessages.size >= HISTORY_PAGE_SIZE
+
+                // 初始加载滚动到底部显示最新消息
+                conversationRecyclerView.scrollToPosition(chatMessageAdapter.itemCount - 1)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load initial conversation history")
                 Toast.makeText(this@MainActivity, "聊天记录加载失败", Toast.LENGTH_SHORT).show()
@@ -550,11 +553,16 @@ class MainActivity : AppCompatActivity() {
     private fun loadMoreConversationHistory() {
         val oldestId = oldestLoadedMessageId ?: return
         val oldestCreatedAt = oldestLoadedMessageCreatedAt ?: return
-        if (isLoadingHistory || !hasMoreHistory) return
+        if (chatMessageAdapter.isLoadingMore || !hasMoreHistory) return
 
-        isLoadingHistory = true
+        // 显示 loading 占位符
+        chatMessageAdapter.isLoadingMore = true
+
         lifecycleScope.launch {
             try {
+                val layoutManager = conversationRecyclerView.layoutManager as LinearLayoutManager
+                val firstVisiblePos = layoutManager.findFirstVisibleItemPosition()
+
                 val olderMessages = withContext(Dispatchers.IO) {
                     chatMessageDao.getMessagesBefore(
                         beforeCreatedAt = oldestCreatedAt,
@@ -574,11 +582,15 @@ class MainActivity : AppCompatActivity() {
                 oldestLoadedMessageId = newOldest.id
                 oldestLoadedMessageCreatedAt = newOldest.createdAt
                 hasMoreHistory = olderMessages.size >= HISTORY_PAGE_SIZE
+
+                // 恢复滚动位置，保持用户正在看的内容不变
+                // +1 是因为 loading 占位符占了一个位置
+                layoutManager.scrollToPositionWithOffset(firstVisiblePos + olderMessages.size + 1, 0)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load more conversation history")
                 Toast.makeText(this@MainActivity, "加载历史记录失败", Toast.LENGTH_SHORT).show()
             } finally {
-                isLoadingHistory = false
+                chatMessageAdapter.isLoadingMore = false
             }
         }
     }

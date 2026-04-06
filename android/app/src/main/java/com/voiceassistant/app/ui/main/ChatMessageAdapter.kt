@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -15,37 +16,77 @@ import java.util.Locale
 
 class ChatMessageAdapter(
     private val onMessageLongClick: (Long, View) -> Unit
-) : RecyclerView.Adapter<ChatMessageAdapter.MessageViewHolder>() {
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+    companion object {
+        private const val VIEW_TYPE_MESSAGE = 0
+        private const val VIEW_TYPE_LOADING = 1
+    }
 
     private val messages = mutableListOf<ChatMessageEntity>()
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    var isLoadingMore = false
+        set(value) {
+            if (field != value) {
+                field = value
+                if (value) {
+                    notifyItemInserted(0) // 插入 loading 占位
+                } else {
+                    notifyItemRemoved(0)
+                }
+            }
+        }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_message, parent, false)
-        return MessageViewHolder(view)
+    override fun getItemViewType(position: Int): Int {
+        return if (isLoadingMore && position == 0) VIEW_TYPE_LOADING else VIEW_TYPE_MESSAGE
     }
 
-    override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
-        holder.bind(messages[position])
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return when (viewType) {
+            VIEW_TYPE_LOADING -> {
+                val view = LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_loading, parent, false)
+                LoadingViewHolder(view)
+            }
+            else -> {
+                val view = LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_message, parent, false)
+                MessageViewHolder(view)
+            }
+        }
     }
 
-    override fun getItemCount(): Int = messages.size
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (holder) {
+            is MessageViewHolder -> {
+                val msgPosition = if (isLoadingMore) position - 1 else position
+                if (msgPosition in messages.indices) {
+                    holder.bind(messages[msgPosition])
+                }
+            }
+            // LoadingViewHolder 无需绑定
+        }
+    }
+
+    override fun getItemCount(): Int = messages.size + if (isLoadingMore) 1 else 0
 
     fun getMessageAt(position: Int): ChatMessageEntity = messages[position]
 
     fun addMessages(newMessages: List<ChatMessageEntity>, atEnd: Boolean = true) {
-        val diffCallback = MessageDiffCallback(messages, newMessages, atEnd)
-        val diffResult = DiffUtil.calculateDiff(diffCallback)
+        if (newMessages.isEmpty()) return
 
         if (atEnd) {
+            val oldSize = messages.size
             messages.addAll(newMessages)
+            notifyItemRangeInserted(oldSize, newMessages.size)
         } else {
-            // Prepend - need to add in reverse order so oldest appears first
-            messages.addAll(0, newMessages.reversed())
+            // Prepend 历史消息：直接计算插入数量，使用 notifyItemRangeInserted
+            // 跳过 DiffUtil，因为 prepending 时位置对应会出错
+            val reversed = newMessages.reversed()
+            val insertCount = reversed.size
+            messages.addAll(0, reversed)
+            notifyItemRangeInserted(0, insertCount)
         }
-
-        diffResult.dispatchUpdatesTo(this)
     }
 
     fun addMessage(message: ChatMessageEntity) {
@@ -68,6 +109,10 @@ class ChatMessageAdapter(
     fun getOldestMessageId(): Long? = messages.firstOrNull()?.id
 
     fun getOldestMessageCreatedAt(): Long? = messages.firstOrNull()?.createdAt
+
+    fun getMessagePosition(messageId: Long): Int {
+        return messages.indexOfFirst { it.id == messageId }
+    }
 
     inner class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val aiContainer: LinearLayout = itemView.findViewById(R.id.aiMessageContainer)
@@ -100,10 +145,11 @@ class ChatMessageAdapter(
         }
     }
 
+    class LoadingViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
+
     private class MessageDiffCallback(
         private val oldList: List<ChatMessageEntity>,
-        private val newList: List<ChatMessageEntity>,
-        private val atEnd: Boolean
+        private val newList: List<ChatMessageEntity>
     ) : DiffUtil.Callback() {
 
         override fun getOldListSize(): Int = oldList.size
@@ -111,15 +157,11 @@ class ChatMessageAdapter(
         override fun getNewListSize(): Int = newList.size
 
         override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-            val oldItem = oldList[oldItemPosition]
-            val newItem = if (atEnd) newList[newItemPosition] else newList[newItemPosition]
-            return oldItem.id == newItem.id
+            return oldList[oldItemPosition].id == newList[newItemPosition].id
         }
 
         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-            val oldItem = oldList[oldItemPosition]
-            val newItem = if (atEnd) newList[newItemPosition] else newList[newItemPosition]
-            return oldItem == newItem
+            return oldList[oldItemPosition] == newList[newItemPosition]
         }
     }
 }
