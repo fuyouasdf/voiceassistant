@@ -82,7 +82,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvProvider: TextView
     private lateinit var jellyfinStatusDot: View
     private lateinit var tvJellyfinStatus: TextView
-    private lateinit var tvSelectedDlnaDevice: TextView
+    private lateinit var tvSelectedPlaybackDevice: TextView
     private lateinit var btnSettings: ImageButton
 
     // Conversation
@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity() {
         // 每次返回主页时重新检测 LLM 和 Jellyfin 连接状态
         testLlmConnection()
         testJellyfinConnection()
-        refreshSelectedDlnaDeviceDisplay()
+        refreshSelectedPlaybackDeviceDisplay()
     }
 
     override fun onStart() {
@@ -171,7 +171,7 @@ class MainActivity : AppCompatActivity() {
         tvProvider = findViewById(R.id.tvProvider)
         jellyfinStatusDot = findViewById(R.id.jellyfinStatusDot)
         tvJellyfinStatus = findViewById(R.id.tvJellyfinStatus)
-        tvSelectedDlnaDevice = findViewById(R.id.tvSelectedDlnaDevice)
+        tvSelectedPlaybackDevice = findViewById(R.id.tvSelectedDlnaDevice)
         btnSettings = findViewById(R.id.btnSettings)
 
         // 测试 LLM 连接状态
@@ -179,7 +179,7 @@ class MainActivity : AppCompatActivity() {
 
         // 测试 Jellyfin 连接状态
         testJellyfinConnection()
-        refreshSelectedDlnaDeviceDisplay()
+        refreshSelectedPlaybackDeviceDisplay()
 
         // Conversation
         tvEmptyHint = findViewById(R.id.tvEmptyHint)
@@ -785,13 +785,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshSelectedDlnaDeviceDisplay() {
+    private fun refreshSelectedPlaybackDeviceDisplay() {
         val prefs = getSharedPreferences("voice_assistant_prefs", Context.MODE_PRIVATE)
         val deviceName = prefs.getString(PREF_SELECTED_DEVICE_NAME, null)
-        tvSelectedDlnaDevice.text = if (deviceName.isNullOrBlank()) {
-            "设备: 未选择"
+        tvSelectedPlaybackDevice.text = if (deviceName.isNullOrBlank()) {
+            "播放设备: 未选择"
         } else {
-            "设备: $deviceName"
+            "播放设备: $deviceName"
         }
     }
 }

@@ -3,6 +3,8 @@ package com.voiceassistant.app.ui.music
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.voiceassistant.core.music.MusicItem
+import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.JellyfinSong
@@ -21,6 +23,8 @@ import javax.inject.Inject
 
 private const val PREF_SELECTED_DEVICE_ID = "jellyfin_selected_device_id"
 private const val PREF_SELECTED_DEVICE_NAME = "jellyfin_selected_device_name"
+private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
+private const val LOCAL_DEVICE_NAME = "本机"
 
 /**
  * Jellyfin 浏览页面状态
@@ -46,7 +50,8 @@ data class JellyfinBrowseUiState(
 class JellyfinBrowseViewModel @Inject constructor(
     private val jellyfinClient: JellyfinClient,
     private val sharedPreferences: SharedPreferences,
-    private val playlistRepository: PlaylistRepository
+    private val playlistRepository: PlaylistRepository,
+    private val musicPlayer: MusicPlayer
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(JellyfinBrowseUiState())
@@ -59,6 +64,19 @@ class JellyfinBrowseViewModel @Inject constructor(
     // 记住上次选择的设备ID
     private val savedDeviceId: String?
         get() = sharedPreferences.getString(PREF_SELECTED_DEVICE_ID, null)
+
+    private val localDevice = SessionInfo(
+        id = LOCAL_DEVICE_SESSION_ID,
+        deviceName = LOCAL_DEVICE_NAME,
+        deviceId = LOCAL_DEVICE_SESSION_ID,
+        client = "VoiceAssistant",
+        userName = null,
+        userId = null,
+        isActive = true,
+        supportsMediaControl = true,
+        playbackState = null,
+        nowPlayingItem = null
+    )
 
     init {
         // 加载专辑列表
@@ -77,6 +95,14 @@ class JellyfinBrowseViewModel @Inject constructor(
             playlistRepository.getAllPlaylists().collect { list ->
                 _playlists.value = list
             }
+        }
+    }
+
+    private fun warmupPlaybackInfo(songs: List<JellyfinSong>) {
+        val songIds = songs.take(2).map { it.id }
+        if (songIds.isEmpty()) return
+        viewModelScope.launch {
+            jellyfinClient.prefetchPlaybackInfo(songIds)
         }
     }
 
@@ -131,6 +157,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                     songs = songs,
                     albums = emptyList()
                 )
+                warmupPlaybackInfo(songs)
             } catch (e: Exception) {
                 Timber.e(e, "搜索失败")
                 _uiState.value = _uiState.value.copy(
@@ -157,6 +184,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                     currentAlbumName = album.name,
                     albums = emptyList()
                 )
+                warmupPlaybackInfo(songs)
             } catch (e: Exception) {
                 Timber.e(e, "加载专辑歌曲失败")
                 _uiState.value = _uiState.value.copy(
@@ -189,19 +217,39 @@ class JellyfinBrowseViewModel @Inject constructor(
 
             val session = _uiState.value.selectedDlnaDevice
             if (session == null) {
-                _uiState.value = _uiState.value.copy(error = "请先选择投屏设备")
+                _uiState.value = _uiState.value.copy(error = "请先选择播放设备")
                 return@launch
             }
 
             try {
-                // 使用Jellyfin Session API 播放到目标设备
-                val result = jellyfinClient.playItem(session.id, song.id)
-                if (result.isFailure) {
-                    _uiState.value = _uiState.value.copy(
-                        error = "播放失败: ${result.exceptionOrNull()?.message}"
+                if (session.id == LOCAL_DEVICE_SESSION_ID) {
+                    val streamInfo = jellyfinClient.getStreamInfo(song.id)
+                    Timber.d(
+                        "本机播放: songId=${song.id}, playMethod=${streamInfo.playMethod}, container=${streamInfo.container}, transcoding=${streamInfo.isTranscoding}"
                     )
-                } else {
+                    val musicItem = MusicItem(
+                        id = song.id,
+                        title = song.title,
+                        artist = song.artist,
+                        album = song.album,
+                        duration = song.duration,
+                        streamUrl = streamInfo.url,
+                        coverUrl = song.coverUrl,
+                        playbackSessionId = streamInfo.playSessionId,
+                        mediaSourceId = streamInfo.mediaSourceId
+                    )
+                    musicPlayer.play(musicItem)
                     _uiState.value = _uiState.value.copy(isPlaying = true)
+                } else {
+                    // 使用Jellyfin Session API 播放到目标设备
+                    val result = jellyfinClient.playItem(session.id, song.id)
+                    if (result.isFailure) {
+                        _uiState.value = _uiState.value.copy(
+                            error = "播放失败: ${result.exceptionOrNull()?.message}"
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(isPlaying = true)
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "播放失败")
@@ -217,12 +265,22 @@ class JellyfinBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             val session = _uiState.value.selectedDlnaDevice ?: return@launch
             try {
-                if (_uiState.value.isPlaying) {
-                    jellyfinClient.pause(session.id)
-                    _uiState.value = _uiState.value.copy(isPlaying = false)
+                if (session.id == LOCAL_DEVICE_SESSION_ID) {
+                    if (_uiState.value.isPlaying) {
+                        musicPlayer.pause()
+                        _uiState.value = _uiState.value.copy(isPlaying = false)
+                    } else {
+                        musicPlayer.resume()
+                        _uiState.value = _uiState.value.copy(isPlaying = true)
+                    }
                 } else {
-                    jellyfinClient.unpause(session.id)
-                    _uiState.value = _uiState.value.copy(isPlaying = true)
+                    if (_uiState.value.isPlaying) {
+                        jellyfinClient.pause(session.id)
+                        _uiState.value = _uiState.value.copy(isPlaying = false)
+                    } else {
+                        jellyfinClient.unpause(session.id)
+                        _uiState.value = _uiState.value.copy(isPlaying = true)
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "播放控制失败")
@@ -238,7 +296,11 @@ class JellyfinBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             val session = _uiState.value.selectedDlnaDevice ?: return@launch
             try {
-                jellyfinClient.stop(session.id)
+                if (session.id == LOCAL_DEVICE_SESSION_ID) {
+                    musicPlayer.stop()
+                } else {
+                    jellyfinClient.stop(session.id)
+                }
                 _uiState.value = _uiState.value.copy(currentSong = null, isPlaying = false)
             } catch (e: Exception) {
                 Timber.e(e, "停止播放失败")
@@ -280,18 +342,19 @@ class JellyfinBrowseViewModel @Inject constructor(
                 val sessions = jellyfinClient.getSessions()
                 // 过滤出支持媒体控制且活跃的会话（这些就是可投屏设备）
                 val castableDevices = sessions.filter { it.supportsMediaControl && it.isActive }
-                Timber.d("发现 ${castableDevices.size} 个可投屏设备")
+                val allDevices = listOf(localDevice) + castableDevices
+                Timber.d("发现 ${castableDevices.size} 个可投屏设备，本机设备已加入列表")
 
                 // 尝试恢复上次选择的设备
                 val savedDevice = savedDeviceId?.let { savedId ->
-                    castableDevices.find { it.id == savedId }
+                    allDevices.find { it.id == savedId }
                 }
                 val selectedDevice = savedDevice
                     ?: _uiState.value.selectedDlnaDevice
-                    ?: castableDevices.firstOrNull()
+                    ?: localDevice
 
                 _uiState.value = _uiState.value.copy(
-                    dlnaDevices = castableDevices,
+                    dlnaDevices = allDevices,
                     selectedDlnaDevice = selectedDevice
                 )
 

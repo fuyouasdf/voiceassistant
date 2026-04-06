@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Jellyfin 浏览页面
- * 用于浏览专辑、搜索歌曲、播放到DLNA设备
+ * 用于浏览专辑、搜索歌曲、播放到本机或DLNA设备
  */
 @AndroidEntryPoint
 class JellyfinBrowseActivity : AppCompatActivity() {
@@ -43,7 +43,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     private lateinit var albumAdapter: AlbumAdapter
     private lateinit var songAdapter: SongAdapter
 
-    // DLNA Dialog
+    // Device Dialog
     private var dlnaDialog: AlertDialog? = null
     private var lastKnownDeviceCount = 0
 
@@ -178,14 +178,14 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                     else android.R.drawable.ic_media_play
                 )
 
-                // DLNA device
+                // Playback device
                 state.selectedDlnaDevice?.let { device ->
                     binding.chipDlnaDevice.text = device.deviceName
                 } ?: run {
                     binding.chipDlnaDevice.text = "选择设备"
                 }
 
-                // Update DLNA dialog when devices change
+                // Update device dialog when device list changes
                 if (state.dlnaDevices.size != lastKnownDeviceCount) {
                     lastKnownDeviceCount = state.dlnaDevices.size
                     if (dlnaDialog != null && dlnaDialog!!.isShowing) {
@@ -207,19 +207,13 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
     private fun showDlnaDeviceDialog() {
         val devices = viewModel.uiState.value.dlnaDevices
-
-        // Show dialog immediately, start discovery if no devices
-        val deviceNames = if (devices.isEmpty()) {
-            arrayOf("正在搜索设备...")
-        } else {
-            devices.map { it.deviceName }.toTypedArray()
-        }
+        val deviceNames = devices.map { it.deviceName }.toTypedArray()
 
         dlnaDialog?.dismiss()
         dlnaDialog = AlertDialog.Builder(this)
-            .setTitle("选择投屏设备")
+            .setTitle("选择播放设备")
             .setItems(deviceNames) { _, which ->
-                if (devices.isNotEmpty() && which < devices.size) {
+                if (which < devices.size) {
                     viewModel.selectDlnaDevice(devices[which])
                 }
             }
@@ -231,10 +225,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         dlnaDialog?.show()
 
-        // Start discovery if no devices
-        if (devices.isEmpty()) {
-            viewModel.discoverDlnaDevices()
-        }
+        viewModel.discoverDlnaDevices()
     }
 
     private fun updateDlnaDialog(devices: List<SessionInfo>) {
@@ -242,7 +233,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         dlnaDialog?.dismiss()
         dlnaDialog = AlertDialog.Builder(this)
-            .setTitle("选择投屏设备")
+            .setTitle("选择播放设备")
             .setItems(devices.map { it.deviceName }.toTypedArray()) { _, which ->
                 if (which < devices.size) {
                     viewModel.selectDlnaDevice(devices[which])

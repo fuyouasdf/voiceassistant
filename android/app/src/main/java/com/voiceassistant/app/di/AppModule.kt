@@ -9,6 +9,7 @@ import com.voiceassistant.core.audio.AudioPlayer
 import com.voiceassistant.core.dlna.DLNAManager
 import com.voiceassistant.core.dlna.DLNAPlayer
 import com.voiceassistant.core.intent.IntentRouter
+import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.core.music.PlaybackReporter
 import com.voiceassistant.core.pipeline.ASRManager
 import com.voiceassistant.core.pipeline.PipelineConfig
@@ -260,9 +261,17 @@ object AppModule {
         llmRepository: LLMRepository?,
         playlistRepository: PlaylistRepository?,
         sharedPreferences: SharedPreferences,
-        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase
+        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase,
+        musicPlayer: MusicPlayer
     ): IntentRouter {
-        return IntentRouter(musicRepository, llmRepository, playlistRepository, sharedPreferences, handleChatUseCase)
+        return IntentRouter(
+            musicRepository,
+            llmRepository,
+            playlistRepository,
+            sharedPreferences,
+            handleChatUseCase,
+            musicPlayer
+        )
     }
 
     @Provides

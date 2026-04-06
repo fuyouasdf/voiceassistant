@@ -216,7 +216,7 @@ voice-assistant-android/
 ## Jellyfin 音乐播放
 
 ### 架构概述
-使用 Jellyfin REST API 获取音乐库数据，通过 Jellyfin 内置的 DLNA 投放功能将音乐推送到 DLNA 设备播放。
+使用 Jellyfin REST API 获取音乐库数据，播放目标统一抽象为“播放设备”：可选本机 ExoPlayer 本地播放，或通过 Jellyfin Session API 控制远程 DLNA/客户端设备播放。
 
 ### 依赖
 ```gradle
@@ -261,7 +261,14 @@ Headers:
    - 播放态命令使用 `POST /Sessions/{sessionId}/Playing/{command}`（如 `Stop/Pause/Unpause/NextTrack/PreviousTrack/Seek/SetVolume`）
 4. UI 通过 StateFlow 观察播放状态
 
-语音指令与文本指令（`IntentRouter`）与手动点击播放统一走 Session API，不再回退 DLNA SOAP 控制，避免 `Failed to get control URL`。
+语音指令与文本指令（`IntentRouter`）与手动点击播放统一走“播放设备”路由：
+- 选择本机时，走 `MusicPlayer` 本地播放与控制。
+- 选择远程设备时，走 Jellyfin Session API。
+- 不再回退 DLNA SOAP 控制，避免 `Failed to get control URL`。
+- 播放列表页点击歌曲时，不直接复用数据库缓存的 `streamUrl`；会先按 `songId` 调 `JellyfinClient.getStreamInfo()` 获取最新 `url/playSessionId/mediaSourceId`，再交给 `MusicPlayer`，避免缓存播放参数过期导致本机不播放。
+- `MusicPlayer` 对同一首歌的点击去重仅在“当前已处于实际播放态”时生效；如果同曲同 URL 但播放器已暂停、报错或停住，再次点击会强制重新拉起播放。
+- `MusicPlayer` 使用较低的启动缓冲门槛（低延迟 `LoadControl`）以缩短进入 `STATE_READY` 的时间；播放列表页加载后会预热前 3 首歌的 `PlaybackInfo`，减少点击时的冷启动等待。
+- 音频项构建流地址时统一使用 `/Audio/{id}/stream`，本机播放默认追加 `Container=mp4&AudioCodec=aac` 强制转码；已验证当前 Jellyfin 服务端的部分 `DIRECT_PLAY` 音频直链会返回 `200` 但空 body，导致 ExoPlayer 无法识别输入流。
 
 ### 音乐库浏览
 支持多级浏览：
@@ -277,8 +284,8 @@ enum class MusicCategory {
 }
 ```
 
-### DLNA 投放
-使用自实现的 SSDP 发现协议发现 DLNA 设备，通过 Jellyfin 的 DLNA 功能投放音乐。
+### 播放设备
+设备选择固定包含“本机”，并可附加从 Jellyfin 会话中发现的远程可控设备。
 
 #### DLNAManager
 - 使用原生 SSDP 协议发现 DLNA 设备 (M-SEARCH 广播)
@@ -317,7 +324,7 @@ Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传�
 ## 首页状态指示逻辑
 
 - 首页顶部 `statusDot/tvStatus` 表示 **LLM 实际连通性**，不再由语音管道状态（IDLE/LISTENING/THINKING）驱动。
-- 首页状态栏新增已选投屏设备名称展示（`设备: xxx`），读取 `SharedPreferences` 中 Jellyfin 设备选择结果。
+- 首页状态栏新增已选播放设备名称展示（`播放设备: xxx`），读取 `SharedPreferences` 中 Jellyfin 设备选择结果。
 - `MainActivity.testLlmConnection()` 在 `onResume` 和页面初始化时执行：
   - 未配置（URL/API Key 为空）=> `LLM: 未配置` + 离线指示。
   - 已配置 => 发起一次真实 LLM 请求探测，成功显示 `LLM: 已连接`，失败显示 `LLM: 未连接`。

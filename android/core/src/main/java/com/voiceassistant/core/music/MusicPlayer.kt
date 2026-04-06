@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -291,11 +292,21 @@ class MusicPlayer @Inject constructor(
                 setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             }
 
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    1500,  // minBufferMs
+                    5000,  // maxBufferMs
+                    250,   // bufferForPlaybackMs
+                    750    // bufferForPlaybackAfterRebufferMs
+                )
+                .build()
+
             exoPlayer = ExoPlayer.Builder(context, renderersFactory)
+                .setLoadControl(loadControl)
                 .build().also {
                     it.addListener(playerListener)
                 }
-            Timber.d("MusicPlayer: 创建 ExoPlayer with FFmpeg decoder extension")
+            Timber.d("MusicPlayer: 创建 ExoPlayer with FFmpeg decoder extension and low-latency load control")
         }
         return exoPlayer!!
     }
@@ -314,10 +325,15 @@ class MusicPlayer @Inject constructor(
         // 如果正在播放同一首歌且 URL 相同，不重新创建播放器
         val currentItem = _state.value.playlist.getOrNull(_state.value.currentIndex)
         if (currentItem != null && currentItem.id == item.id && exoPlayer != null) {
-            val currentMediaUri = exoPlayer?.currentMediaItem?.localConfiguration?.uri?.toString()
+            val player = exoPlayer
+            val currentMediaUri = player?.currentMediaItem?.localConfiguration?.uri?.toString()
             if (currentMediaUri == item.streamUrl) {
-                android.util.Log.i("♪", "SAME song+url ${item.title}, ignoring")
-                return
+                val isActivelyPlaying = player?.isPlaying == true
+                if (isActivelyPlaying) {
+                    android.util.Log.i("♪", "SAME song+url ${item.title}, already playing, ignoring")
+                    return
+                }
+                android.util.Log.i("♪", "SAME song+url ${item.title}, but player is not actively playing, restarting")
             } else {
                 android.util.Log.i("♪", "SAME id but DIFFERENT url! current=$currentMediaUri, new=${item.streamUrl}")
             }
@@ -328,11 +344,10 @@ class MusicPlayer @Inject constructor(
         seekedPositionMs = null
         lastSeekPosition = null
         lastSeekRealtimeMs = 0L
-        // 释放旧播放器
-        exoPlayer?.release()
-        exoPlayer = null
 
         val player = getOrCreatePlayer()
+        player.stop()
+        player.clearMediaItems()
         playlist = listOf(item)
 
         val mediaItem = MediaItem.fromUri(item.streamUrl)
@@ -371,11 +386,9 @@ class MusicPlayer @Inject constructor(
     fun playPlaylist(items: List<MusicItem>, startIndex: Int = 0) {
         if (items.isEmpty()) return
 
-        // 释放旧播放器
-        exoPlayer?.release()
-        exoPlayer = null
-
         val player = getOrCreatePlayer()
+        player.stop()
+        player.clearMediaItems()
         playlist = items
 
         val mediaItems = items.map { MediaItem.fromUri(it.streamUrl) }
