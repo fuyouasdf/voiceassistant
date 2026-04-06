@@ -3,6 +3,7 @@ package com.voiceassistant.app.di
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
+import coil.ImageLoader
 import com.voiceassistant.app.ui.music.JellyfinPlaybackReporter
 import com.voiceassistant.core.audio.AudioCapture
 import com.voiceassistant.core.audio.AudioPlayer
@@ -116,6 +117,12 @@ object AppModule {
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
         return context.getSharedPreferences("voice_assistant_prefs", Context.MODE_PRIVATE)
+    }
+
+    @Provides
+    @Singleton
+    fun provideImageLoader(@ApplicationContext context: Context): ImageLoader {
+        return ImageLoader.Builder(context).build()
     }
 
 

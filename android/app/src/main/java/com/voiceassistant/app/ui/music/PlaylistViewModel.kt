@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceassistant.core.music.MusicItem
 import com.voiceassistant.core.music.MusicPlayer
+import com.voiceassistant.core.music.QueueSource
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.PlaylistSong
@@ -131,7 +132,7 @@ class PlaylistViewModel @Inject constructor(
                 Timber.d(
                     "playlist playSong: queueSize=${musicItems.size}, startIndex=$startIndex, songId=${song.songId}, playMethod=${currentItem?.streamPlayMethod}, container=${currentItem?.streamContainer}"
                 )
-                musicPlayer.playPlaylist(musicItems, startIndex)
+                musicPlayer.playPlaylist(musicItems, startIndex, QueueSource.PLAYLIST)
             } catch (e: Exception) {
                 Timber.e(e, "播放播放列表歌曲失败")
                 _uiState.value = _uiState.value.copy(error = "播放失败: ${e.message}")

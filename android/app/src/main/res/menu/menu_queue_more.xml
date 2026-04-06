@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_play_now"
+        android:title="立即播放" />
+    <item
+        android:id="@+id/action_play_next"
+        android:title="下一首播放" />
+    <item
+        android:id="@+id/action_remove"
+        android:title="从队列移除" />
+</menu>

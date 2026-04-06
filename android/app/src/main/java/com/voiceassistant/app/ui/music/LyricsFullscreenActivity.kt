@@ -1,23 +1,39 @@
 package com.voiceassistant.app.ui.music
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.View
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.createBitmap
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.palette.graphics.Palette
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityLyricsFullscreenBinding
 import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.LyricLine
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class LyricsFullscreenActivity : AppCompatActivity() {
@@ -27,6 +43,9 @@ class LyricsFullscreenActivity : AppCompatActivity() {
 
     @Inject
     lateinit var jellyfinClient: JellyfinClient
+
+    @Inject
+    lateinit var imageLoader: ImageLoader
 
     private lateinit var binding: ActivityLyricsFullscreenBinding
     private val lyricsAdapter = LyricsAdapter { line ->
@@ -40,6 +59,16 @@ class LyricsFullscreenActivity : AppCompatActivity() {
     private var highlightedLyricIndex: Int = -1
     private var isUserScrollingLyrics = false
     private var pendingCenterLyricIndex: Int? = null
+
+    // Fallback gradient drawable used when no cover is available
+    private val noCoverGradient: GradientDrawable by lazy {
+        GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.parseColor("#FF1A1A2E"), Color.parseColor("#FF0A0A0F"))
+        ).apply {
+            gradientType = GradientDrawable.LINEAR_GRADIENT
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +100,7 @@ class LyricsFullscreenActivity : AppCompatActivity() {
     }
 
     private fun setupInsets() {
-        ViewCompat.setOnApplyWindowInsetsListener(binding.topBar) { view, windowInsets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root.findViewById<View>(R.id.topBar)) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(view.paddingLeft, insets.top, view.paddingRight, view.paddingBottom)
             windowInsets
@@ -109,8 +138,121 @@ class LyricsFullscreenActivity : AppCompatActivity() {
                 binding.tvArtist.text = currentItem?.artist ?: "未知艺术家"
                 syncLyrics(currentItem?.id)
                 updatePlaybackSummary(state.currentPosition, state.duration)
+                loadBlurredCoverBackground(currentItem?.coverUrl)
             }
         }
+    }
+
+    private fun loadBlurredCoverBackground(coverUrl: String?) {
+        if (coverUrl.isNullOrEmpty()) {
+            showNoCoverBackground()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val request = ImageRequest.Builder(this@LyricsFullscreenActivity)
+                    .data(coverUrl)
+                    .allowHardware(false)
+                    .build()
+
+                val result = imageLoader.execute(request)
+                if (result is SuccessResult) {
+                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                    if (bitmap != null) {
+                        applyBlurredCoverWithPalette(bitmap)
+                    } else {
+                        showNoCoverBackground()
+                    }
+                } else {
+                    showNoCoverBackground()
+                }
+            } catch (e: Exception) {
+                showNoCoverBackground()
+            }
+        }
+    }
+
+    private suspend fun applyBlurredCoverWithPalette(bitmap: Bitmap) = withContext(Dispatchers.Main) {
+        binding.ivBlurredCover.visibility = View.VISIBLE
+        binding.viewGradientScrim.visibility = View.VISIBLE
+
+        // Apply fast blur by scaling down then up
+        val blurredBitmap = createBlurredBitmap(bitmap, 200, 200, 8)
+        binding.ivBlurredCover.setImageBitmap(blurredBitmap)
+
+        // Extract dominant color for gradient scrim tint
+        val palette = Palette.from(bitmap).generate()
+        val dominantColor = palette.getDominantColor(Color.parseColor("#FF1A1A2E"))
+        val scrimColor = shiftColor(dominantColor, 0.25f)
+
+        val scrimGradient = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                (dominantColor and 0x00FFFFFF) or (0x99000000.toInt()),
+                (scrimColor and 0x00FFFFFF) or (0xDD000000.toInt())
+            )
+        )
+        binding.viewGradientScrim.background = scrimGradient
+    }
+
+    private fun showNoCoverBackground() {
+        binding.ivBlurredCover.visibility = View.GONE
+        binding.viewGradientScrim.visibility = View.VISIBLE
+        binding.viewGradientScrim.background = noCoverGradient
+    }
+
+    /**
+     * Create a fast blurred bitmap by scaling down, applying blur via multiple canvas draws,
+     * then scaling back up.
+     */
+    private fun createBlurredBitmap(
+        source: Bitmap,
+        targetWidth: Int,
+        targetHeight: Int,
+        blurRadius: Int
+    ): Bitmap {
+        // Scale down first for efficiency
+        val smallBitmap = Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true)
+
+        // Create a mutable bitmap for the blur result
+        val blurred = createBitmap(targetWidth, targetHeight)
+        val canvas = Canvas(blurred)
+
+        // Draw the scaled bitmap multiple times with decreasing alpha to simulate blur
+        val paint = Paint().apply {
+            isAntiAlias = false
+            isFilterBitmap = false
+        }
+
+        val iterations = blurRadius.coerceIn(1, 16)
+        val alphaStep = (200 / iterations).coerceAtLeast(10)
+
+        for (i in 0 until iterations) {
+            paint.alpha = alphaStep
+            canvas.drawBitmap(smallBitmap, 0f, 0f, paint)
+        }
+
+        // Scale up to target size with filtering for soft blur
+        paint.isFilterBitmap = true
+        paint.alpha = 255
+        val result = createBitmap(targetWidth, targetHeight)
+        val resultCanvas = Canvas(result)
+        resultCanvas.drawBitmap(blurred, 0f, 0f, paint)
+
+        return result
+    }
+
+    /**
+     * Shift a color's brightness by the given factor.
+     * factor < 1.0 darkens, factor > 1.0 lightens
+     */
+    private fun shiftColor(color: Int, factor: Float): Int {
+        val a = Color.alpha(color)
+        val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
+        val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
+        val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
+        return Color.argb(a, r, g, b)
     }
 
     private fun syncLyrics(songId: String?) {

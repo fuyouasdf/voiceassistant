@@ -15,9 +15,22 @@ data class QueueEntry(
     val isCurrent: Boolean
 )
 
+/**
+ * 队列项操作类型
+ */
+enum class QueueAction {
+    PLAY_NOW,          // 立即播放
+    PLAY_NEXT,         // 下一首播放
+    MOVE_UP,           // 上移
+    MOVE_DOWN,         // 下移
+    REMOVE             // 移除
+}
+
 class QueueAdapter(
     private val onSongClick: (QueueEntry) -> Unit,
-    private val onDeleteClick: (QueueEntry) -> Unit
+    private val onMoveUpClick: (QueueEntry) -> Unit,
+    private val onMoveDownClick: (QueueEntry) -> Unit,
+    private val onMoreClick: (QueueEntry) -> Unit
 ) : RecyclerView.Adapter<QueueAdapter.ViewHolder>() {
 
     private val items = mutableListOf<QueueEntry>()
@@ -89,7 +102,15 @@ class QueueAdapter(
             }
 
             binding.root.setOnClickListener { onSongClick(entry) }
-            binding.btnDelete.setOnClickListener { onDeleteClick(entry) }
+            binding.btnMoveUp.setOnClickListener { onMoveUpClick(entry) }
+            binding.btnMoveDown.setOnClickListener { onMoveDownClick(entry) }
+            binding.btnMore.setOnClickListener { onMoreClick(entry) }
+
+            // 当前歌曲禁用上移/下移按钮
+            binding.btnMoveUp.isEnabled = !entry.isCurrent
+            binding.btnMoveUp.alpha = if (entry.isCurrent) 0.3f else 1f
+            binding.btnMoveDown.isEnabled = !entry.isCurrent
+            binding.btnMoveDown.alpha = if (entry.isCurrent) 0.3f else 1f
         }
 
         private fun formatDuration(seconds: Int): String {

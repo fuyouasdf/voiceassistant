@@ -2,8 +2,8 @@
 
 > 目标兼容 Android 6.0 (API 23)，基于 MVVM + Clean Architecture
 
-**版本**: 1.2
-**日期**: 2026-03-27
+**版本**: 1.3
+**日期**: 2026-04-06
 **minSdk**: 26
 **targetSdk**: 34
 
@@ -254,6 +254,14 @@ Headers:
 - 管理播放状态（播放/暂停/上一首/下一首）
 - 支持播放列表
 
+#### LyricsParser
+- 位于 `core/src/main/java/com/voiceassistant/core/music/LyricsParser.kt`
+- 独立的歌词解析组件，支持 JSON 和 LRC 格式
+- 从 Jellyfin API 歌词端点获取的原始内容统一通过此类解析
+- JSON 格式支持 `Lyrics`/`lyrics` 数组键，以及 `Text`/`text`、`Start`/`StartMs` 等多种字段名
+- LRC 格式支持标准时间轴 `[mm:ss.xx]` 和多位数分钟 `[mm:mm:ss]`
+- 时间戳归一化处理，支持 ticks、毫秒、秒三种格式
+
 #### 播放流程
 1. 用户选择歌曲 → MusicViewModel.playSong()
 2. 使用 Jellyfin Session API（`playItem(sessionId, songId)`）投放到已选设备
@@ -326,6 +334,45 @@ val url = "$baseUrl/Audio/$songId/stream?$apiKeyParam&Container=mp4&AudioCodec=a
 
 #### 3. mediaSourceId 必须移除 dashes
 Jellyfin 服务端通过 `itemId.replace("-", "")` 查找媒体源，必须传递无 dashes 的 ID
+
+---
+
+## 单元测试
+
+### 测试结构
+```
+core/src/test/java/com/voiceassistant/core/
+├── music/
+│   ├── LyricsParserTest.kt          # 歌词解析测试
+│   ├── MusicPlayerQueueTest.kt      # 队列操作测试
+│   └── MusicPlayerStateTest.kt      # 播放器状态测试
+└── intent/
+    └── IntentParserTest.kt          # 意图解析测试
+
+app/src/test/java/com/voiceassistant/app/ui/music/
+└── PlaylistEnqueueTest.kt           # 播放列表入队测试
+```
+
+### 测试覆盖范围
+
+#### LyricsParserTest
+- JSON 歌词解析：多种字段名组合、时间戳格式归一化、空值过滤
+- LRC 歌词解析：标准格式、毫秒精度、多位数分钟、元数据行忽略
+- 自动格式检测：JSON/LRC 格式识别与回退
+
+#### MusicPlayerQueueTest
+- `moveQueueItem`：位置交换、边界处理、当前歌曲跟随
+- `removeFromQueue`：移除中间/当前/末尾歌曲、空队列处理
+
+#### MusicPlayerStateTest
+- 播放状态转换：play、pause、resume、stop
+- 播放列表操作：播放单曲/列表、切歌、随机、循环
+- 收藏与播放速度
+
+#### PlaylistEnqueueTest
+- PlaylistSong → MusicItem 转换
+- JellyfinSong → MusicItem 转换
+- 空白 URL 过滤、播放信息填充
 
 ---
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceassistant.core.music.MusicItem
 import com.voiceassistant.core.music.MusicPlayer
+import com.voiceassistant.core.music.QueueSource
 import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.JellyfinSong
@@ -237,7 +238,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                     Timber.d(
                         "本机播放列表: size=${musicItems.size}, startIndex=$actualStartIndex, songId=${song.id}, playMethod=${currentItem?.streamPlayMethod}, container=${currentItem?.streamContainer}, transcoding=${currentItem?.isTranscoding}"
                     )
-                    musicPlayer.playPlaylist(musicItems, actualStartIndex.takeIf { it < musicItems.size } ?: startIndex)
+                    musicPlayer.playPlaylist(musicItems, actualStartIndex.takeIf { it < musicItems.size } ?: startIndex, QueueSource.BROWSER)
                     _uiState.value = _uiState.value.copy(isPlaying = true)
                 } else {
                     // 使用Jellyfin Session API 播放到目标设备

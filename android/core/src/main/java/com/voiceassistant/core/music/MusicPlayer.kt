@@ -19,6 +19,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import com.voiceassistant.core.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,8 @@ data class MusicPlayerState(
     val playlist: List<MusicItem> = emptyList(),
     val currentIndex: Int = -1,
     val isShuffleEnabled: Boolean = false,
-    val repeatMode: RepeatMode = RepeatMode.OFF
+    val repeatMode: RepeatMode = RepeatMode.OFF,
+    val queueSource: QueueSource = QueueSource.UNKNOWN
 )
 
 /**
@@ -56,6 +58,16 @@ enum class RepeatMode {
     OFF,    // 不重复
     ALL,    // 列表循环
     ONE     // 单曲循环
+}
+
+/**
+ * 队列来源
+ */
+enum class QueueSource {
+    UNKNOWN,        // 未知来源
+    BROWSER,        // 来自浏览页
+    PLAYLIST,       // 来自播放列表
+    LOCAL           // 来自本地歌曲
 }
 
 /**
@@ -129,6 +141,10 @@ class MusicPlayer @Inject constructor(
     // 当使用 StartTimeTicks 方案时，记录 seek 的目标位置（毫秒）
     // 用于计算 effective position = seekedPositionMs + currentPosition
     private var seekedPositionMs: Long? = null
+
+    // 播放错误状态
+    private var _playbackError: androidx.media3.common.PlaybackException? = null
+    private val playbackError: androidx.media3.common.PlaybackException? get() = _playbackError
 
     // Favorite state
     private var isFavorite = false
@@ -211,6 +227,7 @@ class MusicPlayer @Inject constructor(
             Timber.e("Player error: ${error.errorCode}, ${error.message}")
             Timber.e("Player error cause: ${error.cause?.message}")
             Timber.e("Player error stack: ${error.stackTraceToString()}")
+            _playbackError = error
             updateMediaSessionPlaybackState()
         }
 
@@ -230,6 +247,8 @@ class MusicPlayer @Inject constructor(
                 }
                 Player.STATE_READY -> {
                     android.util.Log.i("♪", "STATE_READY, pos=$pos")
+                    // 清除错误状态
+                    _playbackError = null
                     // ExoPlayer 的 duration 对流媒体可能无效，使用 MusicItem 的 duration
                     val currentItem = _state.value.playlist.getOrNull(_state.value.currentIndex)
                     val playerDuration = exoPlayer?.duration ?: 0
@@ -259,6 +278,10 @@ class MusicPlayer @Inject constructor(
                         currentSongTitle = item.title
                     )
                 }
+                // 更新 MediaSession 元数据
+                updateMediaSessionMetadata(item)
+                // 更新通知
+                updateNotification()
             }
         }
 
@@ -386,8 +409,11 @@ class MusicPlayer @Inject constructor(
 
     /**
      * 播放播放列表
+     * @param items 播放列表
+     * @param startIndex 起始索引
+     * @param source 队列来源
      */
-    fun playPlaylist(items: List<MusicItem>, startIndex: Int = 0) {
+    fun playPlaylist(items: List<MusicItem>, startIndex: Int = 0, source: QueueSource = QueueSource.UNKNOWN) {
         if (items.isEmpty()) return
 
         val player = getOrCreatePlayer()
@@ -407,11 +433,15 @@ class MusicPlayer @Inject constructor(
                 currentIndex = startIndex,
                 currentSongId = currentItem?.id,
                 currentSongTitle = currentItem?.title,
-                isPlaying = true
+                isPlaying = true,
+                queueSource = source
             )
         }
 
-        Timber.d("MusicPlayer: playing playlist, start at index $startIndex")
+        Timber.d("MusicPlayer: playing playlist, start at index $startIndex, source=$source")
+
+        // 更新 MediaSession metadata
+        currentItem?.let { updateMediaSessionMetadata(it) }
 
         // 显示通知
         currentItem?.let { showNotification(it) }
@@ -501,6 +531,7 @@ class MusicPlayer @Inject constructor(
         }
 
         val currentItem = newPlaylist.getOrNull(targetIndex)
+        val currentRepeatMode = _state.value.repeatMode
         updateState {
             it.copy(
                 isPlaying = wasPlaying,
@@ -510,9 +541,12 @@ class MusicPlayer @Inject constructor(
                 duration = (currentItem?.duration ?: 0) * 1000L,
                 playlist = newPlaylist,
                 currentIndex = targetIndex,
-                isShuffleEnabled = shuffleMode
+                isShuffleEnabled = shuffleMode,
+                repeatMode = currentRepeatMode
             )
         }
+        // 更新 MediaSession 元数据
+        currentItem?.let { updateMediaSessionMetadata(it) }
         updateMediaSessionPlaybackState()
         updateNotification()
         return true
@@ -556,6 +590,7 @@ class MusicPlayer @Inject constructor(
         }
 
         val activeItem = reordered.getOrNull(targetIndex)
+        val currentRepeatMode = _state.value.repeatMode
         updateState {
             it.copy(
                 isPlaying = wasPlaying,
@@ -565,9 +600,12 @@ class MusicPlayer @Inject constructor(
                 duration = (activeItem?.duration ?: 0) * 1000L,
                 playlist = reordered,
                 currentIndex = targetIndex,
-                isShuffleEnabled = shuffleMode
+                isShuffleEnabled = shuffleMode,
+                repeatMode = currentRepeatMode
             )
         }
+        // 更新 MediaSession 元数据
+        activeItem?.let { updateMediaSessionMetadata(it) }
         updateMediaSessionPlaybackState()
         updateNotification()
         return true
@@ -1037,7 +1075,8 @@ class MusicPlayer @Inject constructor(
             Notification.Builder(context)
         }
         builder.setStyle(style)
-        builder.setSmallIcon(android.R.drawable.ic_media_play)
+        @Suppress("DEPRECATION")
+        builder.setSmallIcon(R.drawable.ic_notification_play)
         builder.setContentTitle(item.title)
         builder.setContentText(item.artist ?: "未知艺术家")
         builder.setSubText(item.album ?: "")
@@ -1047,13 +1086,14 @@ class MusicPlayer @Inject constructor(
 
         // Previous button
         builder.addAction(
-            android.R.drawable.ic_media_previous,
+            R.drawable.ic_notification_previous,
             "上一首",
             createPendingIntent(ACTION_PREVIOUS)
         )
 
         // Play/Pause button
-        val playPauseIcon = if (player.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        @Suppress("DEPRECATION")
+        val playPauseIcon = if (player.isPlaying) R.drawable.ic_notification_pause else R.drawable.ic_notification_play
         val playPauseText = if (player.isPlaying) "暂停" else "播放"
         builder.addAction(
             playPauseIcon,
@@ -1063,7 +1103,7 @@ class MusicPlayer @Inject constructor(
 
         // Next button
         builder.addAction(
-            android.R.drawable.ic_media_next,
+            R.drawable.ic_notification_next,
             "下一首",
             createPendingIntent(ACTION_NEXT)
         )
@@ -1192,7 +1232,7 @@ class MusicPlayer @Inject constructor(
      */
     fun getState(): MusicPlayerState {
         val player = exoPlayer
-        val position = player?.currentPosition ?: 0
+        val position = getCurrentPosition()
         val duration = player?.duration ?: 0
         // 过滤无效的 duration 值 (TIME_UNSET = -9223372036854775808L)
         // 如果播放器 duration 无效，尝试使用 MusicItem 中的 duration（秒转毫秒）

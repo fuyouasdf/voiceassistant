@@ -95,6 +95,9 @@ dependencies {
     // Image Loading
     implementation("io.coil-kt:coil:${versions["coil"]}")
 
+    // Palette for color extraction
+    implementation("androidx.palette:palette-ktx:1.0.0")
+
     // Media3 ExoPlayer
     implementation("androidx.media3:media3-exoplayer:${versions["media3"]}")
     implementation("androidx.media3:media3-ui:${versions["media3"]}")

@@ -66,6 +66,13 @@ class NowPlayingActivity : AppCompatActivity() {
         startProgressUpdates()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Re-observe player state to ensure UI is up-to-date
+        // The collectLatest in observePlayerState will handle updates
+    }
+
     private fun setupLyricsList() {
         binding.recyclerLyrics.apply {
             layoutManager = LinearLayoutManager(this@NowPlayingActivity)
@@ -227,6 +234,10 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updateShuffleButton(enabled: Boolean) {
+        // Change icon AND color for active state
+        binding.btnShuffle.setImageResource(
+            if (enabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle
+        )
         binding.btnShuffle.setColorFilter(
             ContextCompat.getColor(
                 this,
@@ -237,9 +248,24 @@ class NowPlayingActivity : AppCompatActivity() {
     }
 
     private fun updateRepeatButton(mode: RepeatMode) {
-        val color = if (mode == RepeatMode.OFF) R.color.text_secondary else R.color.primary
-        binding.btnRepeat.setColorFilter(ContextCompat.getColor(this, color))
-        binding.btnRepeat.alpha = if (mode == RepeatMode.ONE) 1f else 0.72f
+        // Change icon AND color for each mode
+        when (mode) {
+            RepeatMode.OFF -> {
+                binding.btnRepeat.setImageResource(R.drawable.ic_repeat)
+                binding.btnRepeat.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
+                binding.btnRepeat.alpha = 0.72f
+            }
+            RepeatMode.ALL -> {
+                binding.btnRepeat.setImageResource(R.drawable.ic_repeat)
+                binding.btnRepeat.setColorFilter(ContextCompat.getColor(this, R.color.primary))
+                binding.btnRepeat.alpha = 1f
+            }
+            RepeatMode.ONE -> {
+                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_one)
+                binding.btnRepeat.setColorFilter(ContextCompat.getColor(this, R.color.primary))
+                binding.btnRepeat.alpha = 1f
+            }
+        }
         binding.btnRepeat.contentDescription = when (mode) {
             RepeatMode.OFF -> "循环关闭"
             RepeatMode.ALL -> "列表循环"
@@ -250,14 +276,15 @@ class NowPlayingActivity : AppCompatActivity() {
     private fun showMoreMenu() {
         val state = musicPlayer.getState()
         val currentItem = state.playlist.getOrNull(state.currentIndex)
-        val options = arrayOf("查看流信息", "打开 Jellyfin 浏览", "停止播放")
+        val options = arrayOf("查看流信息", "打开 Jellyfin 浏览", "全屏歌词", "停止播放")
         AlertDialog.Builder(this)
             .setTitle("更多")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showStreamInfoDialog(currentItem)
                     1 -> startActivity(Intent(this, JellyfinBrowseActivity::class.java))
-                    2 -> {
+                    2 -> startActivity(Intent(this, LyricsFullscreenActivity::class.java))
+                    3 -> {
                         musicPlayer.stop()
                         finish()
                     }
