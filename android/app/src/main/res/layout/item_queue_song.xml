@@ -118,7 +118,7 @@
             android:contentDescription="拖动排序"
             android:focusable="false"
             android:padding="12dp"
-            android:src="@android:drawable/ic_menu_sort_by_size"
+            android:src="@drawable/ic_drag_handle"
             app:tint="@color/text_secondary" />
 
         <ImageButton
@@ -129,7 +129,7 @@
             android:background="@drawable/bg_player_icon_button"
             android:contentDescription="移出队列"
             android:padding="12dp"
-            android:src="@android:drawable/ic_menu_delete"
+            android:src="@drawable/ic_delete"
             app:tint="@color/text_secondary" />
 
     </LinearLayout>

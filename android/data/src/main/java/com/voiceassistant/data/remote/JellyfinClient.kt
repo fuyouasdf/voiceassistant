@@ -1,10 +1,12 @@
 package com.voiceassistant.data.remote
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Response
 import retrofit2.Retrofit
@@ -35,6 +37,7 @@ class JellyfinClient(
     private var cachedUserId: String? = null
     private var cachedAccessToken: String? = null
     private val playbackInfoCache = mutableMapOf<String, CachedPlaybackInfo>()
+    private val lyricsCache = mutableMapOf<String, CachedLyrics>()
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -87,6 +90,7 @@ class JellyfinClient(
         cachedUserId = null
         cachedAccessToken = null
         playbackInfoCache.clear()
+        lyricsCache.clear()
 
         // 重建 HTTP 客户端
         retrofit = Retrofit.Builder()
@@ -1171,6 +1175,122 @@ class JellyfinClient(
      */
     suspend fun previousTrack(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "PreviousTrack")
 
+    suspend fun getLyrics(itemId: String): LyricsResult? = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        lyricsCache[itemId]?.takeIf { now - it.cachedAtMs <= PLAYBACK_INFO_CACHE_TTL_MS }?.let {
+            return@withContext it.result
+        }
+
+        try {
+            val response = api.getLyrics(itemId)
+            if (!response.isSuccessful) {
+                Timber.w("getLyrics failed: code=${response.code()}, itemId=$itemId")
+                return@withContext null
+            }
+
+            val body = response.body()?.string()?.trim().orEmpty()
+            if (body.isBlank()) {
+                return@withContext null
+            }
+
+            val parsed = parseLyrics(body)
+            lyricsCache[itemId] = CachedLyrics(parsed, now)
+            parsed
+        } catch (e: Exception) {
+            Timber.w(e, "getLyrics exception: itemId=$itemId")
+            null
+        }
+    }
+
+    private fun parseLyrics(raw: String): LyricsResult {
+        return if (raw.startsWith("{") || raw.startsWith("[")) {
+            parseJsonLyrics(raw) ?: parseLrcLyrics(raw)
+        } else {
+            parseLrcLyrics(raw)
+        }
+    }
+
+    private fun parseJsonLyrics(raw: String): LyricsResult? {
+        return try {
+            val root = JsonParser.parseString(raw)
+            val lyricsArray = when {
+                root.isJsonObject -> {
+                    val obj = root.asJsonObject
+                    when {
+                        obj.has("Lyrics") -> obj.getAsJsonArray("Lyrics")
+                        obj.has("lyrics") -> obj.getAsJsonArray("lyrics")
+                        else -> null
+                    }
+                }
+                root.isJsonArray -> root.asJsonArray
+                else -> null
+            } ?: return null
+
+            val entries = lyricsArray.mapNotNull { element ->
+                val obj = element.asJsonObject
+                val text = when {
+                    obj.has("Text") -> obj.get("Text")?.asString
+                    obj.has("text") -> obj.get("text")?.asString
+                    else -> null
+                }?.trim().orEmpty()
+
+                if (text.isBlank()) {
+                    return@mapNotNull null
+                }
+
+                val rawStart = when {
+                    obj.has("Start") -> obj.get("Start")?.asLong
+                    obj.has("start") -> obj.get("start")?.asLong
+                    obj.has("StartMs") -> obj.get("StartMs")?.asLong
+                    obj.has("startMs") -> obj.get("startMs")?.asLong
+                    else -> null
+                } ?: 0L
+
+                LyricLine(
+                    text = text,
+                    startMs = normalizeLyricTime(rawStart)
+                )
+            }.sortedBy { it.startMs }
+
+            LyricsResult(
+                lines = entries,
+                rawText = raw
+            )
+        } catch (e: Exception) {
+            Timber.w(e, "parseJsonLyrics failed")
+            null
+        }
+    }
+
+    private fun parseLrcLyrics(raw: String): LyricsResult {
+        val regex = Regex("\\[(\\d{2}):(\\d{2})(?:\\.(\\d{1,3}))?\\](.*)")
+        val lines = raw.lineSequence().mapNotNull { line ->
+            val match = regex.find(line.trim()) ?: return@mapNotNull null
+            val minutes = match.groupValues[1].toLongOrNull() ?: 0L
+            val seconds = match.groupValues[2].toLongOrNull() ?: 0L
+            val fraction = match.groupValues[3].padEnd(3, '0').takeIf { it.isNotBlank() }?.toLongOrNull() ?: 0L
+            val text = match.groupValues[4].trim()
+            if (text.isBlank()) return@mapNotNull null
+            LyricLine(
+                text = text,
+                startMs = minutes * 60_000 + seconds * 1_000 + fraction
+            )
+        }.toList()
+
+        return LyricsResult(
+            lines = lines,
+            rawText = raw
+        )
+    }
+
+    private fun normalizeLyricTime(value: Long): Long {
+        return when {
+            value >= 10_000_000L -> value / 10_000L
+            value >= 1_000L -> value
+            else -> value * 1000L
+        }
+    }
+
     /**
      * 设置会话音量
      * Jellyfin Session Command: SetVolume, arguments: { Volume: 0-100 }
@@ -1293,6 +1413,11 @@ private data class CachedPlaybackInfo(
     val cachedAtMs: Long
 )
 
+private data class CachedLyrics(
+    val result: LyricsResult,
+    val cachedAtMs: Long
+)
+
 enum class PlayMethodType {
     DIRECT_PLAY, DIRECT_STREAM, TRANSCODE
 }
@@ -1307,6 +1432,16 @@ data class StreamInfo(
     val playMethod: PlayMethodType?,
     val container: String?,
     val isTranscoding: Boolean
+)
+
+data class LyricLine(
+    val text: String,
+    val startMs: Long
+)
+
+data class LyricsResult(
+    val lines: List<LyricLine>,
+    val rawText: String
 )
 
 /**
@@ -1405,6 +1540,11 @@ interface JellyfinApi {
     suspend fun getItem(
         @Path("itemId") itemId: String
     ): Response<ItemDto>
+
+    @GET("Audio/{itemId}/Lyrics")
+    suspend fun getLyrics(
+        @Path("itemId") itemId: String
+    ): Response<ResponseBody>
 
     @POST("Sessions/Playing")
     suspend fun reportPlaybackStart(

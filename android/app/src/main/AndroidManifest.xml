@@ -77,6 +77,13 @@
             android:theme="@style/Theme.VoiceAssistant"
             android:parentActivityName=".ui.music.NowPlayingActivity" />
 
+        <activity
+            android:name=".ui.music.LyricsFullscreenActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.VoiceAssistant"
+            android:parentActivityName=".ui.music.NowPlayingActivity" />
+
         <!-- Playlist Activity -->
         <activity
             android:name=".ui.music.PlaylistActivity"
