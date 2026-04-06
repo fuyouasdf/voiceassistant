@@ -18,13 +18,15 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import android.animation.ObjectAnimator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
 import com.voiceassistant.app.R
@@ -87,8 +89,8 @@ class MainActivity : AppCompatActivity() {
 
     // Conversation
     private lateinit var tvEmptyHint: TextView
-    private lateinit var conversationScroll: ScrollView
-    private lateinit var conversationContainer: LinearLayout
+    private lateinit var conversationRecyclerView: RecyclerView
+    private lateinit var chatMessageAdapter: ChatMessageAdapter
 
     // ASR Real-time Result
     private lateinit var asrResultCard: MaterialCardView
@@ -118,6 +120,10 @@ class MainActivity : AppCompatActivity() {
     private var hasMoreHistory = true
     private var oldestLoadedMessageId: Long? = null
     private var oldestLoadedMessageCreatedAt: Long? = null
+
+    // Animation
+    private var pulseAnimatorX: ObjectAnimator? = null
+    private var pulseAnimatorY: ObjectAnimator? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -161,6 +167,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         llmStatusPollingJob?.cancel()
         llmStatusPollingJob = null
+        stopAsrPulseAnimation()
         super.onStop()
     }
 
@@ -184,8 +191,10 @@ class MainActivity : AppCompatActivity() {
 
         // Conversation
         tvEmptyHint = findViewById(R.id.tvEmptyHint)
-        conversationScroll = findViewById(R.id.conversationScroll)
-        conversationContainer = findViewById(R.id.conversationContainer)
+        conversationRecyclerView = findViewById(R.id.conversationRecyclerView)
+        chatMessageAdapter = ChatMessageAdapter { messageId, view ->
+            showDeleteMessageDialog(messageId, view)
+        }
 
         // ASR Result Card
         asrResultCard = findViewById(R.id.asrResultCard)
@@ -417,20 +426,30 @@ class MainActivity : AppCompatActivity() {
      */
     private fun startAsrPulseAnimation() {
         asrPulseDot.visibility = View.VISIBLE
-        val scaleX = android.animation.ObjectAnimator.ofFloat(asrPulseDot, "scaleX", 1f, 1.5f, 1f)
-        val scaleY = android.animation.ObjectAnimator.ofFloat(asrPulseDot, "scaleY", 1f, 1.5f, 1f)
-        scaleX.duration = 1000
-        scaleY.duration = 1000
-        scaleX.repeatCount = android.animation.ObjectAnimator.INFINITE
-        scaleY.repeatCount = android.animation.ObjectAnimator.INFINITE
-        scaleX.start()
-        scaleY.start()
+        // Cancel any existing animators first
+        pulseAnimatorX?.cancel()
+        pulseAnimatorY?.cancel()
+
+        pulseAnimatorX = ObjectAnimator.ofFloat(asrPulseDot, "scaleX", 1f, 1.5f, 1f).apply {
+            duration = 1000
+            repeatCount = ObjectAnimator.INFINITE
+            start()
+        }
+        pulseAnimatorY = ObjectAnimator.ofFloat(asrPulseDot, "scaleY", 1f, 1.5f, 1f).apply {
+            duration = 1000
+            repeatCount = ObjectAnimator.INFINITE
+            start()
+        }
     }
 
     /**
      * Stop the pulse animation
      */
     private fun stopAsrPulseAnimation() {
+        pulseAnimatorX?.cancel()
+        pulseAnimatorY?.cancel()
+        pulseAnimatorX = null
+        pulseAnimatorY = null
         asrPulseDot.animate().cancel()
         asrPulseDot.scaleX = 1f
         asrPulseDot.scaleY = 1f
@@ -469,10 +488,26 @@ class MainActivity : AppCompatActivity() {
     // ==================== Message Handling ====================
 
     private fun setupConversationPagination() {
-        conversationScroll.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-            if (scrollY == 0 && oldScrollY > scrollY) {
-                loadMoreConversationHistory()
+        conversationRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                // 向上滚动时检查是否到达顶部
+                if (dy < 0) {
+                    val layoutManager = recyclerView.layoutManager as LinearLayoutManager
+                    val firstVisible = layoutManager.findFirstVisibleItemPosition()
+                    if (firstVisible == 0) {
+                        loadMoreConversationHistory()
+                    }
+                }
             }
+        })
+
+        // Initialize RecyclerView
+        conversationRecyclerView.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity).apply {
+                stackFromEnd = true
+            }
+            adapter = chatMessageAdapter
         }
     }
 
@@ -484,10 +519,9 @@ class MainActivity : AppCompatActivity() {
                     chatMessageDao.getLatestMessages(HISTORY_PAGE_SIZE)
                 }
 
-                conversationContainer.removeAllViews()
                 if (latestMessages.isEmpty()) {
                     tvEmptyHint.visibility = View.VISIBLE
-                    conversationScroll.visibility = View.GONE
+                    conversationRecyclerView.visibility = View.GONE
                     hasMoreHistory = false
                     oldestLoadedMessageId = null
                     oldestLoadedMessageCreatedAt = null
@@ -495,20 +529,15 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 tvEmptyHint.visibility = View.GONE
-                conversationScroll.visibility = View.VISIBLE
+                conversationRecyclerView.visibility = View.VISIBLE
 
-                latestMessages.asReversed().forEach { message ->
-                    appendMessageToConversation(message.id, message.text, message.isUser, message.createdAt, autoScroll = false)
-                }
+                chatMessageAdapter.clearMessages()
+                chatMessageAdapter.addMessages(latestMessages.reversed(), atEnd = true)
 
                 val oldestMessage = latestMessages.last()
                 oldestLoadedMessageId = oldestMessage.id
                 oldestLoadedMessageCreatedAt = oldestMessage.createdAt
                 hasMoreHistory = latestMessages.size >= HISTORY_PAGE_SIZE
-
-                conversationScroll.post {
-                    conversationScroll.fullScroll(ScrollView.FOCUS_DOWN)
-                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load initial conversation history")
                 Toast.makeText(this@MainActivity, "聊天记录加载失败", Toast.LENGTH_SHORT).show()
@@ -523,10 +552,9 @@ class MainActivity : AppCompatActivity() {
         val oldestCreatedAt = oldestLoadedMessageCreatedAt ?: return
         if (isLoadingHistory || !hasMoreHistory) return
 
+        isLoadingHistory = true
         lifecycleScope.launch {
-            isLoadingHistory = true
             try {
-                val previousHeight = conversationContainer.height
                 val olderMessages = withContext(Dispatchers.IO) {
                     chatMessageDao.getMessagesBefore(
                         beforeCreatedAt = oldestCreatedAt,
@@ -540,19 +568,12 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                olderMessages.asReversed().forEach { message ->
-                    prependMessageToConversation(message.id, message.text, message.isUser, message.createdAt)
-                }
+                chatMessageAdapter.addMessages(olderMessages, atEnd = false)
 
                 val newOldest = olderMessages.last()
                 oldestLoadedMessageId = newOldest.id
                 oldestLoadedMessageCreatedAt = newOldest.createdAt
                 hasMoreHistory = olderMessages.size >= HISTORY_PAGE_SIZE
-
-                conversationScroll.post {
-                    val newHeight = conversationContainer.height
-                    conversationScroll.scrollTo(0, newHeight - previousHeight)
-                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load more conversation history")
                 Toast.makeText(this@MainActivity, "加载历史记录失败", Toast.LENGTH_SHORT).show()
@@ -564,8 +585,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun addMessage(text: String, isUser: Boolean) {
         val createdAt = System.currentTimeMillis()
-        var newId: Long = 0L
         lifecycleScope.launch {
+            var newId: Long = 0L
             try {
                 newId = withContext(Dispatchers.IO) {
                     chatMessageDao.insertMessage(
@@ -584,107 +605,19 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Timber.e(e, "Failed to persist chat message")
                 Toast.makeText(this@MainActivity, "聊天记录保存失败", Toast.LENGTH_SHORT).show()
-            } finally {
-                appendMessageToConversation(newId, text, isUser, createdAt)
             }
-        }
-    }
 
-    private fun appendMessageToConversation(
-        messageId: Long,
-        text: String,
-        isUser: Boolean,
-        createdAt: Long,
-        autoScroll: Boolean = true
-    ) {
-        tvEmptyHint.visibility = View.GONE
-        conversationScroll.visibility = View.VISIBLE
-        conversationContainer.addView(createMessageItemView(messageId, text, isUser, createdAt))
-
-        if (autoScroll) {
-            conversationScroll.post {
-                conversationScroll.fullScroll(ScrollView.FOCUS_DOWN)
-            }
-        }
-    }
-
-    private fun prependMessageToConversation(messageId: Long, text: String, isUser: Boolean, createdAt: Long) {
-        tvEmptyHint.visibility = View.GONE
-        conversationScroll.visibility = View.VISIBLE
-        conversationContainer.addView(createMessageItemView(messageId, text, isUser, createdAt), 0)
-    }
-
-    private fun createMessageItemView(messageId: Long, text: String, isUser: Boolean, createdAt: Long): LinearLayout {
-        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        val timestamp = timeFormat.format(java.util.Date(createdAt))
-
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 8, 0, 8)
-            gravity = if (isUser) android.view.Gravity.END else android.view.Gravity.START
-        }
-
-        val timestampView = TextView(this).apply {
-            this.text = timestamp
-            this.textSize = 10f
-            setTextColor(ContextCompat.getColor(context, R.color.text_tertiary))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                if (isUser) {
-                    setMargins(0, 0, 16, 4)
-                } else {
-                    setMargins(16, 0, 0, 4)
-                }
-            }
-        }
-
-        val messageView = TextView(this).apply {
-            this.text = text
-            this.textSize = 16f
-            setPadding(24, 16, 24, 16)
-            setTextColor(
-                ContextCompat.getColor(
-                    context,
-                    if (isUser) R.color.text_primary else R.color.on_primary
+            tvEmptyHint.visibility = View.GONE
+            conversationRecyclerView.visibility = View.VISIBLE
+            chatMessageAdapter.addMessage(
+                ChatMessageEntity(
+                    id = newId,
+                    text = text,
+                    isUser = isUser,
+                    createdAt = createdAt
                 )
             )
-            background = androidx.core.content.res.ResourcesCompat.getDrawable(
-                resources,
-                if (isUser) R.drawable.bg_message_user else R.drawable.bg_message_ai,
-                null
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                if (isUser) marginStart = 64 else marginEnd = 64
-            }
-        }
-
-        container.addView(timestampView)
-        container.addView(messageView)
-
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            tag = messageId
-            isClickable = true
-            isFocusable = true
-            setOnLongClickListener { view ->
-                showDeleteMessageDialog(messageId, view)
-                true
-            }
-            if (isUser) {
-                gravity = android.view.Gravity.END
-                addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
-            }
-
-            addView(container)
-
-            if (!isUser) {
-                addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
-            }
+            conversationRecyclerView.scrollToPosition(chatMessageAdapter.itemCount - 1)
         }
     }
 
@@ -705,12 +638,17 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) {
                     chatMessageDao.deleteMessage(messageId)
                 }
-                // 从 UI 移除消息视图
-                conversationContainer.removeView(messageView)
+                // 从适配器移除消息
+                val position = (0 until chatMessageAdapter.itemCount).firstOrNull { i ->
+                    chatMessageAdapter.getMessageAt(i).id == messageId
+                }
+                if (position != null) {
+                    chatMessageAdapter.removeMessage(position)
+                }
                 // 检查是否为空
-                if (conversationContainer.childCount == 0) {
+                if (chatMessageAdapter.itemCount == 0) {
                     tvEmptyHint.visibility = View.VISIBLE
-                    conversationScroll.visibility = View.GONE
+                    conversationRecyclerView.visibility = View.GONE
                     hasMoreHistory = true
                     oldestLoadedMessageId = null
                     oldestLoadedMessageCreatedAt = null

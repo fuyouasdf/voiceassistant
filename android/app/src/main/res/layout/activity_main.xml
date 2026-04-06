@@ -130,25 +130,14 @@
                 android:textSize="18sp"
                 android:fontFamily="sans-serif-light" />
 
-            <!-- Conversation ScrollView -->
-            <ScrollView
-                android:id="@+id/conversationScroll"
+            <!-- Conversation RecyclerView -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/conversationRecyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:visibility="gone"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:id="@+id/conversationContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingVertical="16dp">
-
-                    <!-- Messages will be added here dynamically -->
-
-                </LinearLayout>
-            </ScrollView>
+                android:clipToPadding="false"
+                android:paddingVertical="8dp" />
 
             <!-- ========================
                  Real-time ASR Text (Floating)

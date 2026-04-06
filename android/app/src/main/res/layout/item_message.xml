@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="4dp">
+
+    <!-- AI Message (left aligned) -->
+    <LinearLayout
+        android:id="@+id/aiMessageContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvAiTimestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:textColor="@color/text_tertiary"
+            android:layout_marginBottom="2dp" />
+
+        <TextView
+            android:id="@+id/tvAiMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_message_ai"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp"
+            android:textSize="16sp"
+            android:textColor="@color/on_primary" />
+    </LinearLayout>
+
+    <!-- User Message (right aligned) -->
+    <LinearLayout
+        android:id="@+id/userMessageContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvUserTimestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:textColor="@color/text_tertiary"
+            android:layout_gravity="end"
+            android:layout_marginBottom="2dp" />
+
+        <TextView
+            android:id="@+id/tvUserMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_message_user"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp"
+            android:textSize="16sp"
+            android:textColor="@color/text_primary" />
+    </LinearLayout>
+
+</FrameLayout>

@@ -96,6 +96,8 @@ class LyricsFullscreenActivity : AppCompatActivity() {
     override fun onStop() {
         progressJob?.cancel()
         progressJob = null
+        lyricsJob?.cancel()
+        lyricsJob = null
         super.onStop()
     }
 
