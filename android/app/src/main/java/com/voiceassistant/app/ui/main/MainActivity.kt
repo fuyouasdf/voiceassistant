@@ -104,6 +104,7 @@ class MainActivity : AppCompatActivity() {
     // Quick Actions
     private lateinit var chipWeather: Chip
     private lateinit var chipJellyfin: Chip
+    private lateinit var chipPlaylist: Chip
 
     // Haptic Feedback
     private var vibrator: Vibrator? = null
@@ -200,6 +201,7 @@ class MainActivity : AppCompatActivity() {
         // Quick actions
         chipWeather = findViewById(R.id.chipWeather)
         chipJellyfin = findViewById(R.id.chipJellyfin)
+        chipPlaylist = findViewById(R.id.chipPlaylist)
 
         // Initialize vibrator for haptic feedback
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -263,6 +265,9 @@ class MainActivity : AppCompatActivity() {
         // Quick actions
         chipWeather.setOnClickListener { triggerQuickAction("今天天气怎么样") }
         chipJellyfin.setOnClickListener {
+            startActivity(Intent(this, JellyfinBrowseActivity::class.java))
+        }
+        chipPlaylist.setOnClickListener {
             startActivity(Intent(this, JellyfinBrowseActivity::class.java))
         }
     }
