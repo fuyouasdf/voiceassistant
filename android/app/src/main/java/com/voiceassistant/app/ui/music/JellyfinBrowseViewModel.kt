@@ -75,6 +75,7 @@ class JellyfinBrowseViewModel @Inject constructor(
         userId = null,
         isActive = true,
         supportsMediaControl = true,
+        supportedCommands = listOf("Pause", "Unpause", "Stop", "Seek", "NextTrack", "PreviousTrack"),
         playbackState = null,
         nowPlayingItem = null
     )
@@ -83,7 +84,7 @@ class JellyfinBrowseViewModel @Inject constructor(
         // 加载专辑列表
         loadAlbums()
         // 刷新DLNA设备列表（从Jellyfin会话获取）
-        refreshDlnaDevices()
+        discoverDlnaDevices()
         // 加载播放列表
         loadPlaylists()
     }
@@ -241,14 +242,32 @@ class JellyfinBrowseViewModel @Inject constructor(
                     musicPlayer.playPlaylist(musicItems, actualStartIndex.takeIf { it < musicItems.size } ?: startIndex, QueueSource.BROWSER)
                     _uiState.value = _uiState.value.copy(isPlaying = true)
                 } else {
-                    // 使用Jellyfin Session API 播放到目标设备
+                    // 切到远程设备前，彻底停止本机出声；本机队列会保留，切回本机时可重新 resume
+                    stopLocalPlaybackIfActive()
+                    val latestSession = syncRemoteSessionState(session.id) ?: session
+                    if (!latestSession.supportsCommand("PlayMediaSource")) {
+                        _uiState.value = _uiState.value.copy(
+                            error = "设备 ${latestSession.deviceName} 不支持远程发起播放"
+                        )
+                        return@launch
+                    }
+                    // 保持与 d4590d71 一致：只通过 Jellyfin Session API playItem 发起远程播放
                     val result = jellyfinClient.playItem(session.id, song.id)
                     if (result.isFailure) {
                         _uiState.value = _uiState.value.copy(
                             error = "播放失败: ${result.exceptionOrNull()?.message}"
                         )
                     } else {
-                        _uiState.value = _uiState.value.copy(isPlaying = true)
+                        val syncedSession = syncRemoteSessionState(session.id)
+                        val matchedItem = syncedSession?.nowPlayingItem?.id == song.id
+                        val actualPlaying = syncedSession?.playbackState?.isPaused?.not()
+                        if (matchedItem) {
+                            _uiState.value = _uiState.value.copy(isPlaying = actualPlaying ?: true)
+                        } else {
+                            _uiState.value = _uiState.value.copy(
+                                error = "设备 ${latestSession.deviceName} 未确认开始播放"
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -305,11 +324,44 @@ class JellyfinBrowseViewModel @Inject constructor(
                     }
                 } else {
                     if (_uiState.value.isPlaying) {
-                        jellyfinClient.pause(session.id)
-                        _uiState.value = _uiState.value.copy(isPlaying = false)
+                        val latestSession = syncRemoteSessionState(session.id) ?: session
+                        if (!latestSession.supportsCommand("Pause")) {
+                            _uiState.value = _uiState.value.copy(
+                                error = "设备 ${latestSession.deviceName} 不支持暂停"
+                            )
+                            return@launch
+                        }
+                        val result = executeRemotePlaybackCommand(
+                            sessionId = session.id,
+                            desiredPlaying = false
+                        ) {
+                            jellyfinClient.pause(session.id)
+                        }
+                        if (result.isFailure) {
+                            _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
+                        }
                     } else {
-                        jellyfinClient.unpause(session.id)
-                        _uiState.value = _uiState.value.copy(isPlaying = true)
+                        val latestSession = syncRemoteSessionState(session.id) ?: session
+                        if (!latestSession.supportsCommand("Unpause")) {
+                            val actualPlaying = latestSession.playbackState?.isPaused?.not()
+                            if (actualPlaying == true) {
+                                _uiState.value = _uiState.value.copy(isPlaying = true)
+                            } else {
+                                _uiState.value = _uiState.value.copy(
+                                    error = "设备 ${latestSession.deviceName} 不支持继续播放"
+                                )
+                            }
+                            return@launch
+                        }
+                        val result = executeRemotePlaybackCommand(
+                            sessionId = session.id,
+                            desiredPlaying = true
+                        ) {
+                            jellyfinClient.unpause(session.id)
+                        }
+                        if (result.isFailure) {
+                            _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -329,6 +381,13 @@ class JellyfinBrowseViewModel @Inject constructor(
                 if (session.id == LOCAL_DEVICE_SESSION_ID) {
                     musicPlayer.stop()
                 } else {
+                    val latestSession = syncRemoteSessionState(session.id) ?: session
+                    if (!latestSession.supportsCommand("Stop")) {
+                        _uiState.value = _uiState.value.copy(
+                            error = "设备 ${latestSession.deviceName} 不支持停止"
+                        )
+                        return@launch
+                    }
                     jellyfinClient.stop(session.id)
                 }
                 _uiState.value = _uiState.value.copy(currentSong = null, isPlaying = false)
@@ -343,13 +402,99 @@ class JellyfinBrowseViewModel @Inject constructor(
      * 选择投屏设备
      */
     fun selectDlnaDevice(device: SessionInfo) {
-        _uiState.value = _uiState.value.copy(selectedDlnaDevice = device)
-        // 保存设备ID和设备名称，供首页展示
+        viewModelScope.launch {
+            val previousDevice = _uiState.value.selectedDlnaDevice
+            val switchedFromLocalToRemote =
+                previousDevice?.id == LOCAL_DEVICE_SESSION_ID && device.id != LOCAL_DEVICE_SESSION_ID
+
+            if (switchedFromLocalToRemote) {
+                stopLocalPlaybackIfActive()
+            }
+
+            val nextIsPlaying = if (device.id == LOCAL_DEVICE_SESSION_ID) {
+                musicPlayer.getState().isPlaying
+            } else {
+                device.playbackState?.isPaused?.not() ?: false
+            }
+
+            _uiState.value = _uiState.value.copy(
+                selectedDlnaDevice = device,
+                isPlaying = nextIsPlaying
+            )
+            persistSelectedDevice(device)
+        }
+    }
+
+    private fun persistSelectedDevice(device: SessionInfo) {
         sharedPreferences.edit()
             .putString(PREF_SELECTED_DEVICE_ID, device.id)
             .putString(PREF_SELECTED_DEVICE_NAME, device.deviceName)
             .apply()
         Timber.d("已保存投屏设备: ${device.deviceName} (${device.id})")
+    }
+
+    private fun stopLocalPlaybackIfActive() {
+        val localState = musicPlayer.getState()
+        val hasLocalPlaybackContext =
+            localState.isPlaying || localState.playlist.isNotEmpty() || localState.currentIndex >= 0
+        if (hasLocalPlaybackContext) {
+            Timber.d("停止本机播放以切换到远程设备")
+            musicPlayer.stop()
+        }
+    }
+
+    private suspend fun executeRemotePlaybackCommand(
+        sessionId: String,
+        desiredPlaying: Boolean,
+        command: suspend () -> Result<Boolean>
+    ): Result<Boolean> {
+        val commandResult = command()
+        val syncedSession = syncRemoteSessionState(sessionId)
+        val actualPlaying = syncedSession?.playbackState?.isPaused?.not()
+
+        if (commandResult.isSuccess) {
+            if (actualPlaying != null) {
+                _uiState.value = _uiState.value.copy(isPlaying = actualPlaying)
+            } else {
+                _uiState.value = _uiState.value.copy(isPlaying = desiredPlaying)
+            }
+            return commandResult
+        }
+
+        if (actualPlaying == desiredPlaying) {
+            Timber.w(
+                "远程播放命令返回失败，但会话状态已符合预期: sessionId=$sessionId, desiredPlaying=$desiredPlaying, error=${commandResult.exceptionOrNull()?.message}"
+            )
+            _uiState.value = _uiState.value.copy(isPlaying = actualPlaying)
+            return Result.success(true)
+        }
+
+        return commandResult
+    }
+
+    private suspend fun syncRemoteSessionState(sessionId: String): SessionInfo? {
+        return try {
+            val sessions = jellyfinClient.getSessions()
+            val castableDevices = sessions.filter { it.supportsMediaControl && it.isActive }
+            val allDevices = listOf(localDevice) + castableDevices
+            val syncedSession = castableDevices.find { it.id == sessionId }
+
+            val selectedDevice = when {
+                _uiState.value.selectedDlnaDevice?.id == sessionId && syncedSession != null -> syncedSession
+                else -> _uiState.value.selectedDlnaDevice
+            }
+
+            _uiState.value = _uiState.value.copy(
+                dlnaDevices = allDevices,
+                selectedDlnaDevice = selectedDevice,
+                isPlaying = syncedSession?.playbackState?.isPaused?.not() ?: _uiState.value.isPlaying
+            )
+
+            syncedSession
+        } catch (e: Exception) {
+            Timber.w(e, "同步远程会话状态失败: sessionId=$sessionId")
+            null
+        }
     }
 
     /**
@@ -358,43 +503,52 @@ class JellyfinBrowseViewModel @Inject constructor(
     fun discoverDlnaDevices() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isDlnaDiscovering = true)
-            refreshDlnaDevices()
-            _uiState.value = _uiState.value.copy(isDlnaDiscovering = false)
+            try {
+                refreshDlnaDevices()
+            } finally {
+                _uiState.value = _uiState.value.copy(isDlnaDiscovering = false)
+            }
         }
     }
 
     /**
      * 从Jellyfin会话刷新可投屏设备列表
      */
-    private fun refreshDlnaDevices() {
-        viewModelScope.launch {
-            try {
-                val sessions = jellyfinClient.getSessions()
-                // 过滤出支持媒体控制且活跃的会话（这些就是可投屏设备）
-                val castableDevices = sessions.filter { it.supportsMediaControl && it.isActive }
-                val allDevices = listOf(localDevice) + castableDevices
-                Timber.d("发现 ${castableDevices.size} 个可投屏设备，本机设备已加入列表")
+    private suspend fun refreshDlnaDevices() {
+        try {
+            val sessions = jellyfinClient.getSessions()
+            // 过滤出支持媒体控制且活跃的会话（这些就是可投屏设备）
+            val castableDevices = sessions.filter { it.supportsMediaControl && it.isActive }
+            val allDevices = listOf(localDevice) + castableDevices
+            Timber.d("发现 ${castableDevices.size} 个可投屏设备，本机设备已加入列表")
 
-                // 尝试恢复上次选择的设备
-                val savedDevice = savedDeviceId?.let { savedId ->
-                    allDevices.find { it.id == savedId }
+            val currentSelectionId = _uiState.value.selectedDlnaDevice?.id
+            val currentSelectedDevice = currentSelectionId?.let { currentId ->
+                allDevices.find { it.id == currentId }
+            }
+            val savedDevice = savedDeviceId?.let { savedId ->
+                allDevices.find { it.id == savedId }
+            }
+            val selectedDevice = currentSelectedDevice
+                ?: savedDevice
+                ?: localDevice
+
+            _uiState.value = _uiState.value.copy(
+                dlnaDevices = allDevices,
+                selectedDlnaDevice = selectedDevice
+            )
+
+            when {
+                currentSelectedDevice != null -> {
+                    Timber.d("保留当前选择的设备: ${currentSelectedDevice.deviceName}")
                 }
-                val selectedDevice = savedDevice
-                    ?: _uiState.value.selectedDlnaDevice
-                    ?: localDevice
-
-                _uiState.value = _uiState.value.copy(
-                    dlnaDevices = allDevices,
-                    selectedDlnaDevice = selectedDevice
-                )
-
-                if (savedDevice != null) {
+                savedDevice != null -> {
                     Timber.d("已恢复上次选择的设备: ${savedDevice.deviceName}")
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "刷新设备列表失败")
-                _uiState.value = _uiState.value.copy(error = "刷新设备列表失败: ${e.message}")
             }
+        } catch (e: Exception) {
+            Timber.e(e, "刷新设备列表失败")
+            _uiState.value = _uiState.value.copy(error = "刷新设备列表失败: ${e.message}")
         }
     }
 

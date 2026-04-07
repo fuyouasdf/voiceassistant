@@ -248,11 +248,13 @@ Headers:
   - `GET /Items/{id}/stream` - 获取音频流地址
   - `GET /Artists` - 获取艺术家列表
   - `GET /Users/{userId}/Items` - 获取用户音乐
+  - `GET /Sessions` - 读取远程会话能力；远程播放控制前必须按 `SupportedCommands` 判断设备是否支持 `Pause` / `Unpause` / `Stop` 等命令，不能只依赖 `SupportsMediaControl`
 
 #### MusicPlayer
 - 封装 Jellyfin 音频播放
 - 管理播放状态（播放/暂停/上一首/下一首）
 - 支持播放列表
+- `JellyfinBrowseActivity` 的本机迷你播放器文案与进度直接订阅 `MusicPlayer.state`，这样从播放列表页触发本机播放后也能立即显示当前歌曲信息
 
 #### LyricsParser
 - 位于 `core/src/main/java/com/voiceassistant/core/music/LyricsParser.kt`
@@ -380,6 +382,7 @@ app/src/test/java/com/voiceassistant/app/ui/music/
 
 - 首页顶部 `statusDot/tvStatus` 表示 **LLM 实际连通性**，不再由语音管道状态（IDLE/LISTENING/THINKING）驱动。
 - 首页状态栏新增已选播放设备名称展示（`播放设备: xxx`），读取 `SharedPreferences` 中 Jellyfin 设备选择结果。
+- 首页快捷入口拆分为两个独立页面：`Jellyfin` 进入 `JellyfinBrowseActivity`，`播放列表` 进入 `PlaylistListActivity`；播放列表列表页负责展示本地已保存的播放列表并跳转到 `PlaylistActivity` 查看详情。
 - `MainActivity.testLlmConnection()` 在 `onResume` 和页面初始化时执行：
   - 未配置（URL/API Key 为空）=> `LLM: 未配置` + 离线指示。
   - 已配置 => 发起一次真实 LLM 请求探测，成功显示 `LLM: 已连接`，失败显示 `LLM: 未连接`。

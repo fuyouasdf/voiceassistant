@@ -64,6 +64,13 @@
             android:parentActivityName=".ui.main.MainActivity" />
 
         <activity
+            android:name=".ui.music.PlaylistListActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.VoiceAssistant"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <activity
             android:name=".ui.music.NowPlayingActivity"
             android:exported="false"
             android:hardwareAccelerated="true"

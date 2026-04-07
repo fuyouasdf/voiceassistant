@@ -38,6 +38,7 @@ import com.voiceassistant.data.local.ChatMessageEntity
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.app.ui.settings.SettingsActivity
 import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
+import com.voiceassistant.app.ui.music.PlaylistListActivity
 import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
 import dagger.hilt.android.AndroidEntryPoint
@@ -277,7 +278,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, JellyfinBrowseActivity::class.java))
         }
         chipPlaylist.setOnClickListener {
-            startActivity(Intent(this, JellyfinBrowseActivity::class.java))
+            startActivity(Intent(this, PlaylistListActivity::class.java))
         }
     }
 

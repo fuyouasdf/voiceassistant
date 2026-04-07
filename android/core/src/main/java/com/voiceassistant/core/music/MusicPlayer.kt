@@ -622,7 +622,11 @@ class MusicPlayer @Inject constructor(
      * 继续播放
      */
     fun resume() {
-        exoPlayer?.play()
+        val player = exoPlayer ?: return
+        if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) {
+            player.prepare()
+        }
+        player.play()
     }
 
     /**

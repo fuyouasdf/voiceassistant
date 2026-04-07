@@ -36,6 +36,9 @@ import kotlinx.coroutines.launch
  */
 @AndroidEntryPoint
 class JellyfinBrowseActivity : AppCompatActivity() {
+    companion object {
+        private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
+    }
 
     @javax.inject.Inject
     lateinit var musicPlayer: MusicPlayer
@@ -46,6 +49,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     // Adapters
     private lateinit var albumAdapter: AlbumAdapter
     private lateinit var songAdapter: SongAdapter
+    private var lastKnownSong: JellyfinSong? = null
 
     // Device Dialog
     private var dlnaDialog: AlertDialog? = null
@@ -148,6 +152,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         binding.btnStop.setOnClickListener {
             viewModel.stopPlayback()
+            lastKnownSong = null
         }
 
         binding.cardNowPlaying.setOnClickListener {
@@ -180,14 +185,37 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 binding.tvEmpty.visibility = if (showEmpty) View.VISIBLE else View.GONE
 
                 // Now playing
-                state.currentSong?.let { song ->
-                    binding.cardNowPlaying.visibility = View.VISIBLE
+                val displaySong = state.currentSong ?: lastKnownSong
+                state.currentSong?.let { currentSong ->
+                    lastKnownSong = currentSong
+                }
+                val localPlayerState = musicPlayer.getState()
+                val localCurrentItem = if (state.selectedDlnaDevice?.id == LOCAL_DEVICE_SESSION_ID) {
+                    localPlayerState.playlist.getOrNull(localPlayerState.currentIndex)
+                } else {
+                    null
+                }
+
+                val hasPlaybackContext =
+                    localCurrentItem != null || displaySong != null || state.selectedDlnaDevice != null
+                binding.cardNowPlaying.visibility = if (hasPlaybackContext) View.VISIBLE else View.GONE
+
+                localCurrentItem?.let { item ->
+                    binding.tvNowPlayingTitle.text = item.title
+                    val playbackState = if (localPlayerState.isPlaying) "播放中" else "已暂停"
+                    val artist = item.artist ?: "未知艺术家"
+                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+                    renderMiniPlayerForSelectedDevice(state)
+                } ?: displaySong?.let { song ->
                     binding.tvNowPlayingTitle.text = song.title
                     val playbackState = if (state.isPlaying) "播放中" else "已暂停"
                     val artist = song.artist ?: "未知艺术家"
                     binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+                    renderMiniPlayerForSelectedDevice(state)
                 } ?: run {
-                    binding.cardNowPlaying.visibility = View.GONE
+                    binding.tvNowPlayingTitle.text = "当前没有播放内容"
+                    binding.tvNowPlayingArtist.text = state.selectedDlnaDevice?.deviceName ?: "请选择播放设备"
+                    renderMiniPlayerForSelectedDevice(state)
                 }
 
                 // Play/Pause button
@@ -224,9 +252,17 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             musicPlayer.state.collectLatest { playerState ->
+                val selectedDevice = viewModel.uiState.value.selectedDlnaDevice
+                if (selectedDevice?.id != LOCAL_DEVICE_SESSION_ID) {
+                    return@collectLatest
+                }
                 val currentItem = playerState.playlist.getOrNull(playerState.currentIndex)
                 if (currentItem != null) {
                     binding.cardNowPlaying.visibility = View.VISIBLE
+                    binding.tvNowPlayingTitle.text = currentItem.title
+                    val artist = currentItem.artist ?: "未知艺术家"
+                    val playbackState = if (playerState.isPlaying) "播放中" else "已暂停"
+                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
                     binding.tvNowPlayingStatus.text = buildMiniPlayerStatus(currentItem)
                     val progress = if (playerState.duration > 0) {
                         ((playerState.currentPosition * 1000) / playerState.duration).toInt().coerceIn(0, 1000)
@@ -239,6 +275,8 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                     binding.btnPreviousMini.isEnabled = playerState.playlist.isNotEmpty()
                     binding.btnNextMini.isEnabled = playerState.playlist.isNotEmpty()
                 } else {
+                    binding.tvNowPlayingTitle.text = "当前没有播放内容"
+                    binding.tvNowPlayingArtist.text = selectedDevice.deviceName
                     binding.tvNowPlayingStatus.text = "当前没有播放内容"
                     binding.progressNowPlaying.progress = 0
                     binding.tvNowPlayingTime.text = "00:00 / 00:00"
@@ -247,6 +285,29 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun renderMiniPlayerForSelectedDevice(state: JellyfinBrowseUiState) {
+        val selectedDevice = state.selectedDlnaDevice
+        if (selectedDevice == null) {
+            binding.tvNowPlayingStatus.text = "请选择播放设备"
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "00:00 / 00:00"
+            binding.btnPreviousMini.isEnabled = false
+            binding.btnNextMini.isEnabled = false
+            return
+        }
+
+        if (selectedDevice.id == LOCAL_DEVICE_SESSION_ID) {
+            return
+        }
+
+        val remoteState = if (state.isPlaying) "正在投放到 ${selectedDevice.deviceName}" else "已连接到 ${selectedDevice.deviceName}"
+        binding.tvNowPlayingStatus.text = remoteState
+        binding.progressNowPlaying.progress = 0
+        binding.tvNowPlayingTime.text = "--:-- / --:--"
+        binding.btnPreviousMini.isEnabled = false
+        binding.btnNextMini.isEnabled = false
     }
 
     private fun showDlnaDeviceDialog() {
@@ -463,7 +524,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
     private fun openNowPlayingIfLocalSelected() {
         val selectedDevice = viewModel.uiState.value.selectedDlnaDevice ?: return
-        if (selectedDevice.id != "__local_device_session__") return
+        if (selectedDevice.id != LOCAL_DEVICE_SESSION_ID) return
         startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 

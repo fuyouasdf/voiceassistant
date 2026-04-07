@@ -1326,6 +1326,7 @@ private fun SessionDto.toSessionInfo(): SessionInfo? {
         userId = userId,
         isActive = isActive ?: false,
         supportsMediaControl = supportsMediaControl ?: false,
+        supportedCommands = supportedCommands ?: emptyList(),
         playbackState = playState?.let {
             SessionPlaybackState(
                 positionTicks = it.positionTicks ?: 0,
@@ -1736,9 +1737,14 @@ data class SessionInfo(
     val userId: String?,
     val isActive: Boolean,
     val supportsMediaControl: Boolean,
+    val supportedCommands: List<String>,
     val playbackState: SessionPlaybackState?,
     val nowPlayingItem: SessionNowPlayingItem?
-)
+) {
+    fun supportsCommand(command: String): Boolean {
+        return supportsMediaControl && supportedCommands.any { it.equals(command, ignoreCase = true) }
+    }
+}
 
 /**
  * Session 播放状态
@@ -1777,6 +1783,7 @@ data class SessionDto(
     @SerializedName("UserName") val userName: String?,
     @SerializedName("IsActive") val isActive: Boolean?,
     @SerializedName("SupportsMediaControl") val supportsMediaControl: Boolean?,
+    @SerializedName("SupportedCommands") val supportedCommands: List<String>?,
     @SerializedName("PlayState") val playState: PlayStateDto?,
     @SerializedName("NowPlayingItem") val nowPlayingItem: NowPlayingItemDto?
 )
