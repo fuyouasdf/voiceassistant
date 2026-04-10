@@ -327,14 +327,9 @@ class JellyfinBrowseViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(isPlaying = true)
                     }
                 } else {
+                    // 远程 DLNA 播放控制 - 直接执行命令，不检查 supportsCommand
+                    // 因为 Jellyfin 报告的 DLNA 设备能力可能不完整（Pause/Unpause 通常支持但未报告）
                     if (_uiState.value.isPlaying) {
-                        val latestSession = syncRemoteSessionState(session.id) ?: session
-                        if (!latestSession.supportsCommand("Pause")) {
-                            _uiState.value = _uiState.value.copy(
-                                error = "设备 ${latestSession.deviceName} 不支持暂停"
-                            )
-                            return@launch
-                        }
                         val result = executeRemotePlaybackCommand(
                             sessionId = session.id,
                             desiredPlaying = false
@@ -345,18 +340,6 @@ class JellyfinBrowseViewModel @Inject constructor(
                             _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
                         }
                     } else {
-                        val latestSession = syncRemoteSessionState(session.id) ?: session
-                        if (!latestSession.supportsCommand("Unpause")) {
-                            val actualPlaying = latestSession.playbackState?.isPaused?.not()
-                            if (actualPlaying == true) {
-                                _uiState.value = _uiState.value.copy(isPlaying = true)
-                            } else {
-                                _uiState.value = _uiState.value.copy(
-                                    error = "设备 ${latestSession.deviceName} 不支持继续播放"
-                                )
-                            }
-                            return@launch
-                        }
                         val result = executeRemotePlaybackCommand(
                             sessionId = session.id,
                             desiredPlaying = true
