@@ -66,6 +66,50 @@ class DLNAController(private val device: DLNADevice) {
     }
 
     /**
+     * Get current transport/playback state.
+     * @return "PLAYING", "PAUSED_PLAYBACK", "STOPPED", or null on error
+     */
+    fun getTransportState(): Result<String> {
+        Timber.d("DLNA getTransportState on ${device.name}")
+        val result = DLNASoapClient.sendSoapRequestWithResponse(
+            device,
+            DLNASoapClient.AV_TRANSPORT_SERVICE,
+            "GetTransportInfo",
+            DLNASoapClient.buildGetTransportInfoBody()
+        )
+        return result.mapCatching { response ->
+            DLNASoapClient.parseTransportInfoResponse(response)
+                ?: throw Exception("Failed to parse transport state")
+        }
+    }
+
+    /**
+     * Toggle play/pause based on current state.
+     * Uses PlayPause action if available, otherwise falls back to Pause/Play.
+     */
+    fun playPause(): Result<Unit> {
+        Timber.d("DLNA playPause on ${device.name}")
+
+        // First get current state
+        val stateResult = getTransportState()
+        val currentState = stateResult.getOrNull()
+        Timber.d("Current DLNA transport state: $currentState")
+
+        return if (currentState == "PLAYING") {
+            // Currently playing, send Pause
+            pause()
+        } else {
+            // Currently paused or stopped, send Play
+            DLNASoapClient.sendSoapRequest(
+                device,
+                DLNASoapClient.AV_TRANSPORT_SERVICE,
+                "Play",
+                DLNASoapClient.buildPlayBody()
+            )
+        }
+    }
+
+    /**
      * Set volume.
      * @param volume Volume level 0-100
      */

@@ -67,9 +67,23 @@ class DLNAPlayer @Inject constructor(
     override suspend fun pause(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val device = _currentDevice.value ?: return@withContext Result.failure(Exception("No device connected"))
-            pausePlayback(device)
-            _isPlaying.value = false
-            Result.success(Unit)
+
+            // Query current state first - some devices (like JBL Bar 800) may not respond correctly
+            // to pause if already paused, or to play if already playing
+            val controller = DLNAController(device)
+            val stateResult = controller.getTransportState()
+            val currentState = stateResult.getOrNull()
+            Timber.d("DLNA pause: current state is $currentState")
+
+            if (currentState == "PLAYING") {
+                pausePlayback(device)
+                _isPlaying.value = false
+                Result.success(Unit)
+            } else {
+                // Already paused or stopped, just update local state
+                _isPlaying.value = false
+                Result.success(Unit)
+            }
         } catch (e: Exception) {
             Timber.e(e, "DLNA pause failed")
             Result.failure(e)
@@ -79,9 +93,22 @@ class DLNAPlayer @Inject constructor(
     override suspend fun resume(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val device = _currentDevice.value ?: return@withContext Result.failure(Exception("No device connected"))
-            play(device)
-            _isPlaying.value = true
-            Result.success(Unit)
+
+            // Query current state first
+            val controller = DLNAController(device)
+            val stateResult = controller.getTransportState()
+            val currentState = stateResult.getOrNull()
+            Timber.d("DLNA resume: current state is $currentState")
+
+            if (currentState != "PLAYING") {
+                play(device)
+                _isPlaying.value = true
+                Result.success(Unit)
+            } else {
+                // Already playing, just update local state
+                _isPlaying.value = true
+                Result.success(Unit)
+            }
         } catch (e: Exception) {
             Timber.e(e, "DLNA resume failed")
             Result.failure(e)

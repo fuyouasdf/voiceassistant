@@ -22,6 +22,18 @@ object DLNASoapClient {
         action: String,
         soapBody: String
     ): Result<Unit> {
+        return sendSoapRequestWithResponse(device, serviceType, action, soapBody).map { }
+    }
+
+    /**
+     * Send a SOAP request and return the response body.
+     */
+    fun sendSoapRequestWithResponse(
+        device: DLNADevice,
+        serviceType: String,
+        action: String,
+        soapBody: String
+    ): Result<String> {
         try {
             val controlUrl = getControlUrl(device.location, serviceType)
             if (controlUrl == null) {
@@ -57,7 +69,7 @@ object DLNASoapClient {
 
             if (responseCode == 200) {
                 Timber.d("DLNA $action succeeded")
-                return Result.success(Unit)
+                return Result.success(response.toString())
             } else {
                 Timber.e("DLNA $action failed with code $responseCode: $response")
                 return Result.failure(Exception("DLNA $action failed: $responseCode"))
@@ -207,6 +219,48 @@ object DLNASoapClient {
                         <Channel>Master</Channel>
                         <Volume>$volume</Volume>
                     </u:SetVolume>
+                </s:Body>
+            </s:Envelope>
+        """.trimIndent()
+    }
+
+    /**
+     * Build GetTransportInfo SOAP body.
+     */
+    fun buildGetTransportInfoBody(): String {
+        return """
+            <?xml version="1.0" encoding="utf-8"?>
+            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                <s:Body>
+                    <u:GetTransportInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+                        <InstanceID>0</InstanceID>
+                    </u:GetTransportInfo>
+                </s:Body>
+            </s:Envelope>
+        """.trimIndent()
+    }
+
+    /**
+     * Parse GetTransportInfo response to extract current playback state.
+     * @return "PLAYING", "PAUSED_PLAYBACK", "STOPPED", or null if parsing fails
+     */
+    fun parseTransportInfoResponse(response: String): String? {
+        // Look for TransportState element
+        val regex = Regex("<TransportState>([^<]+)</TransportState>", RegexOption.IGNORE_CASE)
+        return regex.find(response)?.groupValues?.get(1)?.trim()
+    }
+
+    /**
+     * Build PlayPause SOAP body (for devices that support it).
+     */
+    fun buildPlayPauseBody(): String {
+        return """
+            <?xml version="1.0" encoding="utf-8"?>
+            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                <s:Body>
+                    <u:PlayPause xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+                        <InstanceID>0</InstanceID>
+                    </u:PlayPause>
                 </s:Body>
             </s:Envelope>
         """.trimIndent()

@@ -259,10 +259,14 @@ class JellyfinBrowseViewModel @Inject constructor(
                         )
                     } else {
                         val syncedSession = syncRemoteSessionState(session.id)
+                        // 优先检查 nowPlayingItem 是否匹配
                         val matchedItem = syncedSession?.nowPlayingItem?.id == song.id
-                        val actualPlaying = syncedSession?.playbackState?.isPaused?.not()
-                        if (matchedItem) {
-                            _uiState.value = _uiState.value.copy(isPlaying = actualPlaying ?: true)
+                        // 检查播放状态（isPaused == false 表示正在播放）
+                        val actualPlaying = syncedSession?.playbackState?.isPaused?.not() ?: true
+                        // 如果 nowPlayingItem 匹配，或者播放状态显示正在播放，则认为成功
+                        // DLNA 设备播放需要更多时间同步状态，不要求 nowPlayingItem 必须立即匹配
+                        if (matchedItem || actualPlaying) {
+                            _uiState.value = _uiState.value.copy(isPlaying = actualPlaying)
                         } else {
                             _uiState.value = _uiState.value.copy(
                                 error = "设备 ${latestSession.deviceName} 未确认开始播放"
