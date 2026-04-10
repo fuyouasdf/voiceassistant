@@ -186,6 +186,14 @@
         </FrameLayout>
 
         <!-- ========================
+             Mini Player Container
+             ======================== -->
+        <FrameLayout
+            android:id="@+id/miniPlayerContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <!-- ========================
              Bottom: Input Area
              ======================== -->
         <LinearLayout
@@ -305,4 +313,13 @@
 
         </LinearLayout>
     </LinearLayout>
+
+    <!-- ========================
+         Fragment Container for Playback
+         ======================== -->
+    <FrameLayout
+        android:id="@+id/fragmentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:elevation="8dp" />
 </FrameLayout>

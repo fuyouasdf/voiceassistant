@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_player_surface"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        app:cardCornerRadius="12dp"
+        app:strokeColor="@color/glass_border"
+        app:strokeWidth="1dp">
+
+        <ImageView
+            android:id="@+id/ivCover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/surface"
+            android:scaleType="centerCrop"
+            tools:src="@drawable/ic_music" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvSongTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            tools:text="不流泪的机场" />
+
+        <TextView
+            android:id="@+id/tvArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            tools:text="林俊杰" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/btnPlayPause"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@drawable/bg_player_icon_button"
+        android:contentDescription="播放/暂停"
+        android:padding="12dp"
+        android:src="@drawable/ic_play"
+        app:tint="@color/text_primary" />
+
+    <ImageButton
+        android:id="@+id/btnNext"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@drawable/bg_player_icon_button"
+        android:contentDescription="下一首"
+        android:padding="12dp"
+        android:src="@drawable/ic_skip_next"
+        app:tint="@color/text_secondary" />
+
+</LinearLayout>

@@ -39,6 +39,7 @@ import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.app.ui.settings.SettingsActivity
 import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
 import com.voiceassistant.app.ui.music.PlaylistListActivity
+import com.voiceassistant.app.ui.playback.MiniPlayerFragment
 import com.voiceassistant.core.pipeline.PipelineState
 import com.voiceassistant.core.pipeline.VoicePipeline
 import dagger.hilt.android.AndroidEntryPoint
@@ -109,6 +110,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chipJellyfin: Chip
     private lateinit var chipPlaylist: Chip
 
+    // Playback
+    private lateinit var miniPlayerContainer: View
+
     // Haptic Feedback
     private var vibrator: Vibrator? = null
 
@@ -147,6 +151,7 @@ class MainActivity : AppCompatActivity() {
         setupInsets()
         setupListeners()
         setupConversationPagination()
+        setupMiniPlayer(savedInstanceState)
         loadInitialConversationHistory()
         observeVoicePipeline()
         checkPermissions()
@@ -213,6 +218,9 @@ class MainActivity : AppCompatActivity() {
         chipJellyfin = findViewById(R.id.chipJellyfin)
         chipPlaylist = findViewById(R.id.chipPlaylist)
 
+        // Playback
+        miniPlayerContainer = findViewById(R.id.miniPlayerContainer)
+
         // Initialize vibrator for haptic feedback
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -242,10 +250,26 @@ class MainActivity : AppCompatActivity() {
             )
             windowInsets
         }
+
+        // Mini player container with system bars insets
+        ViewCompat.setOnApplyWindowInsetsListener(miniPlayerContainer) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, 0, 0, insets.bottom)
+            windowInsets
+        }
     }
 
     private fun Int.dpToPx(): Int {
         return (this * resources.displayMetrics.density).toInt()
+    }
+
+    private fun setupMiniPlayer(savedInstanceState: Bundle?) {
+        // Add MiniPlayerFragment if not already added
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.miniPlayerContainer, MiniPlayerFragment())
+                .commit()
+        }
     }
 
     private fun setupListeners() {

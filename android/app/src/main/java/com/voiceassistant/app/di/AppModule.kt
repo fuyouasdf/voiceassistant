@@ -16,6 +16,8 @@ import com.voiceassistant.core.pipeline.ASRManager
 import com.voiceassistant.core.pipeline.PipelineConfig
 import com.voiceassistant.core.pipeline.VoicePipeline
 import com.voiceassistant.core.pipeline.WakeWordManager
+import com.voiceassistant.core.playback.state.PlaybackStateManager
+import com.voiceassistant.core.playback.state.PlaybackStateManagerImpl
 import com.voiceassistant.core.sherpa.SherpaASR
 import com.voiceassistant.core.sherpa.SherpaASRImpl
 import com.voiceassistant.core.sherpa.SherpaKWS
@@ -315,5 +317,12 @@ object AppModule {
             wakeWordManager = wakeWordManager,
             statefulVadFactory = { StatefulVadImpl(context) }
         )
+    }
+
+    // Playback module providers
+    @Provides
+    @Singleton
+    fun providePlaybackStateManager(): PlaybackStateManager {
+        return PlaybackStateManagerImpl()
     }
 }

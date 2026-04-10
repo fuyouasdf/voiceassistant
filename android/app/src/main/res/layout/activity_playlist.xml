@@ -50,6 +50,23 @@
             app:tint="@color/text_secondary" />
     </LinearLayout>
 
+    <!-- DLNA Device Selector -->
+    <com.google.android.material.chip.Chip
+        android:id="@+id/chipDlnaDevice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="8dp"
+        android:text="本机"
+        android:textColor="@color/text_primary"
+        app:chipBackgroundColor="@color/surface"
+        app:chipStrokeWidth="1dp"
+        app:chipStrokeColor="@color/glass_border"
+        app:chipIcon="@drawable/ic_remote_play"
+        app:chipIconTint="@color/primary"
+        app:chipIconVisible="true"
+        app:closeIconVisible="false" />
+
     <!-- 歌曲数量 -->
     <TextView
         android:id="@+id/tvSongCount"

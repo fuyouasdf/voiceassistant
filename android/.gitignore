@@ -76,7 +76,7 @@ lint/intermediates/
 lint/generated/
 lint/outputs/
 lint/tmp/
-
+auxio
 # OS-specific files
 .DS_Store
 Thumbs.db

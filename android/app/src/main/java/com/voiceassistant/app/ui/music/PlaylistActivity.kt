@@ -11,10 +11,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.chip.Chip
 import com.voiceassistant.app.databinding.ActivityPlaylistBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+
+private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
 
 /**
  * 播放列表页面
@@ -26,6 +29,7 @@ class PlaylistActivity : AppCompatActivity() {
     private val viewModel: PlaylistViewModel by viewModels()
     private lateinit var binding: ActivityPlaylistBinding
     private lateinit var songAdapter: PlaylistAdapter
+    private var dlnaDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +85,24 @@ class PlaylistActivity : AppCompatActivity() {
         binding.btnDeletePlaylist.setOnClickListener {
             showDeletePlaylistDialog()
         }
+
+        binding.chipDlnaDevice.setOnClickListener {
+            showDlnaDeviceDialog()
+        }
+    }
+
+    private fun showDlnaDeviceDialog() {
+        val devices = viewModel.uiState.value.dlnaDevices
+        val deviceNames = devices.map { it.deviceName }.toTypedArray()
+        dlnaDialog?.dismiss()
+        dlnaDialog = AlertDialog.Builder(this)
+            .setTitle("选择播放设备")
+            .setItems(deviceNames) { _, which ->
+                if (which < devices.size) {
+                    viewModel.selectDlnaDevice(devices[which])
+                }
+            }
+            .show()
     }
 
     private fun observeState() {
@@ -104,6 +126,9 @@ class PlaylistActivity : AppCompatActivity() {
 
                 // Song count
                 binding.tvSongCount.text = "${state.songs.size} 首歌曲"
+
+                // Selected DLNA device
+                binding.chipDlnaDevice.text = state.selectedDlnaDevice?.deviceName ?: "本机"
 
                 // Error
                 state.error?.let { error ->
