@@ -4,6 +4,8 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
@@ -15,6 +17,7 @@ class AudioPlayer {
     private var audioTrack: AudioTrack? = null
     private var currentSampleRate: Int = 44100
     private var isStreamPrepared: Boolean = false
+    private var playJob: Job? = null
 
     /**
      * Prepare audio track for streaming playback
@@ -95,6 +98,8 @@ class AudioPlayer {
      * Release the audio track
      */
     fun release() {
+        playJob?.cancel()
+        playJob = null
         try {
             audioTrack?.stop()
             audioTrack?.release()
@@ -142,8 +147,8 @@ class AudioPlayer {
 
         audioTrack?.play()
 
-        // Play in background
-        Thread {
+        // Play in background using coroutine
+        playJob = kotlinx.coroutines.MainScope().launch {
             try {
                 // Convert Float samples to Short array (PCM 16-bit)
                 val shortSamples = ShortArray(samples.size) { i ->
@@ -156,7 +161,7 @@ class AudioPlayer {
                 audioTrack?.release()
                 audioTrack = null
 
-                // Call completion on main thread
+                // Call completion
                 onComplete()
             } catch (e: Exception) {
                 Timber.e(e, "Error playing audio")
@@ -164,7 +169,7 @@ class AudioPlayer {
                 audioTrack = null
                 onComplete()
             }
-        }.start()
+        }
     }
 
     /**

@@ -39,6 +39,10 @@
     <string name="cd_mic">麦克风</string>
     <string name="cd_status_indicator">状态指示器</string>
     <string name="cd_voice_visualizer">语音可视化</string>
+    <string name="cd_send">发送</string>
+    <string name="cd_play_pause">播放/暂停</string>
+    <string name="cd_next">下一首</string>
+    <string name="cd_previous">上一首</string>
 
     <!-- Settings Screen -->
     <string name="settings_title">设置</string>
@@ -101,4 +105,99 @@
     <string name="jellyfin_control_pause">暂停</string>
     <string name="jellyfin_control_stop">停止</string>
     <string name="jellyfin_control_next">下一曲</string>
+
+    <!-- Additional Hardcoded Strings - MainActivity -->
+    <string name="permission_mic_denied">未授予麦克风权限，语音功能不可用</string>
+    <string name="hint_ask_help">有什么可以帮你的？</string>
+    <string name="quick_action_weather">今天天气怎么样</string>
+    <string name="error_chat_history_load_failed">聊天记录加载失败</string>
+    <string name="error_load_history_failed">加载历史记录失败</string>
+    <string name="dialog_delete_message_title">删除消息</string>
+    <string name="dialog_delete_message_content">确定要删除这条消息吗？</string>
+    <string name="btn_delete">删除</string>
+    <string name="btn_cancel">取消</string>
+    <string name="btn_ok">确定</string>
+    <string name="btn_new">新建</string>
+    <string name="message_deleted">消息已删除</string>
+    <string name="error_delete_failed">删除失败</string>
+    <string name="llm_not_configured">LLM: 未配置</string>
+    <string name="llm_checking">LLM: 检测中…</string>
+    <string name="llm_connected">LLM: 已连接</string>
+    <string name="llm_not_connected">LLM: 未连接</string>
+    <string name="jellyfin_not_configured">Jellyfin: 未配置</string>
+    <string name="jellyfin_connecting">Jellyfin: 连接中…</string>
+    <string name="jellyfin_connected">Jellyfin: 已连接</string>
+    <string name="jellyfin_not_connected">Jellyfin: 未连接</string>
+    <string name="playback_device_not_selected">播放设备: 未选择</string>
+    <string name="playback_device_selected">播放设备: %s</string>
+
+    <!-- Additional Hardcoded Strings - SettingsActivity -->
+    <string name="settings_loading_hint">页面加载中，请稍候</string>
+    <string name="jellyfin_config_required">请填写完整的 Jellyfin 配置</string>
+    <string name="llm_config_required">请填写完整的 LLM 配置</string>
+    <string name="settings_unsupported_wakeword">当前模型不支持自定义唤醒词：%1$s。仅支持：%2$s</string>
+    <string name="settings_unsupported_wakeword_none">当前模型不支持自定义唤醒词</string>
+    <string name="error_save_failed">保存失败: %s</string>
+
+    <!-- Additional Hardcoded Strings - JellyfinBrowseActivity -->
+    <string name="state_playing">播放中</string>
+    <string name="state_paused">已暂停</string>
+    <string name="artist_unknown">未知艺术家</string>
+    <string name="no_playback_content">当前没有播放内容</string>
+    <string name="select_playback_device">请选择播放设备</string>
+    <string name="casting_to_device">正在投放到 %s</string>
+    <string name="connected_to_device">已连接到 %s</string>
+    <string name="select_device">选择设备</string>
+    <string name="refresh">刷新</string>
+    <string name="playlist_empty_title">播放列表</string>
+    <string name="playlist_empty_message">还没有播放列表\n\n从歌曲列表点击"更多"来创建</string>
+    <string name="playlist_song_count">%s (%d首)</string>
+    <string name="create_playlist">创建播放列表</string>
+    <string name="playlist_name_hint">播放列表名称</string>
+    <string name="create">创建</string>
+    <string name="playlist_created">已创建 %s</string>
+    <string name="playlist_create_failed">创建失败: %s</string>
+    <string name="playlist_name_empty">名称不能为空</string>
+    <string name="add_to_playlist">添加到播放列表</string>
+    <string name="added_to_playlist">已添加到 %s</string>
+    <string name="create_new_playlist">创建新播放列表</string>
+    <string name="playlist_created_with_song">已创建 %s 并添加歌曲</string>
+    <string name="playlist_create_failed_with_error">创建播放列表失败: %s</string>
+    <string name="transcoding_to_aac">%s，正在服务器转码为 AAC</string>
+    <string name="direct_playback">%s，本机直连播放</string>
+    <string name="direct_playback_with_method">%s，本机直连播放（%s）</string>
+
+    <!-- Additional Hardcoded Strings - NowPlayingActivity -->
+    <string name="no_playback">暂无播放</string>
+    <string name="repeat_off">循环关闭</string>
+    <string name="repeat_all">列表循环</string>
+    <string name="repeat_one">单曲循环</string>
+    <string name="more_options">更多</string>
+    <string name="view_stream_info">查看流信息</string>
+    <string name="open_jellyfin_browse">打开 Jellyfin 浏览</string>
+    <string name="fullscreen_lyrics">全屏歌词</string>
+    <string name="stop_playback">停止播放</string>
+    <string name="stream_info_title">流信息</string>
+    <string name="stream_info_no_content">当前没有正在播放的内容</string>
+    <string name="label_artist">艺术家:</string>
+    <string name="label_container">容器:</string>
+    <string name="label_playback_method">播放方式:</string>
+    <string name="label_transcoding">转码:</string>
+    <string name="label_session_id">会话 ID:</string>
+    <string name="label_media_source_id">媒体源 ID:</string>
+    <string name="label_title">标题</string>
+    <string name="yes">是</string>
+    <string name="no">否</string>
+    <string name="none">无</string>
+    <string name="unknown">未知</string>
+    <string name="queue_position">第 %1$d 首 / 共 %2$d 首</string>
+    <string name="queue_empty">当前队列为空</string>
+    <string name="waiting_for_playback">等待播放</string>
+    <string name="local_playing">本机播放中</string>
+    <string name="currently_loading_lyrics">正在加载歌词</string>
+    <string name="lyrics_loading">歌词加载中</string>
+    <string name="no_lyrics_available">当前歌曲没有可用歌词</string>
+    <string name="intro">前奏中</string>
+    <string name="lyrics_loaded">已加载 %d 行歌词，可点击歌词跳转</string>
+    <string name="state_wakeword_detected">唤醒成功</string>
 </resources>

@@ -134,7 +134,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.RECORD_AUDIO] != true) {
-            Toast.makeText(this, "未授予麦克风权限，语音功能不可用", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.permission_mic_denied, Toast.LENGTH_SHORT).show()
         } else {
             startVoiceService()
         }
@@ -246,7 +246,7 @@ class MainActivity : AppCompatActivity() {
                 view.paddingLeft,
                 view.paddingTop,
                 view.paddingRight,
-                insets.bottom + 32.dpToPx()
+                insets.bottom + resources.getDimensionPixelSize(R.dimen.bottom_padding_standard)
             )
             windowInsets
         }
@@ -297,7 +297,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick actions
-        chipWeather.setOnClickListener { triggerQuickAction("今天天气怎么样") }
+        chipWeather.setOnClickListener { triggerQuickAction(getString(R.string.quick_action_weather)) }
         chipJellyfin.setOnClickListener {
             startActivity(Intent(this, JellyfinBrowseActivity::class.java))
         }
@@ -314,7 +314,7 @@ class MainActivity : AppCompatActivity() {
         etTextInput.text.clear()
 
         // Update state
-        updateUIFromState(PipelineState.THINKING, "思考中...")
+        updateUIFromState(PipelineState.THINKING, getString(R.string.state_thinking))
 
         // Trigger voice pipeline with text input
         try {
@@ -325,7 +325,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun triggerQuickAction(text: String) {
-        updateUIFromState(PipelineState.THINKING, "思考中...")
+        updateUIFromState(PipelineState.THINKING, getString(R.string.state_thinking))
         try {
             voicePipeline.processTextInput(text)
         } catch (e: Exception) {
@@ -375,7 +375,7 @@ class MainActivity : AppCompatActivity() {
                         // Haptic feedback on wake word detection
                         triggerHapticFeedback()
                         // Show wake success indicator with confidence
-                        showWakeSuccessIndicator(message ?: "唤醒成功", wakeConfidence)
+                        showWakeSuccessIndicator(message ?: getString(R.string.state_wakeword_detected), wakeConfidence)
                     }
                     PipelineState.LISTENING -> {
                         btnSend.visibility = View.INVISIBLE
@@ -568,7 +568,7 @@ class MainActivity : AppCompatActivity() {
                 conversationRecyclerView.scrollToPosition(chatMessageAdapter.itemCount - 1)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load initial conversation history")
-                Toast.makeText(this@MainActivity, "聊天记录加载失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, R.string.error_chat_history_load_failed, Toast.LENGTH_SHORT).show()
             } finally {
                 isLoadingHistory = false
             }
@@ -619,7 +619,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load more conversation history")
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "加载历史记录失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, R.string.error_load_history_failed, Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -665,12 +665,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun showDeleteMessageDialog(messageId: Long, messageView: View) {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("删除消息")
-            .setMessage("确定要删除这条消息吗？")
-            .setPositiveButton("删除") { _, _ ->
+            .setTitle(R.string.dialog_delete_message_title)
+            .setMessage(R.string.dialog_delete_message_content)
+            .setPositiveButton(R.string.btn_delete) { _, _ ->
                 deleteMessage(messageId, messageView)
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .show()
     }
 
@@ -695,10 +695,10 @@ class MainActivity : AppCompatActivity() {
                     oldestLoadedMessageId = null
                     oldestLoadedMessageCreatedAt = null
                 }
-                Toast.makeText(this@MainActivity, "消息已删除", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, R.string.message_deleted, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Timber.e(e, "Failed to delete message")
-                Toast.makeText(this@MainActivity, "删除失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, R.string.error_delete_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -751,22 +751,22 @@ class MainActivity : AppCompatActivity() {
     private fun testLlmConnection() {
         val llmConfigured = configHolder.llmBaseUrl.isNotEmpty() && configHolder.llmApiKey.isNotEmpty()
         if (!llmConfigured) {
-            tvProvider.text = "LLM: 未配置"
+            tvProvider.text = getString(R.string.llm_not_configured)
             updateStatus(false)
             return
         }
 
-        tvProvider.text = "LLM: 检测中..."
+        tvProvider.text = getString(R.string.llm_checking)
         llmConnectionCheckJob?.cancel()
         llmConnectionCheckJob = lifecycleScope.launch {
             try {
                 val result = llmRepository.chat("ping")
                 val isOnline = result.isSuccess
-                tvProvider.text = if (isOnline) "LLM: 已连接" else "LLM: 未连接"
+                tvProvider.text = if (isOnline) getString(R.string.llm_connected) else getString(R.string.llm_not_connected)
                 updateStatus(isOnline)
             } catch (e: Exception) {
                 Timber.e(e, "LLM connection test failed")
-                tvProvider.text = "LLM: 未连接"
+                tvProvider.text = getString(R.string.llm_not_connected)
                 updateStatus(false)
             }
         }
@@ -790,7 +790,7 @@ class MainActivity : AppCompatActivity() {
             val jellyfinConfigured = configHolder.jellyfinUrl.isNotEmpty() &&
                 configHolder.jellyfinApiKey.isNotEmpty()
             if (!jellyfinConfigured) {
-                tvJellyfinStatus.text = "Jellyfin: 未配置"
+                tvJellyfinStatus.text = getString(R.string.jellyfin_not_configured)
                 jellyfinStatusDot.setBackgroundResource(R.drawable.circle_status_offline)
                 return@launch
             }
@@ -798,17 +798,17 @@ class MainActivity : AppCompatActivity() {
             // 重新加载 Jellyfin 配置，确保使用最新地址
             jellyfinClient.reload(configHolder.jellyfinUrl, configHolder.jellyfinApiKey)
 
-            tvJellyfinStatus.text = "Jellyfin: 连接中..."
+            tvJellyfinStatus.text = getString(R.string.jellyfin_connecting)
             try {
                 val result = jellyfinClient.testConnection()
                 val isOnline = result.isSuccess
-                tvJellyfinStatus.text = if (isOnline) "Jellyfin: 已连接" else "Jellyfin: 未连接"
+                tvJellyfinStatus.text = if (isOnline) getString(R.string.jellyfin_connected) else getString(R.string.jellyfin_not_connected)
                 jellyfinStatusDot.setBackgroundResource(
                     if (isOnline) R.drawable.circle_status_online else R.drawable.circle_status_offline
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Jellyfin connection test failed")
-                tvJellyfinStatus.text = "Jellyfin: 未连接"
+                tvJellyfinStatus.text = getString(R.string.jellyfin_not_connected)
                 jellyfinStatusDot.setBackgroundResource(R.drawable.circle_status_offline)
             }
         }
@@ -818,9 +818,9 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("voice_assistant_prefs", Context.MODE_PRIVATE)
         val deviceName = prefs.getString(PREF_SELECTED_DEVICE_NAME, null)
         tvSelectedPlaybackDevice.text = if (deviceName.isNullOrBlank()) {
-            "播放设备: 未选择"
+            getString(R.string.playback_device_not_selected)
         } else {
-            "播放设备: $deviceName"
+            getString(R.string.playback_device_selected, deviceName)
         }
     }
 }

@@ -23,6 +23,7 @@ class DLNAManager(private val context: Context) {
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
     private var discoveryJob: Job? = null
+    private val discoveryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val foundDevices = CopyOnWriteArrayList<DLNADevice>()
 
     // Preselected device (e.g., restored from saved settings on startup)
@@ -54,13 +55,13 @@ class DLNAManager(private val context: Context) {
         foundDevices.clear()
         _devices.value = emptyList()
 
-        discoveryJob = CoroutineScope(Dispatchers.IO).launch {
+        discoveryJob = discoveryScope.launch {
             try {
                 // Send multiple M-SEARCH requests with different targets and delays
                 sendMultipleSSDPDiscoveries()
 
-                // Wait for responses for 8 seconds (increased from 5)
-                delay(8000)
+                // Wait for responses for 3 seconds (reduced from 8)
+                delay(3000)
 
                 // Update devices list
                 _devices.value = foundDevices.toList()
@@ -74,18 +75,23 @@ class DLNAManager(private val context: Context) {
     }
 
     private suspend fun sendMultipleSSDPDiscoveries() {
-        // Send M-SEARCH for each target type with delays
+        // Send M-SEARCH for each target type with shorter delays
         for (target in searchTargets) {
             sendSSDPDiscover(target)
-            delay(500) // Wait 500ms between requests
+            delay(300) // Wait 300ms between requests
         }
 
         // Send additional ssdp:all requests at intervals to catch slow devices
-        repeat(3) { index ->
-            delay(1500)
+        repeat(2) { index ->
+            delay(800)
             if (_isScanning.value) {
                 sendSSDPDiscover("ssdp:all")
                 Timber.d("Sent additional M-SEARCH #${index + 1}")
+            }
+            // Early exit if we already found at least one device
+            if (foundDevices.isNotEmpty()) {
+                Timber.d("Early exit from discovery - found ${foundDevices.size} device(s)")
+                return
             }
         }
     }
@@ -140,7 +146,7 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
                     val responsePacket = DatagramPacket(responseBuffer, responseBuffer.size)
                     socket.receive(responsePacket)
 
-                    val sourceIp = responsePacket.address.hostAddress ?: continue
+                    val sourceIp = responsePacket.address.hostAddress?.let { formatHostAddress(it) } ?: continue
                     val response = String(responsePacket.data, 0, responsePacket.length)
                     parseSSDPResponse(response, sourceIp)
                 } catch (e: Exception) {
@@ -151,7 +157,7 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
                 try {
                     val mcPacket = DatagramPacket(responseBuffer, responseBuffer.size)
                     multicastSocket?.receive(mcPacket)
-                    val mcSourceIp = mcPacket.address.hostAddress ?: continue
+                    val mcSourceIp = mcPacket.address.hostAddress?.let { formatHostAddress(it) } ?: continue
                     val mcResponse = String(mcPacket.data, 0, mcPacket.length)
                     parseSSDPResponse(mcResponse, mcSourceIp)
                 } catch (e: Exception) {
@@ -213,7 +219,7 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
         if (foundDevices.any { it.uuid == uuid }) return
 
         // Launch coroutine to fetch device description
-        CoroutineScope(Dispatchers.IO).launch {
+        discoveryScope.launch {
             try {
                 val deviceInfo = fetchDeviceDescription(location)
                 val device = DLNADevice(
@@ -301,8 +307,20 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
         return regex.find(xml)?.groups?.get(1)?.value?.trim()
     }
 
+    /**
+     * Format host address for display. IPv6 addresses need brackets.
+     */
+    private fun formatHostAddress(address: String): String {
+        return if (address.contains(":")) {
+            "[$address]"
+        } else {
+            address
+        }
+    }
+
     fun stopDiscovery() {
         discoveryJob?.cancel()
+        discoveryJob = null
         _isScanning.value = false
         _devices.value = emptyList()
         Timber.d("DLNA discovery stopped")
@@ -331,6 +349,7 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
 
     fun release() {
         stopDiscovery()
+        discoveryScope.cancel()
         _devices.value = emptyList()
     }
 }

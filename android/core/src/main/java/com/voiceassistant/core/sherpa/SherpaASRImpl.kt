@@ -152,6 +152,7 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
             // 统一在结束后检查 endpoint
             isEndpointReached = r.isEndpoint(stream)
             if (isEndpointReached) {
+                listener.onEndpointDetected()
                 // 添加尾部填充以获得更好的识别效果
                 val tailPaddings = FloatArray((0.8 * 16000).toInt())
                 stream.acceptWaveform(tailPaddings, sampleRate = 16000)

@@ -19,7 +19,7 @@ interface MusicRepository {
     /**
      * Get stream URL for a song
      */
-    suspend fun getStreamUrl(songId: String): String
+    suspend fun getStreamUrl(songId: String): Result<String>
 
     /**
      * Play item to a Jellyfin session (uses Jellyfin Session API)

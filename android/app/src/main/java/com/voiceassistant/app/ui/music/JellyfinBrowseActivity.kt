@@ -86,14 +86,10 @@ class JellyfinBrowseActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.cardNowPlaying) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val params = view.layoutParams as LinearLayout.LayoutParams
-            params.bottomMargin = insets.bottom + 16.dpToPx()
+            params.bottomMargin = insets.bottom + resources.getDimensionPixelSize(R.dimen.spacing_lg)
             view.layoutParams = params
             windowInsets
         }
-    }
-
-    private fun Int.dpToPx(): Int {
-        return (this * resources.displayMetrics.density).toInt()
     }
 
     private fun setupRecyclerViews() {
@@ -163,89 +159,28 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     private fun observeState() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
-                // Loading
+                // Loading indicator
                 binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
 
-                // Albums
-                if (!state.isSearching && state.albums.isNotEmpty()) {
-                    binding.recyclerAlbums.visibility = View.VISIBLE
-                    binding.recyclerSongs.visibility = View.GONE
-                    albumAdapter.submitList(state.albums)
-                }
+                // Content display (albums/songs)
+                updateContentUi(state)
 
-                // Songs
-                if (state.songs.isNotEmpty()) {
-                    binding.recyclerAlbums.visibility = View.GONE
-                    binding.recyclerSongs.visibility = View.VISIBLE
-                    songAdapter.submitList(state.songs)
-                }
+                // Now playing card
+                updateNowPlayingCard(state)
 
-                // Empty state
-                val showEmpty = !state.isLoading && state.albums.isEmpty() && state.songs.isEmpty()
-                binding.tvEmpty.visibility = if (showEmpty) View.VISIBLE else View.GONE
+                // Playback controls
+                updatePlaybackControls(state)
 
-                // Now playing
-                val displaySong = state.currentSong ?: lastKnownSong
-                state.currentSong?.let { currentSong ->
-                    lastKnownSong = currentSong
-                }
-                val localPlayerState = musicPlayer.getState()
-                val localCurrentItem = if (state.selectedDlnaDevice?.id == LOCAL_DEVICE_SESSION_ID) {
-                    localPlayerState.playlist.getOrNull(localPlayerState.currentIndex)
-                } else {
-                    null
-                }
+                // Device selection UI
+                updateDeviceListUi(state)
 
-                val hasPlaybackContext =
-                    localCurrentItem != null || displaySong != null || state.selectedDlnaDevice != null
-                binding.cardNowPlaying.visibility = if (hasPlaybackContext) View.VISIBLE else View.GONE
-
-                localCurrentItem?.let { item ->
-                    binding.tvNowPlayingTitle.text = item.title
-                    val playbackState = if (localPlayerState.isPlaying) "播放中" else "已暂停"
-                    val artist = item.artist ?: "未知艺术家"
-                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
-                    renderMiniPlayerForSelectedDevice(state)
-                } ?: displaySong?.let { song ->
-                    binding.tvNowPlayingTitle.text = song.title
-                    val playbackState = if (state.isPlaying) "播放中" else "已暂停"
-                    val artist = song.artist ?: "未知艺术家"
-                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
-                    renderMiniPlayerForSelectedDevice(state)
-                } ?: run {
-                    binding.tvNowPlayingTitle.text = "当前没有播放内容"
-                    binding.tvNowPlayingArtist.text = state.selectedDlnaDevice?.deviceName ?: "请选择播放设备"
-                    renderMiniPlayerForSelectedDevice(state)
-                }
-
-                // Play/Pause button
-                binding.btnPlayPause.setImageResource(
-                    if (state.isPlaying) android.R.drawable.ic_media_pause
-                    else android.R.drawable.ic_media_play
-                )
-
-                // Playback device
-                state.selectedDlnaDevice?.let { device ->
-                    binding.chipDlnaDevice.text = device.deviceName
-                } ?: run {
-                    binding.chipDlnaDevice.text = "选择设备"
-                }
-
-                // Update device dialog when device list changes
-                if (state.dlnaDevices.size != lastKnownDeviceCount) {
-                    lastKnownDeviceCount = state.dlnaDevices.size
-                    if (dlnaDialog != null && dlnaDialog!!.isShowing) {
-                        updateDlnaDialog(state.dlnaDevices)
-                    }
-                }
-
-                // Error
+                // Error handling
                 state.error?.let { error ->
                     Toast.makeText(this@JellyfinBrowseActivity, error, Toast.LENGTH_SHORT).show()
                     viewModel.clearError()
                 }
 
-                // Back button for album view
+                // Back button visibility
                 binding.btnBack.visibility = if (state.isViewingAlbum || state.isSearching) View.VISIBLE else View.GONE
             }
         }
@@ -260,8 +195,8 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 if (currentItem != null) {
                     binding.cardNowPlaying.visibility = View.VISIBLE
                     binding.tvNowPlayingTitle.text = currentItem.title
-                    val artist = currentItem.artist ?: "未知艺术家"
-                    val playbackState = if (playerState.isPlaying) "播放中" else "已暂停"
+                    val artist = currentItem.artist ?: getString(R.string.artist_unknown)
+                    val playbackState = if (playerState.isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
                     binding.tvNowPlayingArtist.text = "$playbackState · $artist"
                     binding.tvNowPlayingStatus.text = buildMiniPlayerStatus(currentItem)
                     val progress = if (playerState.duration > 0) {
@@ -275,9 +210,9 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                     binding.btnPreviousMini.isEnabled = playerState.playlist.isNotEmpty()
                     binding.btnNextMini.isEnabled = playerState.playlist.isNotEmpty()
                 } else {
-                    binding.tvNowPlayingTitle.text = "当前没有播放内容"
+                    binding.tvNowPlayingTitle.text = getString(R.string.no_playback_content)
                     binding.tvNowPlayingArtist.text = selectedDevice.deviceName
-                    binding.tvNowPlayingStatus.text = "当前没有播放内容"
+                    binding.tvNowPlayingStatus.text = getString(R.string.no_playback_content)
                     binding.progressNowPlaying.progress = 0
                     binding.tvNowPlayingTime.text = "00:00 / 00:00"
                     binding.btnPreviousMini.isEnabled = false
@@ -287,10 +222,101 @@ class JellyfinBrowseActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Update content display (albums/songs grid)
+     */
+    private fun updateContentUi(state: JellyfinBrowseUiState) {
+        // Albums
+        if (!state.isSearching && state.albums.isNotEmpty()) {
+            binding.recyclerAlbums.visibility = View.VISIBLE
+            binding.recyclerSongs.visibility = View.GONE
+            albumAdapter.submitList(state.albums)
+        }
+
+        // Songs
+        if (state.songs.isNotEmpty()) {
+            binding.recyclerAlbums.visibility = View.GONE
+            binding.recyclerSongs.visibility = View.VISIBLE
+            songAdapter.submitList(state.songs)
+        }
+
+        // Empty state
+        val showEmpty = !state.isLoading && state.albums.isEmpty() && state.songs.isEmpty()
+        binding.tvEmpty.visibility = if (showEmpty) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Update now playing card UI
+     */
+    private fun updateNowPlayingCard(state: JellyfinBrowseUiState) {
+        val displaySong = state.currentSong ?: lastKnownSong
+        state.currentSong?.let { currentSong ->
+            lastKnownSong = currentSong
+        }
+        val localPlayerState = musicPlayer.getState()
+        val localCurrentItem = if (state.selectedDlnaDevice?.id == LOCAL_DEVICE_SESSION_ID) {
+            localPlayerState.playlist.getOrNull(localPlayerState.currentIndex)
+        } else {
+            null
+        }
+
+        val hasPlaybackContext =
+            localCurrentItem != null || displaySong != null || state.selectedDlnaDevice != null
+        binding.cardNowPlaying.visibility = if (hasPlaybackContext) View.VISIBLE else View.GONE
+
+        localCurrentItem?.let { item ->
+            binding.tvNowPlayingTitle.text = item.title
+            val playbackState = if (localPlayerState.isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
+            val artist = item.artist ?: getString(R.string.artist_unknown)
+            binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+            renderMiniPlayerForSelectedDevice(state)
+        } ?: displaySong?.let { song ->
+            binding.tvNowPlayingTitle.text = song.title
+            val playbackState = if (state.isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
+            val artist = song.artist ?: getString(R.string.artist_unknown)
+            binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+            renderMiniPlayerForSelectedDevice(state)
+        } ?: run {
+            binding.tvNowPlayingTitle.text = getString(R.string.no_playback_content)
+            binding.tvNowPlayingArtist.text = state.selectedDlnaDevice?.deviceName ?: getString(R.string.select_playback_device)
+            renderMiniPlayerForSelectedDevice(state)
+        }
+    }
+
+    /**
+     * Update playback control buttons
+     */
+    private fun updatePlaybackControls(state: JellyfinBrowseUiState) {
+        binding.btnPlayPause.setImageResource(
+            if (state.isPlaying) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play
+        )
+    }
+
+    /**
+     * Update device selection UI and sync device dialog
+     */
+    private fun updateDeviceListUi(state: JellyfinBrowseUiState) {
+        // Playback device chip
+        state.selectedDlnaDevice?.let { device ->
+            binding.chipDlnaDevice.text = device.deviceName
+        } ?: run {
+            binding.chipDlnaDevice.text = getString(R.string.select_device)
+        }
+
+        // Update device dialog when device list changes
+        if (state.dlnaDevices.size != lastKnownDeviceCount) {
+            lastKnownDeviceCount = state.dlnaDevices.size
+            if (dlnaDialog != null && dlnaDialog!!.isShowing) {
+                updateDlnaDialog(state.dlnaDevices)
+            }
+        }
+    }
+
     private fun renderMiniPlayerForSelectedDevice(state: JellyfinBrowseUiState) {
         val selectedDevice = state.selectedDlnaDevice
         if (selectedDevice == null) {
-            binding.tvNowPlayingStatus.text = "请选择播放设备"
+            binding.tvNowPlayingStatus.text = getString(R.string.select_playback_device)
             binding.progressNowPlaying.progress = 0
             binding.tvNowPlayingTime.text = "00:00 / 00:00"
             binding.btnPreviousMini.isEnabled = false
@@ -302,7 +328,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
             return
         }
 
-        val remoteState = if (state.isPlaying) "正在投放到 ${selectedDevice.deviceName}" else "已连接到 ${selectedDevice.deviceName}"
+        val remoteState = if (state.isPlaying) getString(R.string.casting_to_device, selectedDevice.deviceName) else getString(R.string.connected_to_device, selectedDevice.deviceName)
         binding.tvNowPlayingStatus.text = remoteState
         binding.progressNowPlaying.progress = 0
         binding.tvNowPlayingTime.text = "--:-- / --:--"
@@ -316,16 +342,16 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         dlnaDialog?.dismiss()
         dlnaDialog = AlertDialog.Builder(this)
-            .setTitle("选择播放设备")
+            .setTitle(R.string.select_device)
             .setItems(deviceNames) { _, which ->
                 if (which < devices.size) {
                     viewModel.selectDlnaDevice(devices[which])
                 }
             }
-            .setNeutralButton("刷新") { _, _ ->
+            .setNeutralButton(R.string.refresh) { _, _ ->
                 viewModel.discoverDlnaDevices()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .create()
 
         dlnaDialog?.show()
@@ -338,16 +364,16 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         dlnaDialog?.dismiss()
         dlnaDialog = AlertDialog.Builder(this)
-            .setTitle("选择播放设备")
+            .setTitle(R.string.select_device)
             .setItems(devices.map { it.deviceName }.toTypedArray()) { _, which ->
                 if (which < devices.size) {
                     viewModel.selectDlnaDevice(devices[which])
                 }
             }
-            .setNeutralButton("刷新") { _, _ ->
+            .setNeutralButton(R.string.refresh) { _, _ ->
                 viewModel.discoverDlnaDevices()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .create()
 
         dlnaDialog?.show()
@@ -361,29 +387,29 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
         if (playlists.isEmpty()) {
             AlertDialog.Builder(this)
-                .setTitle("播放列表")
-                .setMessage("还没有播放列表\n\n从歌曲列表点击\"更多\"来创建")
-                .setPositiveButton("确定", null)
+                .setTitle(R.string.playlist_empty_title)
+                .setMessage(R.string.playlist_empty_message)
+                .setPositiveButton(R.string.btn_ok, null)
                 .show()
             return
         }
 
         val playlistNames = playlists.map { playlist ->
             val count = if (playlist.songIds.isEmpty()) 0 else playlist.songIds.split(",").size
-            playlist.name + " (" + count + "首)"
+            getString(R.string.playlist_song_count, playlist.name, count)
         }.toTypedArray()
 
         AlertDialog.Builder(this)
-            .setTitle("播放列表")
+            .setTitle(R.string.playlist_empty_title)
             .setItems(playlistNames) { _, which ->
                 if (which < playlists.size) {
                     showPlaylistSongsDialog(playlists[which])
                 }
             }
-            .setNeutralButton("新建") { _, _ ->
+            .setNeutralButton(R.string.btn_new) { _, _ ->
                 showCreateEmptyPlaylistDialog()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .show()
     }
 
@@ -402,13 +428,13 @@ class JellyfinBrowseActivity : AppCompatActivity() {
      */
     private fun showCreateEmptyPlaylistDialog() {
         val editText = EditText(this).apply {
-            hint = "播放列表名称"
+            hint = getString(R.string.playlist_name_hint)
         }
 
         AlertDialog.Builder(this)
-            .setTitle("创建播放列表")
+            .setTitle(R.string.create_playlist)
             .setView(editText)
-            .setPositiveButton("创建") { _, _ ->
+            .setPositiveButton(R.string.create) { _, _ ->
                 val name = editText.text.toString().trim()
                 if (name.isNotEmpty()) {
                     lifecycleScope.launch {
@@ -416,13 +442,13 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                             viewModel.createPlaylist(name)
                             Toast.makeText(
                                 this@JellyfinBrowseActivity,
-                                "已创建 $name",
+                                getString(R.string.playlist_created, name),
                                 Toast.LENGTH_SHORT
                             ).show()
                         } catch (e: Exception) {
                             Toast.makeText(
                                 this@JellyfinBrowseActivity,
-                                "创建失败: ${e.message}",
+                                getString(R.string.playlist_create_failed, e.message),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -430,12 +456,12 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(
                         this,
-                        "名称不能为空",
+                        R.string.playlist_name_empty,
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .show()
     }
 
@@ -454,21 +480,21 @@ class JellyfinBrowseActivity : AppCompatActivity() {
         val playlistNames = playlists.map { it.name }.toTypedArray()
 
         AlertDialog.Builder(this)
-            .setTitle("添加到播放列表")
+            .setTitle(R.string.add_to_playlist)
             .setItems(playlistNames) { _, which ->
                 if (which < playlists.size) {
                     viewModel.addToPlaylist(playlists[which].id, song)
                     Toast.makeText(
                         this,
-                        "已添加到 ${playlists[which].name}",
+                        getString(R.string.added_to_playlist, playlists[which].name),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             }
-            .setNeutralButton("创建新播放列表") { _, _ ->
+            .setNeutralButton(R.string.create_new_playlist) { _, _ ->
                 showCreatePlaylistDialog(song)
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .show()
     }
 
@@ -477,25 +503,25 @@ class JellyfinBrowseActivity : AppCompatActivity() {
      */
     private fun showCreatePlaylistDialog(song: JellyfinSong) {
         val editText = EditText(this).apply {
-            hint = "播放列表名称"
+            hint = getString(R.string.playlist_name_hint)
         }
 
         AlertDialog.Builder(this)
-            .setTitle("创建播放列表")
+            .setTitle(R.string.create_playlist)
             .setView(editText)
-            .setPositiveButton("创建") { _, _ ->
+            .setPositiveButton(R.string.create) { _, _ ->
                 val name = editText.text.toString().trim()
                 if (name.isNotEmpty()) {
                     createPlaylistAndAddSong(name, song)
                 } else {
                     Toast.makeText(
                         this@JellyfinBrowseActivity,
-                        "名称不能为空",
+                        R.string.playlist_name_empty,
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .show()
     }
 
@@ -509,13 +535,13 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 viewModel.addToPlaylist(playlistId, song)
                 Toast.makeText(
                     this@JellyfinBrowseActivity,
-                    "已创建 $playlistName 并添加歌曲",
+                    getString(R.string.playlist_created_with_song, playlistName),
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
                 Toast.makeText(
                     this@JellyfinBrowseActivity,
-                    "创建播放列表失败: ${e.message}",
+                    getString(R.string.playlist_create_failed_with_error, e.message),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -529,11 +555,11 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     }
 
     private fun buildMiniPlayerStatus(currentItem: com.voiceassistant.core.music.MusicItem): String {
-        val container = currentItem.streamContainer?.uppercase() ?: "未知格式"
+        val container = currentItem.streamContainer?.uppercase() ?: getString(R.string.unknown)
         return if (currentItem.isTranscoding) {
-            "$container，正在服务器转码为 AAC"
+            getString(R.string.transcoding_to_aac, container)
         } else {
-            "$container，本机直连播放"
+            getString(R.string.direct_playback, container)
         }
     }
 

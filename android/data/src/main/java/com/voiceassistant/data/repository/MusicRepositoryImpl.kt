@@ -27,8 +27,18 @@ class MusicRepositoryImpl(
         }
     }
 
-    override suspend fun getStreamUrl(songId: String): String {
-        return jellyfinClient.getStreamUrl(songId)
+    override suspend fun getStreamUrl(songId: String): Result<String> {
+        return try {
+            val url = jellyfinClient.getStreamUrl(songId)
+            if (url.isEmpty()) {
+                Result.failure(IllegalStateException("Failed to get stream URL for song: $songId"))
+            } else {
+                Result.success(url)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "getStreamUrl failed for songId: $songId")
+            Result.failure(e)
+        }
     }
 
     override suspend fun playItem(sessionId: String, itemId: String): Result<Boolean> {

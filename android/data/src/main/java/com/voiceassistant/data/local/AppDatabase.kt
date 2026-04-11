@@ -5,14 +5,15 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 
 @Database(
-    entities = [ConfigEntity::class, PlaylistEntity::class, ChatMessageEntity::class],
-    version = 4,
+    entities = [ConfigEntity::class, PlaylistEntity::class, ChatMessageEntity::class, LocalSongEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun configDao(): ConfigDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun localSongDao(): LocalSongDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -53,6 +54,28 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_chat_messages_createdAt_id ON chat_messages(createdAt, id)"
                 )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS local_songs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        playlistId INTEGER NOT NULL,
+                        songId TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        artist TEXT,
+                        album TEXT,
+                        duration INTEGER NOT NULL,
+                        streamUrl TEXT NOT NULL,
+                        coverUrl TEXT,
+                        addedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_local_songs_playlistId ON local_songs(playlistId)")
             }
         }
     }

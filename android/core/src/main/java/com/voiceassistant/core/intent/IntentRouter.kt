@@ -1,19 +1,12 @@
 package com.voiceassistant.core.intent
 
-import android.content.SharedPreferences
-import com.voiceassistant.core.music.MusicItem
-import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.domain.model.Intent as DomainIntent
 import com.voiceassistant.domain.model.Song
 import com.voiceassistant.domain.model.IntentType as DomainIntentType
-import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.LLMRouteMode
-import com.voiceassistant.domain.repository.PlaylistRepository
 import com.voiceassistant.domain.usecase.HandleChatUseCase
-import java.time.LocalDate
 import java.time.LocalDateTime
-import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -42,28 +35,18 @@ data class Intent(
 
 /**
  * Routes voice commands to appropriate handlers
- * @param musicRepository For music playback (includes playItem for Jellyfin Session API)
+ *
+ * This class handles intent parsing and LLM routing.
+ * Actual execution is delegated to IntentExecutor (domain layer).
+ *
+ * @param intentExecutor Executes intents via domain use cases
  * @param llmRepository For chat functionality
- * @param playerRepository For DLNA playback
- * @param sharedPreferences For storing last used session ID
  */
 class IntentRouter @Inject constructor(
-    private val musicRepository: MusicRepository?,
+    private val intentExecutor: IntentExecutor,
     private val llmRepository: LLMRepository?,
-    private val playlistRepository: PlaylistRepository?,
-    private val sharedPreferences: SharedPreferences,
-    private val handleChatUseCase: HandleChatUseCase,
-    private val musicPlayer: MusicPlayer
+    private val handleChatUseCase: HandleChatUseCase
 ) {
-    companion object {
-        private const val PREF_LAST_SESSION_ID = "jellyfin_selected_device_id"
-        private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
-    }
-
-    // Play queue for next/previous functionality
-    private val playQueue = mutableListOf<Song>()
-    private var currentIndex: Int = -1
-    private var lastKnownVolume: Int = 50
 
     /**
      * Parse text and determine intent
@@ -125,7 +108,7 @@ class IntentRouter @Inject constructor(
         }
 
         if (routedMode == LLMRouteMode.CHAT) {
-            return handleChat(Intent(IntentType.CHAT, query = normalizedText))
+            return intentExecutor.execute(toDomainIntent(Intent(IntentType.CHAT, query = normalizedText)))
         }
 
         val llmIntent = llm.parseCommandIntent(normalizedText).fold(
@@ -137,7 +120,7 @@ class IntentRouter @Inject constructor(
         )
 
         return if (llmIntent.type == IntentType.UNKNOWN) {
-            handleChat(Intent(IntentType.CHAT, query = normalizedText))
+            intentExecutor.execute(toDomainIntent(Intent(IntentType.CHAT, query = normalizedText)))
         } else {
             handleIntent(llmIntent)
         }
@@ -193,14 +176,29 @@ class IntentRouter @Inject constructor(
     private suspend fun handleIntent(intent: Intent): String {
         Timber.d("Handling intent: $intent")
 
+        // Delegate MUSIC, VOLUME, DEVICE to IntentExecutor (domain layer)
+        // QUERY and CHAT are handled directly here
         return when (intent.type) {
-            IntentType.MUSIC -> handleMusic(intent)
-            IntentType.VOLUME -> handleVolume(intent)
-            IntentType.DEVICE -> handleDevice(intent)
+            IntentType.MUSIC, IntentType.VOLUME, IntentType.DEVICE -> {
+                val domainIntent = toDomainIntent(intent)
+                intentExecutor.execute(domainIntent)
+            }
             IntentType.QUERY -> handleQuery(intent)
-            IntentType.CHAT -> handleChat(intent)
+            IntentType.CHAT -> intentExecutor.execute(toDomainIntent(intent))
             IntentType.UNKNOWN -> "没听懂，请再说一遍"
         }
+    }
+
+    /**
+     * Convert core Intent to domain Intent
+     */
+    private fun toDomainIntent(intent: Intent): com.voiceassistant.domain.model.Intent {
+        return com.voiceassistant.domain.model.Intent(
+            type = com.voiceassistant.domain.model.IntentType.valueOf(intent.type.name),
+            action = intent.action,
+            query = intent.query,
+            value = intent.value
+        )
     }
 
     private fun isMusicIntent(text: String): Boolean {
@@ -269,333 +267,6 @@ class IntentRouter @Inject constructor(
         return regex.find(text)?.value?.toIntOrNull()
     }
 
-    private suspend fun handleMusic(intent: Intent): String {
-        val musicRepo = musicRepository
-        if (musicRepo == null) {
-            return "音乐服务未配置"
-        }
-
-        return when (intent.action) {
-            "play" -> {
-                val query = intent.query ?: ""
-                if (query.isEmpty()) {
-                    return playRandomFromPlaylist(musicRepo)
-                }
-
-                val result = musicRepo.searchSongs(query)
-                result.fold(
-                    onSuccess = { songs ->
-                        if (songs.isEmpty()) {
-                            "没找到关于「$query」的歌曲"
-                        } else {
-                            // Update play queue with search results
-                            playQueue.clear()
-                            playQueue.addAll(songs)
-                            currentIndex = 0
-
-                            val song = songs.first()
-                            playSong(musicRepo, song)
-                        }
-                    },
-                    onFailure = { "搜索歌曲失败，请稍后重试" }
-                )
-            }
-            "pause" -> {
-                val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-                if (isLocalSession(sessionId)) {
-                    musicPlayer.pause()
-                    "已暂停播放"
-                } else {
-                    val result = musicRepo.pause(sessionId)
-                    if (result.isSuccess) "已暂停播放" else "暂停失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "resume" -> {
-                val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-                if (isLocalSession(sessionId)) {
-                    musicPlayer.resume()
-                    "继续播放"
-                } else {
-                    val result = musicRepo.unpause(sessionId)
-                    if (result.isSuccess) "继续播放" else "继续播放失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "next" -> {
-                val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-                if (isLocalSession(sessionId)) {
-                    musicPlayer.playNext()
-                    "正在播放下一首"
-                } else {
-                    val result = musicRepo.nextTrack(sessionId)
-                    if (result.isSuccess) "正在播放下一首" else "切换下一首失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "previous" -> {
-                val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-                if (isLocalSession(sessionId)) {
-                    musicPlayer.playPrevious()
-                    "正在播放上一首"
-                } else {
-                    val result = musicRepo.previousTrack(sessionId)
-                    if (result.isSuccess) "正在播放上一首" else "切换上一首失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "stop" -> {
-                val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-                if (isLocalSession(sessionId)) {
-                    musicPlayer.stop()
-                    "已停止播放"
-                } else {
-                    val result = musicRepo.stop(sessionId)
-                    if (result.isSuccess) "已停止播放" else "停止失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            else -> "音乐操作"
-        }
-    }
-
-    /**
-     * Play a song using the provided repositories
-     */
-    private suspend fun playSong(
-        musicRepo: MusicRepository,
-        song: Song
-    ): String {
-        return try {
-            val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-            if (isLocalSession(sessionId)) {
-                val streamUrl = song.url ?: return "播放失败：无法获取本地播放地址"
-                val item = MusicItem(
-                    id = song.id,
-                    title = song.title,
-                    artist = song.artist,
-                    album = song.album,
-                    duration = song.duration,
-                    streamUrl = streamUrl,
-                    coverUrl = song.coverUrl
-                )
-                musicPlayer.play(item)
-                "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
-            } else {
-                Timber.d("playSong: using Jellyfin Session API with sessionId=$sessionId, songId=${song.id}")
-                val sessionResult = musicRepo.playItem(sessionId!!, song.id)
-                if (sessionResult.isSuccess) {
-                    "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
-                } else {
-                    val error = sessionResult.exceptionOrNull()?.message ?: "播放失败"
-                    Timber.e("playSong failed by Session API: $error")
-                    "播放失败：$error"
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "playSong failed")
-            "播放失败：${e.message ?: "未知错误"}"
-        }
-    }
-
-    /**
-     * Play a random song from the local playlist
-     */
-    private suspend fun playRandomFromPlaylist(
-        musicRepo: MusicRepository?
-    ): String {
-        if (musicRepo == null) {
-            return "音乐服务未配置"
-        }
-
-        val playlistRepo = playlistRepository
-        if (playlistRepo == null) {
-            return "播放列表服务未配置"
-        }
-
-        // Get the first playlist
-        val playlists = playlistRepo.getAllPlaylists().first()
-        if (playlists.isEmpty()) {
-            return "没有可用的播放列表"
-        }
-        val playlist = playlists.first()
-
-        val songs = playlistRepo.getPlaylistSongs(playlist)
-        if (songs.isEmpty()) {
-            return "播放列表为空，请先添加歌曲"
-        }
-
-        val randomSong = songs.random()
-
-        val song = Song(
-            id = randomSong.songId,
-            title = randomSong.title,
-            artist = randomSong.artist,
-            album = randomSong.album,
-            duration = randomSong.duration,
-            url = randomSong.streamUrl,
-            coverUrl = randomSong.coverUrl
-        )
-
-        // Update play queue
-        playQueue.clear()
-        playQueue.add(song)
-        currentIndex = 0
-
-        val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-        return if (isLocalSession(sessionId)) {
-            val streamUrl = song.url ?: return "播放失败：无法获取本地播放地址"
-            val item = MusicItem(
-                id = song.id,
-                title = song.title,
-                artist = song.artist,
-                album = song.album,
-                duration = song.duration,
-                streamUrl = streamUrl,
-                coverUrl = song.coverUrl
-            )
-            musicPlayer.play(item)
-            "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
-        } else {
-            Timber.d("playRandomFromPlaylist: using Jellyfin Session API with sessionId=$sessionId")
-            val sessionResult = musicRepo.playItem(sessionId!!, randomSong.songId)
-            if (sessionResult.isSuccess) {
-                "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
-            } else {
-                val error = sessionResult.exceptionOrNull()?.message ?: "播放失败"
-                Timber.e("playRandomFromPlaylist failed by Session API: $error")
-                "播放失败：$error"
-            }
-        }
-    }
-
-    private fun getSavedSessionId(): String? {
-        return sharedPreferences.getString(PREF_LAST_SESSION_ID, null)?.takeIf { it.isNotBlank() }
-    }
-
-    private fun isLocalSession(sessionId: String): Boolean {
-        return sessionId == LOCAL_DEVICE_SESSION_ID
-    }
-
-    private suspend fun handleVolume(intent: Intent): String {
-        val musicRepo = musicRepository ?: return "音乐服务未配置"
-        val sessionId = getSavedSessionId() ?: return "请先在 Jellyfin 页面选择播放设备"
-
-        if (isLocalSession(sessionId)) {
-            return "本机播放暂不支持语音调节 Jellyfin 设备音量"
-        }
-
-        return when (intent.action) {
-            "set" -> {
-                val volume = intent.value ?: 50
-                val normalized = volume.coerceIn(0, 100)
-                val result = musicRepo.setVolume(sessionId, normalized)
-                if (result.isSuccess) {
-                    lastKnownVolume = normalized
-                    "音量已调到 $normalized%"
-                } else {
-                    "音量调节失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "up" -> {
-                val increment = intent.value ?: 10
-                val newVolume = (lastKnownVolume + increment).coerceAtMost(100)
-                val result = musicRepo.setVolume(sessionId, newVolume)
-                if (result.isSuccess) {
-                    lastKnownVolume = newVolume
-                    "音量已增加 $increment%，当前音量 $newVolume%"
-                } else {
-                    "音量调节失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "down" -> {
-                val decrement = intent.value ?: 10
-                val newVolume = (lastKnownVolume - decrement).coerceAtLeast(0)
-                val result = musicRepo.setVolume(sessionId, newVolume)
-                if (result.isSuccess) {
-                    lastKnownVolume = newVolume
-                    "音量已减少 $decrement%，当前音量 $newVolume%"
-                } else {
-                    "音量调节失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "mute" -> {
-                val result = musicRepo.setVolume(sessionId, 0)
-                if (result.isSuccess) {
-                    lastKnownVolume = 0
-                    "已静音"
-                } else {
-                    "静音失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            else -> "音量操作"
-        }
-    }
-
-    private suspend fun handleDevice(intent: Intent): String {
-        val musicRepo = musicRepository
-        val sessionId = getSavedSessionId()
-        if (musicRepo == null || sessionId == null) {
-            return when (intent.action) {
-                "on" -> "设备未连接，无法打开"
-                "off" -> "设备未连接，无法关闭"
-                "toggle" -> "设备未连接，无法切换状态"
-                else -> "设备操作失败"
-            }
-        }
-
-        if (isLocalSession(sessionId)) {
-            return when (intent.action) {
-                "on" -> {
-                    musicPlayer.resume()
-                    "已继续本机播放"
-                }
-                "off" -> {
-                    musicPlayer.stop()
-                    "已停止本机播放"
-                }
-                "toggle" -> {
-                    if (musicPlayer.getState().isPlaying) {
-                        musicPlayer.pause()
-                        "已暂停本机播放"
-                    } else {
-                        musicPlayer.resume()
-                        "已继续本机播放"
-                    }
-                }
-                else -> "设备操作"
-            }
-        }
-
-        return when (intent.action) {
-            "on" -> {
-                val result = musicRepo.unpause(sessionId)
-                if (result.isSuccess) {
-                    "已打开设备并继续播放"
-                } else {
-                    "打开设备失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "off" -> {
-                val result = musicRepo.stop(sessionId)
-                if (result.isSuccess) {
-                    "已关闭设备"
-                } else {
-                    "关闭设备失败：${result.exceptionOrNull()?.message ?: "未知错误"}"
-                }
-            }
-            "toggle" -> {
-                val pauseResult = musicRepo.pause(sessionId)
-                if (pauseResult.isSuccess) {
-                    "已暂停播放"
-                } else {
-                    val resumeResult = musicRepo.unpause(sessionId)
-                    if (resumeResult.isSuccess) {
-                        "已继续播放"
-                    } else {
-                        "切换状态失败：${resumeResult.exceptionOrNull()?.message ?: "未知错误"}"
-                    }
-                }
-            }
-            else -> "设备操作"
-        }
-    }
-
     private suspend fun handleQuery(intent: Intent): String {
         val llm = llmRepository
         if (llm == null) {
@@ -655,16 +326,5 @@ class IntentRouter @Inject constructor(
             7 -> "星期日"
             else -> "未知"
         }
-    }
-
-    private suspend fun handleChat(intent: Intent): String {
-        val domainIntent = DomainIntent(
-            type = DomainIntentType.valueOf(intent.type.name),
-            action = intent.action,
-            query = intent.query,
-            value = intent.value,
-            song = intent.song
-        )
-        return handleChatUseCase.execute(domainIntent)
     }
 }

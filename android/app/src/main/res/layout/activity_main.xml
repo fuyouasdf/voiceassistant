@@ -41,8 +41,9 @@
 
                     <View
                         android:id="@+id/statusDot"
-                        android:layout_width="6dp"
-                        android:layout_height="6dp"
+                        android:layout_width="@dimen/status_dot_size"
+                        android:layout_height="@dimen/status_dot_size"
+                        android:contentDescription="@string/cd_status_indicator"
                         android:background="@drawable/circle_status_online" />
 
                     <TextView
@@ -125,7 +126,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="有什么可以帮你的？"
+                android:text="@string/hint_ask_help"
                 android:textColor="@color/text_secondary"
                 android:textSize="18sp"
                 android:fontFamily="sans-serif-light" />
@@ -165,8 +166,9 @@
                     <!-- Pulsing Dot -->
                     <View
                         android:id="@+id/asrPulseDot"
-                        android:layout_width="8dp"
-                        android:layout_height="8dp"
+                        android:layout_width="@dimen/pulse_dot_size"
+                        android:layout_height="@dimen/pulse_dot_size"
+                        android:contentDescription="@string/cd_voice_visualizer"
                         android:background="@drawable/circle_pulse" />
 
                     <TextView
@@ -301,10 +303,10 @@
                     <!-- Send Button -->
                     <ImageButton
                         android:id="@+id/btnSend"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="@dimen/icon_button_size"
+                        android:layout_height="@dimen/icon_button_size"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="发送"
+                        android:contentDescription="@string/cd_send"
                         android:src="@android:drawable/ic_menu_send"
                         app:tint="@color/primary" />
 

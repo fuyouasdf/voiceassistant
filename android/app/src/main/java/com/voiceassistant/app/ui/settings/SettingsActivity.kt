@@ -200,7 +200,7 @@ class SettingsActivity : AppCompatActivity() {
         // Jellyfin test button
         btnTestJellyfin.setOnClickListener {
             if (isLoading) {
-                Toast.makeText(this, "页面加载中，请稍候", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.settings_loading_hint, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             testJellyfinConnection()
@@ -209,7 +209,7 @@ class SettingsActivity : AppCompatActivity() {
         // LLM test button
         btnTestLlm.setOnClickListener {
             if (isLoading) {
-                Toast.makeText(this, "页面加载中，请稍候", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.settings_loading_hint, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             testLlmConnection()
@@ -228,7 +228,7 @@ class SettingsActivity : AppCompatActivity() {
         // Save button
         btnSave.setOnClickListener {
             if (isLoading) {
-                Toast.makeText(this, "页面加载中，请稍候", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.settings_loading_hint, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             saveSettings()
@@ -354,7 +354,7 @@ class SettingsActivity : AppCompatActivity() {
         val supportedText = supportedWakeWords.sorted().joinToString("、")
         Toast.makeText(
             this,
-            "当前模型不支持自定义唤醒词：$keyword。仅支持：$supportedText",
+            getString(R.string.settings_unsupported_wakeword, keyword, supportedText),
             Toast.LENGTH_LONG
         ).show()
     }
@@ -398,7 +398,7 @@ class SettingsActivity : AppCompatActivity() {
                     tvJellyfinStatus.setTextColor(getColor(R.color.status_offline))
                     tvJellyfinStatus.visibility = View.VISIBLE
                     updateJellyfinOnlineStatus(false)
-                    Toast.makeText(this@SettingsActivity, "请填写完整的 Jellyfin 配置", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, R.string.jellyfin_config_required, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -492,7 +492,7 @@ class SettingsActivity : AppCompatActivity() {
                     tvLlmStatus.setTextColor(getColor(R.color.status_offline))
                     tvLlmStatus.visibility = View.VISIBLE
                     updateLlmOnlineStatus(false)
-                    Toast.makeText(this@SettingsActivity, "请填写完整的 LLM 配置", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, R.string.llm_config_required, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -613,7 +613,7 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this@SettingsActivity, R.string.settings_saved, Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@SettingsActivity, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@SettingsActivity, getString(R.string.error_save_failed, e.message), Toast.LENGTH_SHORT).show()
             }
         }
     }

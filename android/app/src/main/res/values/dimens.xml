@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+
+    <!-- Status bar -->
+    <dimen name="status_dot_size">6dp</dimen>
+    <dimen name="pulse_dot_size">8dp</dimen>
+
+    <!-- Touch targets (minimum 48dp for accessibility) -->
+    <dimen name="touch_target_min">48dp</dimen>
+    <dimen name="icon_button_size">40dp</dimen>
+    <dimen name="icon_button_size_large">44dp</dimen>
+    <dimen name="icon_button_size_xl">56dp</dimen>
+
+    <!-- Card corners -->
+    <dimen name="card_corner_small">12dp</dimen>
+    <dimen name="card_corner_medium">16dp</dimen>
+    <dimen name="card_corner_large">20dp</dimen>
+    <dimen name="card_corner_xl">28dp</dimen>
+
+    <!-- Text sizes -->
+    <dimen name="text_size_caption">12sp</dimen>
+    <dimen name="text_size_body">14sp</dimen>
+    <dimen name="text_size_subtitle">15sp</dimen>
+    <dimen name="text_size_title">16sp</dimen>
+    <dimen name="text_size_headline">18sp</dimen>
+    <dimen name="text_size_display">24sp</dimen>
+
+    <!-- Bottom padding for edge-to-edge -->
+    <dimen name="bottom_padding_standard">32dp</dimen>
+
+    <!-- Icon sizes -->
+    <dimen name="icon_size_small">16dp</dimen>
+    <dimen name="icon_size_medium">24dp</dimen>
+    <dimen name="icon_size_large">32dp</dimen>
+
+    <!-- Cover art -->
+    <dimen name="cover_size_mini">48dp</dimen>
+    <dimen name="cover_size_normal">64dp</dimen>
+    <dimen name="cover_size_large">200dp</dimen>
+
+    <!-- Progress bar -->
+    <dimen name="progress_height">4dp</dimen>
+    <dimen name="progress_height_thick">8dp</dimen>
+
+    <!-- Chip -->
+    <dimen name="chip_height">40dp</dimen>
+
+    <!-- Dialog -->
+    <dimen name="dialog_padding">24dp</dimen>
+</resources>

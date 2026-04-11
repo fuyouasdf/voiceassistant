@@ -168,8 +168,8 @@ class NowPlayingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             musicPlayer.state.collectLatest { state ->
                 val currentItem = state.playlist.getOrNull(state.currentIndex)
-                binding.tvSongTitle.text = currentItem?.title ?: "暂无播放"
-                binding.tvArtist.text = currentItem?.artist ?: "未知艺术家"
+                binding.tvSongTitle.text = currentItem?.title ?: getString(R.string.no_playback)
+                binding.tvArtist.text = currentItem?.artist ?: getString(R.string.artist_unknown)
                 binding.tvAlbum.text = currentItem?.album ?: ""
                 binding.tvPlaybackSummary.text = buildPlaybackSummary(state.isPlaying, currentItem != null)
                 binding.tvQueueInfo.text = buildQueueInfo(state.currentIndex, state.playlist.size)
@@ -269,18 +269,23 @@ class NowPlayingActivity : AppCompatActivity() {
             }
         }
         binding.btnRepeat.contentDescription = when (mode) {
-            RepeatMode.OFF -> "循环关闭"
-            RepeatMode.ALL -> "列表循环"
-            RepeatMode.ONE -> "单曲循环"
+            RepeatMode.OFF -> getString(R.string.repeat_off)
+            RepeatMode.ALL -> getString(R.string.repeat_all)
+            RepeatMode.ONE -> getString(R.string.repeat_one)
         }
     }
 
     private fun showMoreMenu() {
         val state = musicPlayer.getState()
         val currentItem = state.playlist.getOrNull(state.currentIndex)
-        val options = arrayOf("查看流信息", "打开 Jellyfin 浏览", "全屏歌词", "停止播放")
+        val options = arrayOf(
+            getString(R.string.view_stream_info),
+            getString(R.string.open_jellyfin_browse),
+            getString(R.string.fullscreen_lyrics),
+            getString(R.string.stop_playback)
+        )
         AlertDialog.Builder(this)
-            .setTitle("更多")
+            .setTitle(R.string.more_options)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showStreamInfoDialog(currentItem)
@@ -292,56 +297,56 @@ class NowPlayingActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(R.string.btn_cancel, null)
             .show()
     }
 
     private fun showStreamInfoDialog(currentItem: com.voiceassistant.core.music.MusicItem?) {
         if (currentItem == null) {
             AlertDialog.Builder(this)
-                .setTitle("流信息")
-                .setMessage("当前没有正在播放的内容")
-                .setPositiveButton("确定", null)
+                .setTitle(R.string.stream_info_title)
+                .setMessage(R.string.stream_info_no_content)
+                .setPositiveButton(R.string.btn_ok, null)
                 .show()
             return
         }
 
         val message = buildString {
-            appendLine("标题: ${currentItem.title}")
-            appendLine("艺术家: ${currentItem.artist ?: "未知艺术家"}")
-            appendLine("容器: ${currentItem.streamContainer ?: "未知"}")
-            appendLine("播放方式: ${currentItem.streamPlayMethod ?: "未知"}")
-            appendLine("转码: ${if (currentItem.isTranscoding) "是" else "否"}")
-            appendLine("会话 ID: ${currentItem.playbackSessionId ?: "无"}")
-            append("媒体源 ID: ${currentItem.mediaSourceId ?: "无"}")
+            appendLine("${getString(R.string.label_title)}: ${currentItem.title}")
+            appendLine("${getString(R.string.label_artist)}: ${currentItem.artist ?: getString(R.string.artist_unknown)}")
+            appendLine("${getString(R.string.label_container)}: ${currentItem.streamContainer ?: getString(R.string.unknown)}")
+            appendLine("${getString(R.string.label_playback_method)}: ${currentItem.streamPlayMethod ?: getString(R.string.unknown)}")
+            appendLine("${getString(R.string.label_transcoding)}: ${if (currentItem.isTranscoding) getString(R.string.yes) else getString(R.string.no)}")
+            appendLine("${getString(R.string.label_session_id)}: ${currentItem.playbackSessionId ?: getString(R.string.none)}")
+            append("${getString(R.string.label_media_source_id)}: ${currentItem.mediaSourceId ?: getString(R.string.none)}")
         }
 
         AlertDialog.Builder(this)
-            .setTitle("流信息")
+            .setTitle(R.string.stream_info_title)
             .setMessage(message)
-            .setPositiveButton("确定", null)
+            .setPositiveButton(R.string.btn_ok, null)
             .show()
     }
 
     private fun buildStreamStatus(currentItem: com.voiceassistant.core.music.MusicItem?): String {
         if (currentItem == null) {
-            return "当前没有播放内容"
+            return getString(R.string.no_playback_content)
         }
 
-        val container = currentItem.streamContainer?.uppercase() ?: "未知格式"
+        val container = currentItem.streamContainer?.uppercase() ?: getString(R.string.unknown)
         return if (currentItem.isTranscoding) {
-            "$container，正在服务器转码为 AAC"
+            getString(R.string.transcoding_to_aac, container)
         } else {
             val method = currentItem.streamPlayMethod ?: "DIRECT"
-            "$container，本机直连播放（$method）"
+            getString(R.string.direct_playback_with_method, container, method)
         }
     }
 
     private fun buildPlaybackSummary(isPlaying: Boolean, hasCurrentItem: Boolean): String {
         return when {
-            !hasCurrentItem -> "等待播放"
-            isPlaying -> "本机播放中"
-            else -> "已暂停"
+            !hasCurrentItem -> getString(R.string.waiting_for_playback)
+            isPlaying -> getString(R.string.local_playing)
+            else -> getString(R.string.state_paused)
         }
     }
 
@@ -353,8 +358,8 @@ class NowPlayingActivity : AppCompatActivity() {
         highlightedLyricIndex = -1
         lyricsAdapter.submitLyrics(emptyList(), -1)
         renderLyricsState(
-            status = if (songId == null) "当前没有播放内容" else "正在加载歌词",
-            emptyMessage = if (songId == null) "当前没有播放内容" else "歌词加载中"
+            status = if (songId == null) getString(R.string.no_playback_content) else getString(R.string.currently_loading_lyrics),
+            emptyMessage = if (songId == null) getString(R.string.no_playback_content) else getString(R.string.lyrics_loading)
         )
         if (songId == null) return
 
@@ -364,8 +369,8 @@ class NowPlayingActivity : AppCompatActivity() {
             if (currentLyrics.isEmpty()) {
                 lyricsAdapter.submitLyrics(emptyList(), -1)
                 renderLyricsState(
-                    status = "当前歌曲没有可用歌词",
-                    emptyMessage = "当前歌曲没有可用歌词"
+                    status = getString(R.string.no_lyrics_available),
+                    emptyMessage = getString(R.string.no_lyrics_available)
                 )
             } else {
                 lyricsAdapter.submitLyrics(currentLyrics, -1)
@@ -382,15 +387,15 @@ class NowPlayingActivity : AppCompatActivity() {
         val currentIndex = currentLyrics.indexOfLast { it.startMs <= positionMs }
         if (currentIndex < 0) {
             renderLyricsState(
-                status = "已加载 ${currentLyrics.size} 行歌词，可点击歌词跳转",
-                emptyMessage = "前奏中"
+                status = getString(R.string.lyrics_loaded, currentLyrics.size),
+                emptyMessage = getString(R.string.intro)
             )
             lyricsAdapter.updateActiveLine(-1)
             highlightedLyricIndex = -1
             return
         }
         renderLyricsState(
-            status = "已加载 ${currentLyrics.size} 行歌词，可点击歌词跳转",
+            status = getString(R.string.lyrics_loaded, currentLyrics.size),
             emptyMessage = null
         )
         lyricsAdapter.updateActiveLine(currentIndex)
@@ -423,9 +428,9 @@ class NowPlayingActivity : AppCompatActivity() {
 
     private fun buildQueueInfo(currentIndex: Int, total: Int): String {
         if (total <= 0) {
-            return "当前队列为空"
+            return getString(R.string.queue_empty)
         }
-        return "第 ${currentIndex + 1} 首 / 共 $total 首"
+        return getString(R.string.queue_position, currentIndex + 1, total)
     }
 
     private fun applyButtonState(button: ImageButton, enabled: Boolean) {

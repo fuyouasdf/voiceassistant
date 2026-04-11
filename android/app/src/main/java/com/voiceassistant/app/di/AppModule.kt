@@ -9,6 +9,7 @@ import com.voiceassistant.core.audio.AudioCapture
 import com.voiceassistant.core.audio.AudioPlayer
 import com.voiceassistant.core.dlna.DLNAManager
 import com.voiceassistant.core.dlna.DLNAPlayer
+import com.voiceassistant.core.intent.IntentExecutor
 import com.voiceassistant.core.intent.IntentRouter
 import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.core.music.PlaybackReporter
@@ -67,6 +68,7 @@ object AppModule {
             .addMigrations(AppDatabase.MIGRATION_1_2)
             .addMigrations(AppDatabase.MIGRATION_2_3)
             .addMigrations(AppDatabase.MIGRATION_3_4)
+            .addMigrations(AppDatabase.MIGRATION_4_5)
             .build()
     }
 
@@ -266,20 +268,14 @@ object AppModule {
     @Provides
     @Singleton
     fun provideIntentRouter(
-        musicRepository: MusicRepository?,
+        intentExecutor: IntentExecutor,
         llmRepository: LLMRepository?,
-        playlistRepository: PlaylistRepository?,
-        sharedPreferences: SharedPreferences,
-        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase,
-        musicPlayer: MusicPlayer
+        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase
     ): IntentRouter {
         return IntentRouter(
-            musicRepository,
+            intentExecutor,
             llmRepository,
-            playlistRepository,
-            sharedPreferences,
-            handleChatUseCase,
-            musicPlayer
+            handleChatUseCase
         )
     }
 

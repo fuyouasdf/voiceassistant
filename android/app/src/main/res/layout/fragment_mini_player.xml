@@ -61,20 +61,20 @@
 
     <ImageButton
         android:id="@+id/btnPlayPause"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
+        android:layout_width="@dimen/icon_button_size_large"
+        android:layout_height="@dimen/icon_button_size_large"
         android:background="@drawable/bg_player_icon_button"
-        android:contentDescription="播放/暂停"
+        android:contentDescription="@string/cd_play_pause"
         android:padding="12dp"
         android:src="@drawable/ic_play"
         app:tint="@color/text_primary" />
 
     <ImageButton
         android:id="@+id/btnNext"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
+        android:layout_width="@dimen/icon_button_size_large"
+        android:layout_height="@dimen/icon_button_size_large"
         android:background="@drawable/bg_player_icon_button"
-        android:contentDescription="下一首"
+        android:contentDescription="@string/cd_next"
         android:padding="12dp"
         android:src="@drawable/ic_skip_next"
         app:tint="@color/text_secondary" />

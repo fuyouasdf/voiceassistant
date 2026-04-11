@@ -1,6 +1,6 @@
 package com.voiceassistant.data.repository
 
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import com.voiceassistant.data.local.PlaylistDao
 import com.voiceassistant.data.local.PlaylistEntity
@@ -20,7 +20,7 @@ class PlaylistRepositoryImpl @Inject constructor(
     private val playlistDao: PlaylistDao
 ) : PlaylistRepository {
 
-    private val gson = Gson()
+    private val gson = GsonBuilder().create()
 
     // ==================== PlaylistRepository Implementation ====================
 
@@ -35,6 +35,9 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createPlaylist(name: String): Long {
+        if (name.isBlank()) {
+            throw IllegalArgumentException("Playlist name cannot be blank")
+        }
         val playlist = PlaylistEntity(name = name)
         return playlistDao.insertPlaylist(playlist)
     }
@@ -49,7 +52,8 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addSongToPlaylist(playlistId: Long, song: Song) {
-        val playlist = playlistDao.getPlaylistById(playlistId) ?: return
+        val playlist = playlistDao.getPlaylistById(playlistId)
+            ?: throw IllegalStateException("Playlist not found: $playlistId")
 
         // Parse existing songs
         val currentSongs = parseSongList(playlist.songData).toMutableList()
@@ -75,7 +79,8 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeSongFromPlaylist(playlistId: Long, songId: String) {
-        val playlist = playlistDao.getPlaylistById(playlistId) ?: return
+        val playlist = playlistDao.getPlaylistById(playlistId)
+            ?: throw IllegalStateException("Playlist not found: $playlistId")
 
         val currentSongs = parseSongList(playlist.songData).toMutableList()
         currentSongs.removeAll { it.songId == songId }
