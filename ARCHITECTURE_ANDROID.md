@@ -156,7 +156,9 @@ voice-assistant-android/
 │       │   ├── VoicePipeline.kt           # 语音管道控制器
 │       │   └── PipelineState.kt           # 管道状态
 │       ├── intent/
-│       │   └── IntentRouter.kt            # 意图路由
+│       │   ├── IntentRouter.kt            # 意图路由
+│       │   ├── IntentExecutor.kt          # 意图执行器
+│       │   └── ChineseMatcher.kt          # 中文模糊匹配器（拼音首字母+编辑距离）
 │       └── dlna/
 │           ├── DLNAManager.kt             # DLNA 投放管理器 (SSDP 发现)
 │           └── DLNAPlayer.kt             # DLNA 播放器 (PlayerRepository 实现)
@@ -287,6 +289,49 @@ Headers:
 - `MusicPlayer` 对同一首歌的点击去重仅在“当前已处于实际播放态”时生效；如果同曲同 URL 但播放器已暂停、报错或停住，再次点击会强制重新拉起播放。
 - `MusicPlayer` 使用较低的启动缓冲门槛（低延迟 `LoadControl`）以缩短进入 `STATE_READY` 的时间；播放列表页加载后会预热前 3 首歌的 `PlaybackInfo`，减少点击时的冷启动等待。
 - 音频项构建流地址时统一使用 `/Audio/{id}/stream`，本机播放默认追加 `Container=mp4&AudioCodec=aac` 强制转码；已验证当前 Jellyfin 服务端的部分 `DIRECT_PLAY` 音频直链会返回 `200` 但空 body，导致 ExoPlayer 无法识别输入流。
+
+### 音乐搜索与模糊匹配
+
+#### 意图拆分（IntentRouter）
+语音命令"播放周杰伦的双截棍"会被拆分为：
+- `artist` = "周杰伦"
+- `query` = "双截棍"
+
+拆分逻辑使用正则 `^(.+?)的([^的]+)$` 匹配"歌手的歌曲名"模式。
+
+#### 搜索策略（IntentExecutor.searchAndPlay）
+```
+1. 精确搜索 songName（如"双截棍"）
+   ↓
+2. 如果有 artist，过滤匹配歌手的歌曲
+   ↓
+3. 如果没找到，尝试 fallbackQuery（如"周杰伦的双截棍"）
+   ↓
+4. 如果仍然没找到，使用 fuzzySearchAndFilter() 模糊匹配
+```
+
+#### 模糊匹配（ChineseMatcher）
+当精确搜索无结果时，使用模糊匹配作为兜底：
+
+| 匹配方式 | 说明 | 权重 |
+|---------|------|------|
+| 拼音首字母匹配 | "双截棍" → "SJG" | 60% |
+| 编辑距离匹配 | Levenshtein Distance | 40% |
+
+**搜索候选词生成**（按优先级）：
+1. 拼音首字母（如 "SJG"）
+2. 歌曲名前两字（如 "双截"）
+3. 单字声母（如 "S"）
+
+**匹配阈值**：歌曲名匹配度 ≥ 30% 才算有效匹配
+
+#### 示例
+用户说"播放周杰伦的甩劫棍"（假设识别错误）：
+1. 精确搜索"甩劫棍" → 无结果
+2. 搜索"周杰伦的甩劫棍" → 无结果
+3. 拼音首字母 "SJG" 搜索 → 找到"双截棍"
+4. fuzzyScore("甩劫棍", "双截棍") → 匹配度高
+5. 播放成功
 
 ### 音乐库浏览
 支持多级浏览：

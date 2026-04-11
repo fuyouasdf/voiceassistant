@@ -153,19 +153,13 @@ class IntentExecutor @Inject constructor(
 
         // 如果有 artist，在结果中过滤匹配歌手的歌曲
         if (!artist.isNullOrEmpty()) {
-            val matchedSongs = songs.filter { song ->
-                val songArtist = song.artist ?: ""
-                val songAlbumArtist = song.album ?: ""
-                songArtist.contains(artist, ignoreCase = true) ||
-                    songAlbumArtist.contains(artist, ignoreCase = true)
-            }
-
-            if (matchedSongs.isNotEmpty()) {
-                Timber.d("searchAndPlay: matched ${matchedSongs.size} songs by artist '$artist'")
-                songs = matchedSongs
-            } else {
-                Timber.d("searchAndPlay: no songs matched artist '$artist', using all results")
+            songs = filterByArtist(songs, artist)
+            if (songs.isEmpty()) {
                 // 歌手不匹配，但仍有搜索结果时，仍使用结果（用户体验更好）
+                songs = repo.searchSongs(songName).fold(
+                    onSuccess = { it },
+                    onFailure = { emptyList() }
+                )
             }
         }
 
@@ -176,16 +170,18 @@ class IntentExecutor @Inject constructor(
                 onSuccess = { it },
                 onFailure = { emptyList() }
             )
-            if (songs.isNotEmpty()) {
-                // 用 fallback 搜索到了，尝试再次过滤 artist
-                if (!artist.isNullOrEmpty()) {
-                    songs = songs.filter { song ->
-                        val songArtist = song.artist ?: ""
-                        val songAlbumArtist = song.album ?: ""
-                        songArtist.contains(artist, ignoreCase = true) ||
-                            songAlbumArtist.contains(artist, ignoreCase = true)
-                    }
-                }
+            if (songs.isNotEmpty() && !artist.isNullOrEmpty()) {
+                songs = filterByArtist(songs, artist)
+            }
+        }
+
+        // 如果仍然没找到，使用模糊匹配作为最终兜底
+        if (songs.isEmpty()) {
+            Timber.d("searchAndPlay: no exact results, trying fuzzy match")
+            val fuzzyMatch = fuzzySearchAndFilter(repo, songName, artist)
+            if (fuzzyMatch != null) {
+                songs = listOf(fuzzyMatch)
+                Timber.d("searchAndPlay: fuzzy match found: ${fuzzyMatch.title}")
             }
         }
 
@@ -203,6 +199,89 @@ class IntentExecutor @Inject constructor(
 
         val artistInfo = if (artist.isNullOrEmpty()) "" else "（$artist）"
         return "即将播放「${song.title}」$artistInfo"
+    }
+
+    /**
+     * 根据歌手名过滤歌曲列表
+     */
+    private fun filterByArtist(songs: List<Song>, artist: String): List<Song> {
+        val matchedSongs = songs.filter { song ->
+            val songArtist = song.artist ?: ""
+            val songAlbumArtist = song.album ?: ""
+            songArtist.contains(artist, ignoreCase = true) ||
+                songAlbumArtist.contains(artist, ignoreCase = true)
+        }
+        Timber.d("filterByArtist: artist='$artist', matched=${matchedSongs.size} of ${songs.size}")
+        return matchedSongs
+    }
+
+    /**
+     * 模糊搜索：当精确搜索无结果时，使用拼音首字母+编辑距离进行模糊匹配
+     * 策略：
+     * 1. 用拼音首字母搜索（如 "SJG"）
+     * 2. 如果没结果，用歌曲名前两字搜索（如 "甩劫"）
+     * 3. 如果还没结果，用单字声母搜索（如 "S"）
+     * 4. 对搜索结果进行 fuzzyScore 排序
+     */
+    private suspend fun fuzzySearchAndFilter(repo: MusicRepository, songName: String, artist: String?): Song? {
+        Timber.d("fuzzySearchAndFilter: songName='$songName', artist='$artist'")
+
+        // 生成多个搜索候选词（按优先级排序）
+        val searchQueries = buildList {
+            // 1. 拼音首字母
+            add(ChineseMatcher.toPinyinInitial(songName))
+            // 2. 歌曲名前两字
+            if (songName.length >= 2) {
+                add(songName.take(2))
+            }
+            // 3. 歌曲名单字（取前两字分别搜索）
+            if (songName.length >= 1) {
+                add(songName.first().toString())
+            }
+        }.filter { it.isNotEmpty() && it.length >= 1 }
+
+        Timber.d("fuzzySearchAndFilter: searchQueries=$searchQueries")
+
+        // 收集所有搜索结果去重
+        val allCandidates = mutableSetOf<Song>()
+        for (query in searchQueries) {
+            if (allCandidates.isNotEmpty()) break // 已经找到候选就停止搜索
+
+            val results = repo.searchSongs(query).fold(
+                onSuccess = { it },
+                onFailure = { emptyList() }
+            )
+            allCandidates.addAll(results)
+            Timber.d("fuzzySearchAndFilter: query='$query', found=${results.size}, total=${allCandidates.size}")
+        }
+
+        if (allCandidates.isEmpty()) {
+            Timber.d("fuzzySearchAndFilter: no candidates found")
+            return null
+        }
+
+        // 对候选歌曲进行模糊匹配打分
+        val candidatesList = allCandidates.toList()
+        val scoredCandidates = candidatesList.map { song ->
+            val titleScore = ChineseMatcher.fuzzyScore(songName, song.title)
+            val artistScore = if (!artist.isNullOrEmpty()) {
+                val songArtist = song.artist ?: ""
+                ChineseMatcher.fuzzyScore(artist, songArtist)
+            } else 0.0
+            // 综合得分：歌曲名权重 70%，歌手名权重 30%
+            val combinedScore = titleScore * 0.7 + artistScore * 0.3
+            Triple(song, titleScore, combinedScore)
+        }.filter { it.second >= 0.3 } // 歌曲名匹配度至少 30%
+
+        if (scoredCandidates.isEmpty()) {
+            Timber.d("fuzzySearchAndFilter: no candidates passed threshold")
+            return null
+        }
+
+        // 按综合得分排序，返回最佳匹配
+        val bestMatch = scoredCandidates.maxByOrNull { it.third }
+        Timber.d("fuzzySearchAndFilter: best match=${bestMatch?.first?.title}, score=${bestMatch?.third}")
+        return bestMatch?.first
     }
 
     private suspend fun handlePlayRandom(sessionId: String): String {
