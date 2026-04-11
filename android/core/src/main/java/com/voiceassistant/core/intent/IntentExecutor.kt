@@ -42,6 +42,36 @@ class IntentExecutor @Inject constructor(
     companion object {
         private const val PREF_LAST_SESSION_ID = "jellyfin_selected_device_id"
         private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
+        private const val PREF_REMOTE_PLAYBACK_CHANGED = "remote_playback_changed"
+        private const val PREF_REMOTE_PLAYBACK_TIMESTAMP = "remote_playback_timestamp"
+    }
+
+    /**
+     * Notify that remote playback state has changed.
+     * ViewModels should observe this to sync their UI state.
+     */
+    private fun notifyRemotePlaybackChanged() {
+        sharedPreferences.edit()
+            .putBoolean(PREF_REMOTE_PLAYBACK_CHANGED, true)
+            .putLong(PREF_REMOTE_PLAYBACK_TIMESTAMP, System.currentTimeMillis())
+            .apply()
+    }
+
+    /**
+     * Clear the remote playback changed flag.
+     * Should be called by ViewModels after syncing state.
+     */
+    fun clearRemotePlaybackChangedFlag() {
+        sharedPreferences.edit()
+            .putBoolean(PREF_REMOTE_PLAYBACK_CHANGED, false)
+            .apply()
+    }
+
+    /**
+     * Check if remote playback state changed flag is set.
+     */
+    fun isRemotePlaybackChanged(): Boolean {
+        return sharedPreferences.getBoolean(PREF_REMOTE_PLAYBACK_CHANGED, false)
     }
 
     // Play queue for next/previous functionality
@@ -157,7 +187,9 @@ class IntentExecutor @Inject constructor(
             "好的，正在播放 ${song.title} - ${song.artist ?: "未知艺术家"}"
         } else {
             // Use HandleMusicUseCase for Jellyfin session playback
-            handleMusicUseCase.playSong(song, sessionId)
+            val result = handleMusicUseCase.playSong(song, sessionId)
+            notifyRemotePlaybackChanged()
+            result
         }
     }
 
@@ -166,10 +198,12 @@ class IntentExecutor @Inject constructor(
             musicPlayer.pause()
             "已暂停播放"
         } else {
-            handleMusicUseCase.execute(
+            val result = handleMusicUseCase.execute(
                 Intent(IntentType.MUSIC, action = "pause"),
                 sessionId
             )
+            notifyRemotePlaybackChanged()
+            result
         }
     }
 
@@ -178,10 +212,12 @@ class IntentExecutor @Inject constructor(
             musicPlayer.resume()
             "继续播放"
         } else {
-            handleMusicUseCase.execute(
+            val result = handleMusicUseCase.execute(
                 Intent(IntentType.MUSIC, action = "resume"),
                 sessionId
             )
+            notifyRemotePlaybackChanged()
+            result
         }
     }
 
@@ -214,10 +250,12 @@ class IntentExecutor @Inject constructor(
             musicPlayer.stop()
             "已停止播放"
         } else {
-            handleMusicUseCase.execute(
+            val result = handleMusicUseCase.execute(
                 Intent(IntentType.MUSIC, action = "stop"),
                 sessionId
             )
+            notifyRemotePlaybackChanged()
+            result
         }
     }
 

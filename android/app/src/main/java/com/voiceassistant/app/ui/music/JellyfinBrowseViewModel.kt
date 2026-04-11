@@ -26,6 +26,7 @@ private const val PREF_SELECTED_DEVICE_ID = "jellyfin_selected_device_id"
 private const val PREF_SELECTED_DEVICE_NAME = "jellyfin_selected_device_name"
 private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
 private const val LOCAL_DEVICE_NAME = "本机"
+private const val PREF_REMOTE_PLAYBACK_CHANGED = "remote_playback_changed"
 
 /**
  * Jellyfin 浏览页面状态
@@ -401,7 +402,8 @@ class JellyfinBrowseViewModel @Inject constructor(
             val nextIsPlaying = if (device.id == LOCAL_DEVICE_SESSION_ID) {
                 musicPlayer.getState().isPlaying
             } else {
-                device.playbackState?.isPaused?.not() ?: false
+                // Only consider playing if: 1) nowPlayingItem exists (not stopped), 2) not paused
+                device.nowPlayingItem != null && (device.playbackState?.isPaused?.not() ?: false)
             }
 
             _uiState.value = _uiState.value.copy(
@@ -436,6 +438,11 @@ class JellyfinBrowseViewModel @Inject constructor(
         command: suspend () -> Result<Boolean>
     ): Result<Boolean> {
         val commandResult = command()
+
+        // Give DLNA device time to process the command before syncing state
+        // Without this delay, syncRemoteSessionState may get stale state
+        kotlinx.coroutines.delay(300)
+
         val syncedSession = syncRemoteSessionState(sessionId)
         val actualPlaying = syncedSession?.playbackState?.isPaused?.not()
 
@@ -461,6 +468,10 @@ class JellyfinBrowseViewModel @Inject constructor(
 
     private suspend fun syncRemoteSessionState(sessionId: String): SessionInfo? {
         return try {
+            // Check if remote playback was changed by voice command (IntentExecutor)
+            // If so, we need to force a sync to get the latest state
+            val remotePlaybackChanged = sharedPreferences.getBoolean(PREF_REMOTE_PLAYBACK_CHANGED, false)
+
             val sessions = jellyfinClient.getSessions()
             val castableDevices = sessions.filter { it.supportsMediaControl && it.isActive }
             val allDevices = listOf(localDevice) + castableDevices
@@ -471,11 +482,20 @@ class JellyfinBrowseViewModel @Inject constructor(
                 else -> _uiState.value.selectedDlnaDevice
             }
 
+            // Calculate isPlaying: nowPlayingItem must exist AND not paused
+            val isCurrentlyPlaying = syncedSession?.nowPlayingItem != null &&
+                (syncedSession.playbackState?.isPaused?.not() ?: false)
+
             _uiState.value = _uiState.value.copy(
                 dlnaDevices = allDevices,
                 selectedDlnaDevice = selectedDevice,
-                isPlaying = syncedSession?.playbackState?.isPaused?.not() ?: _uiState.value.isPlaying
+                isPlaying = if (remotePlaybackChanged) isCurrentlyPlaying else (_uiState.value.selectedDlnaDevice?.id != sessionId && isCurrentlyPlaying)
             )
+
+            // Clear the flag after syncing
+            if (remotePlaybackChanged) {
+                sharedPreferences.edit().putBoolean(PREF_REMOTE_PLAYBACK_CHANGED, false).apply()
+            }
 
             syncedSession
         } catch (e: Exception) {

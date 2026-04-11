@@ -6,12 +6,24 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Shared DLNA SOAP client for sending UPnP SOAP commands to DLNA devices.
  * Both DLNAPlayer and DLNAController use this utility.
  */
 object DLNASoapClient {
+
+    // Cache for control URLs to avoid repeated device description XML fetches
+    // Key: "$deviceLocation|$serviceType", Value: control URL
+    private val controlUrlCache = ConcurrentHashMap<String, String>()
+
+    /**
+     * Clear the control URL cache (call when device list changes)
+     */
+    fun clearCache() {
+        controlUrlCache.clear()
+    }
 
     /**
      * Send a SOAP request to a DLNA device.
@@ -82,8 +94,14 @@ object DLNASoapClient {
 
     /**
      * Get the control URL for a service type from the device description XML.
+     * Results are cached to avoid repeated XML fetches.
      */
     fun getControlUrl(deviceLocation: String, serviceType: String): String? {
+        val cacheKey = "$deviceLocation|$serviceType"
+
+        // Check cache first
+        controlUrlCache[cacheKey]?.let { return it }
+
         try {
             val url = URL(deviceLocation)
             val connection = url.openConnection() as HttpURLConnection
@@ -104,7 +122,7 @@ object DLNASoapClient {
                 RegexOption.DOT_MATCHES_ALL
             )
 
-            return controlUrlRegex.find(xml)?.groupValues?.get(1)?.let { controlUrl ->
+            val result = controlUrlRegex.find(xml)?.groupValues?.get(1)?.let { controlUrl ->
                 // Handle relative URLs
                 if (controlUrl.startsWith("http")) {
                     controlUrl
@@ -117,6 +135,11 @@ object DLNASoapClient {
                     }
                 }
             }
+
+            // Cache the result if found
+            result?.let { controlUrlCache[cacheKey] = it }
+
+            return result
         } catch (e: Exception) {
             Timber.e(e, "Failed to get control URL from $deviceLocation")
             return null

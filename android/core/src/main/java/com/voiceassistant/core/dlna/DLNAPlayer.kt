@@ -76,7 +76,12 @@ class DLNAPlayer @Inject constructor(
             Timber.d("DLNA pause: current state is $currentState")
 
             if (currentState == "PLAYING") {
-                pausePlayback(device)
+                val pauseResult = pausePlayback(device)
+                if (pauseResult.isFailure) {
+                    Timber.e("DLNA pause failed: ${pauseResult.exceptionOrNull()?.message}")
+                    _isPlaying.value = false
+                    return@withContext pauseResult
+                }
                 _isPlaying.value = false
                 Result.success(Unit)
             } else {
@@ -101,7 +106,12 @@ class DLNAPlayer @Inject constructor(
             Timber.d("DLNA resume: current state is $currentState")
 
             if (currentState != "PLAYING") {
-                play(device)
+                val playResult = play(device)
+                if (playResult.isFailure) {
+                    Timber.e("DLNA resume failed: ${playResult.exceptionOrNull()?.message}")
+                    _isPlaying.value = false
+                    return@withContext playResult
+                }
                 _isPlaying.value = true
                 Result.success(Unit)
             } else {

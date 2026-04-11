@@ -98,14 +98,32 @@ class DLNAController(private val device: DLNADevice) {
         return if (currentState == "PLAYING") {
             // Currently playing, send Pause
             pause()
-        } else {
-            // Currently paused or stopped, send Play
+        } else if (currentState == "PAUSED_PLAYBACK") {
+            // Currently paused, send Play to resume
             DLNASoapClient.sendSoapRequest(
                 device,
                 DLNASoapClient.AV_TRANSPORT_SERVICE,
                 "Play",
                 DLNASoapClient.buildPlayBody()
             )
+        } else {
+            // State is unknown (null) or "STOPPED" - try Pause first (safer).
+            // If device is already paused or stopped, Pause is typically a no-op.
+            // Only send Play if Pause fails and state was not STOPPED.
+            pause().recoverCatching {
+                if (currentState == "STOPPED") {
+                    // Device was stopped, need to send Play to start
+                    DLNASoapClient.sendSoapRequest(
+                        device,
+                        DLNASoapClient.AV_TRANSPORT_SERVICE,
+                        "Play",
+                        DLNASoapClient.buildPlayBody()
+                    )
+                } else {
+                    // State unknown and Pause failed, rethrow original error
+                    throw it
+                }
+            }
         }
     }
 
