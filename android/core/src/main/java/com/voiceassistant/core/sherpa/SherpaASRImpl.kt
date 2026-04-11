@@ -35,11 +35,11 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
                     modelType = "zipformer2"  // 新模型使用 zipformer2
                 ),
                 endpointConfig = EndpointConfig(
-                    // 增大静音阈值，减少误触发
+                    // 调整静音阈值，避免短命令被过早截断
                     // rule1: 非语音连续超时（静音多久认为一句话结束）
-                    // rule2: 语音段落后的静音超时
+                    // rule2: 语音段落后的静音超时（增大到4.0s，避免2-3秒短命令被截断）
                     rule1 = EndpointRule(false, 4.0f, 0.0f),
-                    rule2 = EndpointRule(true, 2.5f, 0.0f),
+                    rule2 = EndpointRule(true, 4.0f, 0.0f),
                     rule3 = EndpointRule(false, 0.0f, 30.0f)
                 ),
                 enableEndpoint = true,
@@ -125,10 +125,9 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
             val interval = 0.1  // 100ms per chunk
             val bufferSize = (interval * 16000).toInt()
             var offset = 0
-            var isEndpointReached = false
-            var finalText = ""
 
-            // 先处理完所有音频（不检查 endpoint，避免过早退出）
+            // 先处理完所有音频（不在循环内检查 endpoint，避免 Sherpa 过早锁定中间结果）
+            // 正确做法：先发送所有音频，再统一检查 endpoint
             while (offset < audio.size) {
                 val end = minOf(offset + bufferSize, audio.size)
                 val chunk = audio.copyOfRange(offset, end)
@@ -149,9 +148,9 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
                 offset = end
             }
 
-            // 统一在结束后检查 endpoint
-            isEndpointReached = r.isEndpoint(stream)
-            if (isEndpointReached) {
+            // 统一在所有音频处理完后检查 endpoint
+            if (r.isEndpoint(stream)) {
+                Timber.d("ASR endpoint detected after all audio processed")
                 listener.onEndpointDetected()
                 // 添加尾部填充以获得更好的识别效果
                 val tailPaddings = FloatArray((0.8 * 16000).toInt())
@@ -162,7 +161,7 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
             }
 
             // 获取最终结果
-            finalText = r.getResult(stream).text ?: ""
+            val finalText = r.getResult(stream).text ?: ""
             if (finalText.isNotEmpty()) {
                 listener.onFinalResult(finalText)
             }

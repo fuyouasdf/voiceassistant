@@ -179,6 +179,16 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideStreamingOkHttpClient(): okhttp3.OkHttpClient {
+        return okhttp3.OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
     fun provideMusicRepository(
         jellyfinClient: JellyfinClient
     ): MusicRepository {
@@ -197,9 +207,10 @@ object AppModule {
     @Singleton
     fun provideLLMRepository(
         llmApi: LLMApi,
-        settingsRepository: SettingsRepository
+        settingsRepository: SettingsRepository,
+        streamingClient: okhttp3.OkHttpClient
     ): LLMRepository {
-        return LLMRepositoryImpl(llmApi, settingsRepository)
+        return LLMRepositoryImpl(llmApi, settingsRepository, streamingClient)
     }
 
     @Provides

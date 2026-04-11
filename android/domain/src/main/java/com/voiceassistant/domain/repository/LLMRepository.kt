@@ -1,5 +1,7 @@
 package com.voiceassistant.domain.repository
 
+import kotlinx.coroutines.flow.Flow
+
 /**
  * Repository interface for LLM API operations
  */
@@ -10,6 +12,18 @@ interface LLMRepository {
      * @return The LLM's response text
      */
     suspend fun chat(message: String): Result<String>
+
+    /**
+     * Stream chat response, emits text deltas as they arrive
+     * @param message The user's message
+     * @return Flow emitting text deltas, completes when stream ends
+     */
+    fun chatStream(message: String): Flow<String>
+
+    /**
+     * Lightweight heartbeat to check connection - minimal tokens, no system prompt
+     */
+    suspend fun heartbeat(): Result<Boolean>
 
     /**
      * Use LLM as router to decide whether a message is normal chat or command execution.

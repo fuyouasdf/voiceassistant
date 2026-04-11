@@ -1,19 +1,29 @@
 package com.voiceassistant.data.repository
 
 import com.google.gson.Gson
-import com.voiceassistant.data.remote.ChatMessage
-import com.voiceassistant.data.remote.ChatRequest
 import com.voiceassistant.data.remote.ErrorResponse
 import com.voiceassistant.data.remote.LLMApi
+import com.voiceassistant.data.remote.LLMRequest
 import com.voiceassistant.domain.repository.LLMParsedIntent
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.LLMRouteDecision
 import com.voiceassistant.domain.repository.LLMRouteMode
 import com.voiceassistant.domain.repository.ModelNotFoundException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONObject
 import timber.log.Timber
+import java.io.IOException
 
 /**
  * Implementation of LLMRepository
@@ -22,12 +32,112 @@ import timber.log.Timber
  */
 class LLMRepositoryImpl(
     private val api: LLMApi,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val httpClient: OkHttpClient
 ) : LLMRepository {
+
+    override fun chatStream(message: String): Flow<String> = callbackFlow {
+        val model = settingsRepository.getLLMModel()
+        val systemPrompt = settingsRepository.getLLMSystemPrompt()
+        val baseUrl = settingsRepository.getLLMBaseUrl().ifEmpty { "http://localhost:1234" }
+        val apiKey = settingsRepository.getLLMApiKey()
+
+        val requestBody = Gson().toJson(
+            LLMRequest(
+                model = model,
+                input = buildString {
+                    if (systemPrompt.isNotBlank()) {
+                        append("System: $systemPrompt\n")
+                    }
+                    append("User: $message")
+                },
+                temperature = 0.7,
+                max_tokens = 1024,
+                stream = true
+            )
+        )
+
+        val request = Request.Builder()
+            .url("$baseUrl/v1/responses")
+            .post(requestBody.toRequestBody("application/json".toMediaType()))
+            .header("Content-Type", "application/json")
+            .apply {
+                if (apiKey.isNotEmpty()) {
+                    header("Authorization", "Bearer $apiKey")
+                }
+            }
+            .build()
+
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                close(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!it.isSuccessful) {
+                        close(IOException("HTTP ${it.code}: ${it.message}"))
+                        return
+                    }
+
+                    it.body?.let { body ->
+                        body.source().let { source ->
+                            while (true) {
+                                val line = source.readUtf8Line() ?: break
+
+                                // SSE data line format: data: {...}
+                                if (line.startsWith("data: ")) {
+                                    val data = line.removePrefix("data: ").trim()
+                                    if (data.isNotEmpty()) {
+                                        try {
+                                            val json = JSONObject(data)
+                                            // Handle different event types
+                                            val eventType = json.optString("type")
+                                            if (eventType == "response.output_text.delta") {
+                                                val delta = json.optString("delta", "")
+                                                if (delta.isNotEmpty()) {
+                                                    trySend(delta)
+                                                }
+                                            } else if (eventType == "response.done") {
+                                                break
+                                            }
+                                        } catch (e: Exception) {
+                                            Timber.w(e, "Failed to parse SSE data: $data")
+                                        }
+                                    }
+                                }
+
+                                // End of event marker - SSE uses blank line between events
+                            }
+                        }
+                    }
+                    close()
+                }
+            }
+        })
+
+        awaitClose { }
+    }
 
     override suspend fun chat(message: String): Result<String> = withContext(Dispatchers.IO) {
         val systemPrompt = settingsRepository.getLLMSystemPrompt()
         requestChat(message = message, systemPrompt = systemPrompt, temperature = 0.7, maxTokens = 1024)
+    }
+
+    override suspend fun heartbeat(): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val model = settingsRepository.getLLMModel()
+            val request = LLMRequest(
+                model = model,
+                input = "ok",
+                temperature = 0.0,
+                max_tokens = 1
+            )
+            val response = api.chat(request)
+            Result.success(response.isSuccessful)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun routeIntent(message: String): Result<LLMRouteDecision> = withContext(Dispatchers.IO) {
@@ -60,12 +170,14 @@ class LLMRepositoryImpl(
             // Read config from settings at runtime
             val model = settingsRepository.getLLMModel()
 
-            val request = ChatRequest(
+            val request = LLMRequest(
                 model = model,
-                messages = listOf(
-                    ChatMessage(role = "system", content = systemPrompt),
-                    ChatMessage(role = "user", content = message)
-                ),
+                input = buildString {
+                    if (systemPrompt.isNotBlank()) {
+                        append("System: $systemPrompt\n")
+                    }
+                    append("User: $message")
+                },
                 temperature = temperature,
                 max_tokens = maxTokens
             )
@@ -74,7 +186,12 @@ class LLMRepositoryImpl(
 
             if (response.isSuccessful) {
                 val body = response.body()
-                val content = body?.choices?.firstOrNull()?.message?.content
+                // Parse: output[0].content[0].text
+                val content = body?.output
+                    ?.firstOrNull()
+                    ?.content
+                    ?.firstOrNull()
+                    ?.text
                 if (content != null) {
                     Result.success(content)
                 } else {

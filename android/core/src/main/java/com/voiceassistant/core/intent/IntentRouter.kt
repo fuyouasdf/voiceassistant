@@ -29,6 +29,7 @@ data class Intent(
     val type: IntentType,
     val action: String? = null,
     val query: String? = null,
+    val artist: String? = null,  // 歌手名
     val value: Int? = null,
     val song: Song? = null
 )
@@ -197,7 +198,9 @@ class IntentRouter @Inject constructor(
             type = com.voiceassistant.domain.model.IntentType.valueOf(intent.type.name),
             action = intent.action,
             query = intent.query,
-            value = intent.value
+            artist = intent.artist,
+            value = intent.value,
+            song = intent.song
         )
     }
 
@@ -214,11 +217,41 @@ class IntentRouter @Inject constructor(
             text.contains("下一首") || text.contains("换一首") || text.contains("切歌") -> Intent(IntentType.MUSIC, action = "next")
             text.contains("上一首") -> Intent(IntentType.MUSIC, action = "previous")
             text.contains("播放") || text.contains("来一首") || text.contains("放歌") -> {
-                val query = text.replace(Regex("(播放|来一首|放一首|放歌|听|我想听)"), "").trim()
-                Intent(IntentType.MUSIC, action = "play", query = query)
+                val (artist, songName, rawQuery) = parseArtistAndSong(text)
+                Intent(IntentType.MUSIC, action = "play", query = songName, artist = artist)
             }
             else -> Intent(IntentType.MUSIC, action = "play")
         }
+    }
+
+    /**
+     * 解析歌手和歌曲名
+     * 模式: "播放周杰伦的双截棍" → artist="周杰伦", song="双截棍"
+     *       "播放双截棍" → artist=null, song="双截棍"
+     */
+    private fun parseArtistAndSong(text: String): Triple<String?, String?, String> {
+        val cleanText = text.replace(Regex("(播放|来一首|放一首|放歌|听|我想听)"), "").trim()
+
+        // 尝试匹配"XXX的YYY"模式（XXX是歌手，YYY是歌名）
+        // 但要排除一些特殊情况，如"音乐的"、"歌曲的"等
+        val dePattern = Regex("^(.+?)的([^的]+)$")
+        val match = dePattern.find(cleanText)
+
+        if (match != null) {
+            val potentialArtist = match.groupValues[1].trim()
+            val potentialSong = match.groupValues[2].trim()
+
+            // 过滤掉明显不是歌手名的词
+            val invalidArtists = listOf("音乐", "歌曲", "这首", "那首", "歌", "专辑", "歌手")
+            if (potentialArtist !in invalidArtists && potentialSong.isNotEmpty() && potentialArtist.isNotEmpty()) {
+                Timber.d("parseArtistAndSong: artist='$potentialArtist', song='$potentialSong'")
+                return Triple(potentialArtist, potentialSong, potentialSong) // 同时返回歌曲名作为原始查询
+            }
+        }
+
+        // 没有找到"XXX的YYY"模式，直接返回歌曲名
+        Timber.d("parseArtistAndSong: no artist found, song='$cleanText'")
+        return Triple(null, cleanText, cleanText)
     }
 
     private fun isVolumeIntent(text: String): Boolean {

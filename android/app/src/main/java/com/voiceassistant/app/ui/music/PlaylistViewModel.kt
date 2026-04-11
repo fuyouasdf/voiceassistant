@@ -418,6 +418,33 @@ class PlaylistViewModel @Inject constructor(
         return commandResult
     }
 
+    /**
+     * 停止播放
+     */
+    fun stopPlayback() {
+        viewModelScope.launch {
+            val session = _uiState.value.selectedDlnaDevice ?: return@launch
+            try {
+                if (session.id == LOCAL_DEVICE_SESSION_ID) {
+                    musicPlayer.stop()
+                } else {
+                    val latestSession = syncRemoteSessionState(session.id) ?: session
+                    if (!latestSession.supportsCommand("Stop")) {
+                        _uiState.value = _uiState.value.copy(
+                            error = "设备 ${latestSession.deviceName} 不支持停止"
+                        )
+                        return@launch
+                    }
+                    jellyfinClient.stop(session.id)
+                }
+                _uiState.value = _uiState.value.copy(currentSong = null, isPlaying = false)
+            } catch (e: Exception) {
+                Timber.e(e, "停止播放失败")
+                _uiState.value = _uiState.value.copy(error = "停止播放失败: ${e.message}")
+            }
+        }
+    }
+
     private suspend fun buildMusicItems(songs: List<PlaylistSong>): List<MusicItem> {
         return songs.mapNotNull { playlistSong ->
             try {

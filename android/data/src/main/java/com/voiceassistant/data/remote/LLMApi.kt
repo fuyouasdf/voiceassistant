@@ -6,40 +6,50 @@ import retrofit2.http.POST
 import retrofit2.http.Headers
 
 interface LLMApi {
-    @POST("v1/chat/completions")
+    @POST("v1/responses")
     @Headers("Content-Type: application/json")
-    suspend fun chat(@Body request: ChatRequest): Response<ChatResponse>
+    suspend fun chat(@Body request: LLMRequest): Response<LLMResponse>
 }
 
-data class ChatRequest(
+data class LLMRequest(
     val model: String,
-    val messages: List<ChatMessage>,
+    val input: String,
+    val previous_response_id: String? = null,
+    val reasoning: Reasoning? = null,
+    val stream: Boolean = false,
     val temperature: Double = 0.7,
     val max_tokens: Int = 1024
 )
 
-data class ChatMessage(
-    val role: String,
-    val content: String
+data class Reasoning(
+    val effort: String = "low"
 )
 
-data class ChatResponse(
+data class LLMResponse(
     val id: String,
     val model: String,
-    val choices: List<ChatChoice>,
+    val status: String,
+    val output: List<OutputItem>?,
+    val previous_response_id: String?,
     val usage: Usage?
 )
 
-data class ChatChoice(
-    val index: Int,
-    val message: ChatMessage,
-    val finish_reason: String?
+data class OutputItem(
+    val id: String?,
+    val type: String?,
+    val role: String?,
+    val content: List<OutputText>?
+)
+
+data class OutputText(
+    val type: String?,
+    val text: String?
 )
 
 data class Usage(
-    val prompt_tokens: Int,
-    val completion_tokens: Int,
-    val total_tokens: Int
+    val prompt_tokens: Int?,
+    val completion_tokens: Int?,
+    val total_tokens: Int?
 )
 
 data class ErrorResponse(

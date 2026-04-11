@@ -20,6 +20,7 @@ data class Intent(
     val type: IntentType,
     val action: String? = null,
     val query: String? = null,
+    val artist: String? = null,  // 歌手名
     val value: Int? = null,
     val song: Song? = null
 )

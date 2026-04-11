@@ -760,7 +760,7 @@ class MainActivity : AppCompatActivity() {
         llmConnectionCheckJob?.cancel()
         llmConnectionCheckJob = lifecycleScope.launch {
             try {
-                val result = llmRepository.chat("ping")
+                val result = llmRepository.heartbeat()
                 val isOnline = result.isSuccess
                 tvProvider.text = if (isOnline) getString(R.string.llm_connected) else getString(R.string.llm_not_connected)
                 updateStatus(isOnline)

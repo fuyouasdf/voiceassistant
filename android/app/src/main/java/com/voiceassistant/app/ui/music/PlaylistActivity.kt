@@ -1,5 +1,6 @@
 package com.voiceassistant.app.ui.music
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -11,8 +12,10 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.chip.Chip
+import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityPlaylistBinding
+import com.voiceassistant.core.music.MusicItem
+import com.voiceassistant.core.music.MusicPlayer
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -30,6 +33,9 @@ class PlaylistActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlaylistBinding
     private lateinit var songAdapter: PlaylistAdapter
     private var dlnaDialog: AlertDialog? = null
+
+    @javax.inject.Inject
+    lateinit var musicPlayer: MusicPlayer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +68,14 @@ class PlaylistActivity : AppCompatActivity() {
             view.setPadding(view.paddingLeft, insets.top, view.paddingRight, view.paddingBottom)
             windowInsets
         }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.cardNowPlaying) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val params = view.layoutParams as android.widget.LinearLayout.LayoutParams
+            params.bottomMargin = insets.bottom + resources.getDimensionPixelSize(R.dimen.spacing_lg)
+            view.layoutParams = params
+            windowInsets
+        }
     }
 
     private fun setupRecyclerView() {
@@ -88,6 +102,24 @@ class PlaylistActivity : AppCompatActivity() {
 
         binding.chipDlnaDevice.setOnClickListener {
             showDlnaDeviceDialog()
+        }
+
+        binding.btnPlayPauseMini.setOnClickListener {
+            viewModel.togglePlayPause()
+        }
+        binding.btnPreviousMini.setOnClickListener {
+            musicPlayer.playPrevious()
+        }
+        binding.btnNextMini.setOnClickListener {
+            musicPlayer.playNext()
+        }
+
+        binding.btnStopMini.setOnClickListener {
+            viewModel.stopPlayback()
+        }
+
+        binding.cardNowPlaying.setOnClickListener {
+            openNowPlayingIfLocalSelected()
         }
     }
 
@@ -137,6 +169,66 @@ class PlaylistActivity : AppCompatActivity() {
                 }
             }
         }
+
+        lifecycleScope.launch {
+            musicPlayer.state.collectLatest { playerState ->
+                val state = viewModel.uiState.value
+                val selectedDevice = state.selectedDlnaDevice
+                // selectedDevice 为 null 时表示使用本机（默认设备）
+                val isLocalDevice = selectedDevice == null || selectedDevice.id == LOCAL_DEVICE_SESSION_ID
+
+                if (isLocalDevice) {
+                    // 本地播放：使用 musicPlayer.state
+                    var currentItem = playerState.playlist.getOrNull(playerState.currentIndex)
+                    if (currentItem == null && playerState.currentSongId != null) {
+                        currentItem = playerState.playlist.find { it.id == playerState.currentSongId }
+                    }
+
+                    if (currentItem == null) {
+                        binding.cardNowPlaying.visibility = View.GONE
+                        return@collectLatest
+                    }
+
+                    binding.cardNowPlaying.visibility = View.VISIBLE
+                    binding.tvNowPlayingTitle.text = currentItem.title
+                    val artist = currentItem.artist ?: getString(R.string.artist_unknown)
+                    val playbackState = if (playerState.isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
+                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+                    binding.tvNowPlayingStatus.text = buildMiniPlayerStatus(currentItem)
+                    val progress = if (playerState.duration > 0) {
+                        ((playerState.currentPosition * 1000) / playerState.duration).toInt().coerceIn(0, 1000)
+                    } else {
+                        0
+                    }
+                    binding.progressNowPlaying.progress = progress
+                    binding.tvNowPlayingTime.text =
+                        "${formatTime(playerState.currentPosition)} / ${formatTime(playerState.duration)}"
+                    binding.btnPreviousMini.isEnabled = playerState.playlist.isNotEmpty()
+                    binding.btnNextMini.isEnabled = playerState.playlist.isNotEmpty()
+                } else {
+                    // 远程播放：使用 session 的 nowPlayingItem
+                    val session = state.selectedDlnaDevice
+                    val isPlaying = state.isPlaying
+                    val nowPlayingItem = session?.nowPlayingItem
+
+                    if (nowPlayingItem == null) {
+                        binding.cardNowPlaying.visibility = View.GONE
+                        return@collectLatest
+                    }
+
+                    binding.cardNowPlaying.visibility = View.VISIBLE
+                    binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
+                    val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
+                    val playbackState = if (isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
+                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+                    binding.tvNowPlayingStatus.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+                    binding.progressNowPlaying.progress = 0
+                    binding.tvNowPlayingTime.text = "--:-- / --:--"
+                    binding.btnPreviousMini.isEnabled = false
+                    binding.btnNextMini.isEnabled = false
+                }
+            }
+        }
     }
 
     private fun showDeleteSongDialog(songId: String, songTitle: String) {
@@ -160,6 +252,29 @@ class PlaylistActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun openNowPlayingIfLocalSelected() {
+        val selectedDevice = viewModel.uiState.value.selectedDlnaDevice ?: return
+        if (selectedDevice.id != LOCAL_DEVICE_SESSION_ID) return
+        startActivity(Intent(this, NowPlayingActivity::class.java))
+    }
+
+    private fun buildMiniPlayerStatus(currentItem: MusicItem): String {
+        val container = currentItem.streamContainer?.uppercase() ?: getString(R.string.unknown)
+        return if (currentItem.isTranscoding) {
+            getString(R.string.transcoding_to_aac, container)
+        } else {
+            getString(R.string.direct_playback, container)
+        }
+    }
+
+    private fun formatTime(positionMs: Long): String {
+        if (positionMs <= 0L) return "00:00"
+        val totalSeconds = positionMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return "%02d:%02d".format(minutes, seconds)
     }
 
     companion object {

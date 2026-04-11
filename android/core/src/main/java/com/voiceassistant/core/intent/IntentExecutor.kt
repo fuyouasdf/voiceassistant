@@ -120,22 +120,89 @@ class IntentExecutor @Inject constructor(
             return handlePlayRandom(sessionId)
         }
 
-        return repo.searchSongs(query).fold(
-            onSuccess = { songs ->
-                if (songs.isEmpty()) {
-                    "没找到关于「$query」的歌曲"
-                } else {
-                    // Update play queue with search results
-                    playQueue.clear()
-                    playQueue.addAll(songs)
-                    currentIndex = 0
+        val artist = intent.artist
+        val songName = query  // query 就是拆分后的歌曲名
 
-                    val song = songs.first()
-                    playSong(song, sessionId)
-                }
-            },
-            onFailure = { "搜索歌曲失败，请稍后重试" }
+        // 搜索策略：
+        // 1. 如果有 artist，先用 song name 搜索，再在结果中匹配 artist
+        // 2. 如果没找到匹配的，用纯 query 再搜索一次
+        return searchAndPlay(repo, songName, artist, query, sessionId)
+    }
+
+    /**
+     * 搜索并播放歌曲
+     * @param repo 音乐仓库
+     * @param songName 歌曲名（主要搜索词）
+     * @param artist 歌手名（用于过滤，可能为 null）
+     * @param fallbackQuery 兜底搜索词（当 songName 搜索无结果时使用）
+     */
+    private suspend fun searchAndPlay(
+        repo: MusicRepository,
+        songName: String,
+        artist: String?,
+        fallbackQuery: String,
+        sessionId: String
+    ): String {
+        // 优先用歌曲名搜索
+        var songs = repo.searchSongs(songName).fold(
+            onSuccess = { it },
+            onFailure = { emptyList() }
         )
+
+        Timber.d("searchAndPlay: songName='$songName', artist='$artist', found=${songs.size}")
+
+        // 如果有 artist，在结果中过滤匹配歌手的歌曲
+        if (!artist.isNullOrEmpty()) {
+            val matchedSongs = songs.filter { song ->
+                val songArtist = song.artist ?: ""
+                val songAlbumArtist = song.album ?: ""
+                songArtist.contains(artist, ignoreCase = true) ||
+                    songAlbumArtist.contains(artist, ignoreCase = true)
+            }
+
+            if (matchedSongs.isNotEmpty()) {
+                Timber.d("searchAndPlay: matched ${matchedSongs.size} songs by artist '$artist'")
+                songs = matchedSongs
+            } else {
+                Timber.d("searchAndPlay: no songs matched artist '$artist', using all results")
+                // 歌手不匹配，但仍有搜索结果时，仍使用结果（用户体验更好）
+            }
+        }
+
+        // 如果没找到任何歌曲，尝试用完整 query 搜索（作为兜底）
+        if (songs.isEmpty() && fallbackQuery != songName) {
+            Timber.d("searchAndPlay: no results for '$songName', trying fallback '$fallbackQuery'")
+            songs = repo.searchSongs(fallbackQuery).fold(
+                onSuccess = { it },
+                onFailure = { emptyList() }
+            )
+            if (songs.isNotEmpty()) {
+                // 用 fallback 搜索到了，尝试再次过滤 artist
+                if (!artist.isNullOrEmpty()) {
+                    songs = songs.filter { song ->
+                        val songArtist = song.artist ?: ""
+                        val songAlbumArtist = song.album ?: ""
+                        songArtist.contains(artist, ignoreCase = true) ||
+                            songAlbumArtist.contains(artist, ignoreCase = true)
+                    }
+                }
+            }
+        }
+
+        if (songs.isEmpty()) {
+            return "没找到「${if (artist.isNullOrEmpty()) songName else "$artist - $songName"}」的歌曲"
+        }
+
+        // Update play queue with search results
+        playQueue.clear()
+        playQueue.addAll(songs)
+        currentIndex = 0
+
+        val song = songs.first()
+        playSong(song, sessionId)
+
+        val artistInfo = if (artist.isNullOrEmpty()) "" else "（$artist）"
+        return "即将播放「${song.title}」$artistInfo"
     }
 
     private suspend fun handlePlayRandom(sessionId: String): String {
