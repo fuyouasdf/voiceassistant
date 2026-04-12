@@ -3,17 +3,51 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Deep indigo background -->
     <path
-        android:fillColor="#3DDC84"
+        android:fillColor="#1E1B4B"
         android:pathData="M0,0h108v108h-108z"/>
+    <!-- Purple accent circle -->
     <path
-        android:fillColor="#00000000"
-        android:pathData="M9,0L9,108"
-        android:strokeWidth="0.8"
-        android:strokeColor="#33FFFFFF"/>
+        android:fillColor="#4338CA"
+        android:fillAlpha="0.3"
+        android:pathData="M54,54m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0"/>
+    <!-- Microphone body -->
     <path
-        android:fillColor="#00000000"
-        android:pathData="M19,0L19,108"
-        android:strokeWidth="0.8"
-        android:strokeColor="#33FFFFFF"/>
+        android:fillColor="#22C55E"
+        android:pathData="M54,32c-3.3,0 -6,2.7 -6,6v16c0,3.3 2.7,6 6,6s6,-2.7 6,-6V38c0,-3.3 -2.7,-6 -6,-6z"/>
+    <!-- Microphone stand/curve -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M66,54c0,6.6 -5.4,12 -12,12s-12,-5.4 -12,-12h-4c0,8.3 6.3,15.2 14.4,16v6h-4.8v4h13.6v-4h-4.8v-6c8.1,-0.8 14.4,-7.7 14.4,-16h-4z"/>
+    <!-- Sound wave left -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.9"
+        android:pathData="M32,50c-2.2,0 -4,1.8 -4,4v0c0,2.2 1.8,4 4,4s4,-1.8 4,-4v0c0,-2.2 -1.8,-4 -4,-4z"/>
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.6"
+        android:pathData="M26,46c-1.7,0 -3,1.3 -3,3v4c0,1.7 1.3,3 3,3s3,-1.3 3,-3v-4c0,-1.7 -1.3,-3 -3,-3z"/>
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.3"
+        android:pathData="M20,42c-1.3,0 -2.3,1 -2.3,2.3v6.4c0,1.3 1,2.3 2.3,2.3s2.3,-1 2.3,-2.3v-6.4c0,-1.3 -1,-2.3 -2.3,-2.3z"/>
+    <!-- Sound wave right -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.9"
+        android:pathData="M76,50c-2.2,0 -4,1.8 -4,4v0c0,2.2 1.8,4 4,4s4,-1.8 4,-4v0c0,-2.2 -1.8,-4 -4,-4z"/>
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.6"
+        android:pathData="M82,46c-1.7,0 -3,1.3 -3,3v4c0,1.7 1.3,3 3,3s3,-1.3 3,-3v-4c0,-1.7 -1.3,-3 -3,-3z"/>
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.3"
+        android:pathData="M88,42c-1.3,0 -2.3,1 -2.3,2.3v6.4c0,1.3 1,2.3 2.3,2.3s2.3,-1 2.3,-2.3v-6.4c0,-1.3 -1,-2.3 -2.3,-2.3z"/>
+    <!-- Music note accent -->
+    <path
+        android:fillColor="#4338CA"
+        android:pathData="M62,72l-2,8h4l2,-8h-4zM68,72l-2,8h4l2,-8h-4z"/>
 </vector>

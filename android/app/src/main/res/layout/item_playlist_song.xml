@@ -66,14 +66,14 @@
         android:textSize="12sp"
         tools:text="3:45" />
 
-    <!-- 删除按钮 -->
+    <!-- 移除按钮 -->
     <ImageButton
         android:id="@+id/btnDelete"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_marginStart="8dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="4dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@android:drawable/ic_menu_delete"
-        android:contentDescription="删除"
-        app:tint="@color/text_tertiary" />
+        android:src="@drawable/ic_close"
+        android:contentDescription="移除"
+        android:scaleType="centerInside" />
 </LinearLayout>
