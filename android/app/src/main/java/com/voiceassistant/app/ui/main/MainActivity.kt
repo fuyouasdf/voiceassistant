@@ -239,14 +239,18 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
-        // Bottom: Input area with navigation bar padding
+        // Bottom: Input area with navigation bar and IME padding
         ViewCompat.setOnApplyWindowInsetsListener(inputArea) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            // 取 systemBars 和 ime 中的较大值，键盘弹出时 ime.bottom > 0，键盘收起时 systemBars.bottom > 0
+            val bottomPadding = maxOf(systemBars.bottom, ime.bottom) +
+                resources.getDimensionPixelSize(R.dimen.bottom_padding_standard)
             view.setPadding(
                 view.paddingLeft,
                 view.paddingTop,
                 view.paddingRight,
-                insets.bottom + resources.getDimensionPixelSize(R.dimen.bottom_padding_standard)
+                bottomPadding
             )
             windowInsets
         }

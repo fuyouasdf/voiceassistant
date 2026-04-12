@@ -69,11 +69,24 @@ class PlaylistActivity : AppCompatActivity() {
             windowInsets
         }
 
+        // Card now playing needs to adjust for both system bars and IME (keyboard)
         ViewCompat.setOnApplyWindowInsetsListener(binding.cardNowPlaying) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
             val params = view.layoutParams as android.widget.LinearLayout.LayoutParams
-            params.bottomMargin = insets.bottom + resources.getDimensionPixelSize(R.dimen.spacing_lg)
+            // 取 systemBars 和 ime 中的较大值，键盘弹出时 ime.bottom > 0，键盘收起时 systemBars.bottom > 0
+            params.bottomMargin = maxOf(systemBars.bottom, ime.bottom) +
+                resources.getDimensionPixelSize(R.dimen.spacing_lg)
             view.layoutParams = params
+            windowInsets
+        }
+
+        // RecyclerView songs list needs to adjust padding when keyboard is visible
+        ViewCompat.setOnApplyWindowInsetsListener(binding.recyclerSongs) { view, windowInsets ->
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bottomPadding = if (ime.bottom > 0) ime.bottom else systemBars.bottom
+            view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, bottomPadding)
             windowInsets
         }
     }

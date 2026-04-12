@@ -187,8 +187,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun setupInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(rootScrollView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            contentLayout.setPadding(16, insets.top + 16, 16, insets.bottom + 16)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            // 取 systemBars 和 ime 中的较大值，键盘弹出时 ime.bottom > 0，键盘收起时 systemBars.bottom > 0
+            val bottomPadding = maxOf(systemBars.bottom, ime.bottom) + 16
+            contentLayout.setPadding(16, systemBars.top + 16, 16, bottomPadding)
             windowInsets
         }
     }
