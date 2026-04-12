@@ -483,6 +483,56 @@ app/src/test/java/com/voiceassistant/app/ui/music/
 - 解析层容错：
   - 允许 LLM 返回包含附加文本，仓库层会抽取首个 JSON 对象再解析，避免因格式噪音直接失败。
 
+## LLM 对话上下文（2026-04）
+
+### ConversationContext 接口
+
+`ConversationContext` 是对话上下文的抽象接口，定义在 `core/intent/IntentRouter.kt`：
+
+```kotlin
+interface ConversationContext {
+    /**
+     * 构建包含对话历史和状态信息的上下文字符串
+     * @return 上下文字符串，无上下文时返回空字符串
+     */
+    fun buildContextString(): String
+
+    /**
+     * 获取当前存储的上下文项数量
+     * @return 上下文项数量
+     */
+    fun getContextCount(): Int
+}
+```
+
+### 上下文配置参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `maxContextCount` | 对话历史保留的最大轮次 | 10 |
+
+### 对话流程
+
+```
+用户输入 → IntentRouter.handle()
+           │
+           ├─ 本地命令（MUSIC/VOLUME/DEVICE）→ IntentExecutor.execute()
+           │
+           └─ LLM 路由
+              │
+              ├─ CHAT → conversationContext.buildContextString() → LLM.chat()
+              │           │
+              │           └─ 追加系统提示词 + 对话历史
+              │
+              └─ COMMAND → LLM.parseCommandIntent() → IntentExecutor.execute()
+```
+
+### 上下文管理策略
+
+- **历史轮次限制**：保留最近 10 轮对话，超出后移除最早记录
+- **构建时机**：仅在 CHAT 模式下使用 `buildContextString()` 构建带上下文的 prompt
+- **注入方式**：通过 Hilt 注入到 `IntentRouter`，支持上下文感知回复
+
 ---
 
 ## 核心组件代码

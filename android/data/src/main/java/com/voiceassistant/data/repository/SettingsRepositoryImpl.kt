@@ -98,6 +98,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun getLLMCommandPrompt(): String =
         getString(ConfigKeys.LLM_COMMAND_PROMPT, DEFAULT_COMMAND_PROMPT).ifBlank { DEFAULT_COMMAND_PROMPT }
     override suspend fun setLLMCommandPrompt(prompt: String) = setString(ConfigKeys.LLM_COMMAND_PROMPT, prompt)
+    override suspend fun getLLMContextCount(): Int = getString(ConfigKeys.LLM_CONTEXT_COUNT, "5").toIntOrNull() ?: 5
+    override suspend fun setLLMContextCount(count: Int) = setString(ConfigKeys.LLM_CONTEXT_COUNT, count.toString())
 
     // Voice Settings
     override suspend fun getWakeSensitivity(): Float = getString(ConfigKeys.WAKE_SENSITIVITY, "0.5").toFloatOrNull() ?: 0.5f
@@ -152,6 +154,8 @@ interface SettingsRepository {
     suspend fun setLLMRouterPrompt(prompt: String)
     suspend fun getLLMCommandPrompt(): String
     suspend fun setLLMCommandPrompt(prompt: String)
+    suspend fun getLLMContextCount(): Int
+    suspend fun setLLMContextCount(count: Int)
 
     // Voice Settings
     suspend fun getWakeSensitivity(): Float

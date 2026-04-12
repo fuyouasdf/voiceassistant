@@ -64,6 +64,8 @@
     <string name="settings_llm_system_prompt">助手提示词</string>
     <string name="settings_llm_router_prompt">路由提示词</string>
     <string name="settings_llm_command_prompt">命令解析提示词</string>
+    <string name="settings_llm_context_count">对话上下文次数</string>
+    <string name="settings_llm_context_count_hint">对话时携带的历史消息轮数</string>
 
     <string name="settings_wake_sensitivity">唤醒灵敏度</string>
     <string name="settings_tts_speed">TTS 语速</string>

@@ -33,7 +33,9 @@ import java.io.IOException
 class LLMRepositoryImpl(
     private val api: LLMApi,
     private val settingsRepository: SettingsRepository,
-    private val httpClient: OkHttpClient
+    private val httpClient: OkHttpClient,
+    private val messageRepository: com.voiceassistant.domain.repository.MessageRepository,
+    private val maxContextCount: Int = 5
 ) : LLMRepository {
 
     override fun chatStream(message: String): Flow<String> = callbackFlow {
@@ -42,12 +44,16 @@ class LLMRepositoryImpl(
         val baseUrl = settingsRepository.getLLMBaseUrl().ifEmpty { "http://localhost:1234" }
         val apiKey = settingsRepository.getLLMApiKey()
 
+        val contextHistory = buildContextString()
         val requestBody = Gson().toJson(
             LLMRequest(
                 model = model,
                 input = buildString {
                     if (systemPrompt.isNotBlank()) {
                         append("System: $systemPrompt\n")
+                    }
+                    if (contextHistory.isNotBlank()) {
+                        append("$contextHistory\n")
                     }
                     append("User: $message")
                 },
@@ -169,12 +175,16 @@ class LLMRepositoryImpl(
         return try {
             // Read config from settings at runtime
             val model = settingsRepository.getLLMModel()
+            val contextHistory = buildContextString()
 
             val request = LLMRequest(
                 model = model,
                 input = buildString {
                     if (systemPrompt.isNotBlank()) {
                         append("System: $systemPrompt\n")
+                    }
+                    if (contextHistory.isNotBlank()) {
+                        append("$contextHistory\n")
                     }
                     append("User: $message")
                 },
@@ -275,6 +285,30 @@ class LLMRepositoryImpl(
             )
         } catch (e: Exception) {
             Result.failure(Exception("命令解析失败: ${e.message}", e))
+        }
+    }
+
+    /**
+     * Build context string from message history.
+     * Uses the same format as core's ConversationContextManager.buildContextString().
+     */
+    private suspend fun buildContextString(): String {
+        return try {
+            val messages = messageRepository.getLatestMessages(maxContextCount * 2)
+            if (messages.isEmpty()) {
+                return ""
+            }
+            // Reverse to get chronological order (oldest first)
+            val chronologicalMessages = messages.reversed()
+            buildString {
+                chronologicalMessages.forEach { message ->
+                    val role = if (message.isUser) "User" else "Assistant"
+                    appendLine("$role: ${message.text}")
+                }
+            }.trimEnd()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to build context string")
+            ""
         }
     }
 

@@ -9,6 +9,8 @@ import com.voiceassistant.core.audio.AudioCapture
 import com.voiceassistant.core.audio.AudioPlayer
 import com.voiceassistant.core.dlna.DLNAManager
 import com.voiceassistant.core.dlna.DLNAPlayer
+import com.voiceassistant.core.ConversationContextManager
+import com.voiceassistant.core.intent.ConversationContext
 import com.voiceassistant.core.intent.IntentExecutor
 import com.voiceassistant.core.intent.IntentRouter
 import com.voiceassistant.core.music.MusicPlayer
@@ -37,10 +39,12 @@ import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.LLMApi
 import com.voiceassistant.data.repository.LLMRepositoryImpl
 import com.voiceassistant.data.repository.MusicRepositoryImpl
+import com.voiceassistant.data.repository.MessageRepositoryImpl
 import com.voiceassistant.data.repository.PlaylistRepositoryImpl
 import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.data.repository.SettingsRepositoryImpl
 import com.voiceassistant.domain.repository.LLMRepository
+import com.voiceassistant.domain.repository.MessageRepository
 import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.PlayerRepository
 import com.voiceassistant.domain.repository.PlaylistRepository
@@ -94,6 +98,12 @@ object AppModule {
     @Singleton
     fun providePlaylistRepository(playlistDao: PlaylistDao): PlaylistRepository {
         return PlaylistRepositoryImpl(playlistDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideMessageRepository(chatMessageDao: ChatMessageDao): MessageRepository {
+        return MessageRepositoryImpl(chatMessageDao)
     }
 
     @Provides
@@ -208,9 +218,10 @@ object AppModule {
     fun provideLLMRepository(
         llmApi: LLMApi,
         settingsRepository: SettingsRepository,
-        streamingClient: okhttp3.OkHttpClient
+        streamingClient: okhttp3.OkHttpClient,
+        messageRepository: MessageRepository
     ): LLMRepository {
-        return LLMRepositoryImpl(llmApi, settingsRepository, streamingClient)
+        return LLMRepositoryImpl(llmApi, settingsRepository, streamingClient, messageRepository)
     }
 
     @Provides
@@ -281,12 +292,14 @@ object AppModule {
     fun provideIntentRouter(
         intentExecutor: IntentExecutor,
         llmRepository: LLMRepository?,
-        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase
+        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase,
+        conversationContext: ConversationContext
     ): IntentRouter {
         return IntentRouter(
             intentExecutor,
             llmRepository,
-            handleChatUseCase
+            handleChatUseCase,
+            conversationContext
         )
     }
 
@@ -331,5 +344,21 @@ object AppModule {
     @Singleton
     fun providePlaybackStateManager(): PlaybackStateManager {
         return PlaybackStateManagerImpl()
+    }
+
+    @Provides
+    @Singleton
+    fun provideConversationContextManager(
+        messageRepository: MessageRepository
+    ): ConversationContextManager {
+        return ConversationContextManager(messageRepository)
+    }
+
+    @Provides
+    @Singleton
+    fun provideConversationContext(
+        conversationContextManager: ConversationContextManager
+    ): ConversationContext {
+        return conversationContextManager
     }
 }

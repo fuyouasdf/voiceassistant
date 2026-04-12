@@ -23,6 +23,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.voiceassistant.app.R
 import com.voiceassistant.app.di.ConfigHolder
+import com.voiceassistant.core.ConversationContextManager
 import com.voiceassistant.core.pipeline.VoicePipeline
 import com.voiceassistant.core.pipeline.WakeWord
 import com.voiceassistant.data.remote.JellyfinClient
@@ -57,6 +58,9 @@ class SettingsActivity : AppCompatActivity() {
     @Inject
     lateinit var voicePipeline: VoicePipeline
 
+    @Inject
+    lateinit var conversationContextManager: ConversationContextManager
+
     // Music Service
     private lateinit var etJellyfinUrl: TextInputEditText
     private lateinit var etJellyfinApiKey: TextInputEditText
@@ -73,6 +77,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etLlmSystemPrompt: TextInputEditText
     private lateinit var etLlmRouterPrompt: TextInputEditText
     private lateinit var etLlmCommandPrompt: TextInputEditText
+    private lateinit var sliderLlmContextCount: Slider
+    private lateinit var tvLlmContextCount: TextView
     private lateinit var llmStatusDot: View
     private lateinit var tvLlmOnlineStatus: TextView
     private lateinit var btnTestLlm: MaterialButton
@@ -147,6 +153,8 @@ class SettingsActivity : AppCompatActivity() {
         etLlmSystemPrompt = findViewById(R.id.etLlmSystemPrompt)
         etLlmRouterPrompt = findViewById(R.id.etLlmRouterPrompt)
         etLlmCommandPrompt = findViewById(R.id.etLlmCommandPrompt)
+        sliderLlmContextCount = findViewById(R.id.sliderLlmContextCount)
+        tvLlmContextCount = findViewById(R.id.tvLlmContextCount)
         llmStatusDot = findViewById(R.id.llmStatusDot)
         tvLlmOnlineStatus = findViewById(R.id.tvLlmOnlineStatus)
         btnTestLlm = findViewById(R.id.btnTestLlm)
@@ -195,6 +203,11 @@ class SettingsActivity : AppCompatActivity() {
         sliderTtsSpeed.addOnChangeListener { _, value, _ ->
             if (isLoading) return@addOnChangeListener
             tvTtsSpeed.text = String.format("%.1fx", value)
+        }
+
+        sliderLlmContextCount.addOnChangeListener { _, value, _ ->
+            if (isLoading) return@addOnChangeListener
+            tvLlmContextCount.text = value.toInt().toString()
         }
 
         // Jellyfin test button
@@ -251,6 +264,12 @@ class SettingsActivity : AppCompatActivity() {
             etLlmSystemPrompt.setText(settingsRepository.getLLMSystemPrompt())
             etLlmRouterPrompt.setText(settingsRepository.getLLMRouterPrompt())
             etLlmCommandPrompt.setText(settingsRepository.getLLMCommandPrompt())
+
+            // Load LLM Context Count
+            val contextCount = settingsRepository.getLLMContextCount()
+            sliderLlmContextCount.value = contextCount.toFloat()
+            tvLlmContextCount.text = contextCount.toString()
+            conversationContextManager.updateMaxContextCount(contextCount)
 
             // Test LLM connection on load
             testLlmConnectionOnLoad()
@@ -581,6 +600,8 @@ class SettingsActivity : AppCompatActivity() {
                 settingsRepository.setLLMSystemPrompt(etLlmSystemPrompt.text.toString())
                 settingsRepository.setLLMRouterPrompt(etLlmRouterPrompt.text.toString())
                 settingsRepository.setLLMCommandPrompt(etLlmCommandPrompt.text.toString())
+                settingsRepository.setLLMContextCount(sliderLlmContextCount.value.toInt())
+                conversationContextManager.updateMaxContextCount(sliderLlmContextCount.value.toInt())
 
                 // Save Voice Settings
                 settingsRepository.setWakeSensitivity(sliderWakeSensitivity.value)

@@ -35,6 +35,28 @@ data class Intent(
 )
 
 /**
+ * Interface for conversation context that provides contextual information
+ * to enable context-aware chat responses.
+ */
+interface ConversationContext {
+    /**
+     * Build a context string that can be prepended to chat messages
+     * to provide conversation history and state information.
+     *
+     * @return A string containing context information, or empty string if no context available
+     */
+    suspend fun buildContextString(): String
+
+    /**
+     * Get the number of context items currently stored.
+     * Useful for debugging and logging purposes.
+     *
+     * @return The count of context items available
+     */
+    fun getContextCount(): Int
+}
+
+/**
  * Routes voice commands to appropriate handlers
  *
  * This class handles intent parsing and LLM routing.
@@ -42,11 +64,14 @@ data class Intent(
  *
  * @param intentExecutor Executes intents via domain use cases
  * @param llmRepository For chat functionality
+ * @param handleChatUseCase For handling chat intents
+ * @param conversationContext Provides conversation history for context-aware responses
  */
 class IntentRouter @Inject constructor(
     private val intentExecutor: IntentExecutor,
     private val llmRepository: LLMRepository?,
-    private val handleChatUseCase: HandleChatUseCase
+    private val handleChatUseCase: HandleChatUseCase,
+    private val conversationContext: ConversationContext
 ) {
 
     /**
@@ -109,7 +134,7 @@ class IntentRouter @Inject constructor(
         }
 
         if (routedMode == LLMRouteMode.CHAT) {
-            return intentExecutor.execute(toDomainIntent(Intent(IntentType.CHAT, query = normalizedText)))
+            return handleChatWithContext(normalizedText)
         }
 
         val llmIntent = llm.parseCommandIntent(normalizedText).fold(
@@ -121,7 +146,7 @@ class IntentRouter @Inject constructor(
         )
 
         return if (llmIntent.type == IntentType.UNKNOWN) {
-            intentExecutor.execute(toDomainIntent(Intent(IntentType.CHAT, query = normalizedText)))
+            handleChatWithContext(normalizedText)
         } else {
             handleIntent(llmIntent)
         }
@@ -185,9 +210,46 @@ class IntentRouter @Inject constructor(
                 intentExecutor.execute(domainIntent)
             }
             IntentType.QUERY -> handleQuery(intent)
-            IntentType.CHAT -> intentExecutor.execute(toDomainIntent(intent))
+            IntentType.CHAT -> handleChat(intent)
             IntentType.UNKNOWN -> "没听懂，请再说一遍"
         }
+    }
+
+    /**
+     * Handle CHAT type intent with conversation context
+     */
+    private suspend fun handleChat(intent: Intent): String {
+        val contextString = conversationContext.buildContextString()
+        val contextCount = conversationContext.getContextCount()
+
+        if (contextCount > 0) {
+            Timber.d("handleChat: context available ($contextCount items), prepending context")
+        }
+
+        // Prepend context to the query for context-aware responses
+        val queryWithContext = if (contextString.isNotEmpty()) {
+            "$contextString\n\n当前消息: ${intent.query ?: ""}"
+        } else {
+            intent.query ?: ""
+        }
+
+        val chatIntent = Intent(
+            type = intent.type,
+            action = intent.action,
+            query = queryWithContext,
+            artist = intent.artist,
+            value = intent.value,
+            song = intent.song
+        )
+
+        return intentExecutor.execute(toDomainIntent(chatIntent))
+    }
+
+    /**
+     * Helper to handle chat with context from raw text
+     */
+    private suspend fun handleChatWithContext(text: String): String {
+        return handleChat(Intent(IntentType.CHAT, query = text))
     }
 
     /**
