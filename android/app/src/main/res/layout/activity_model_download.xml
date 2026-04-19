@@ -6,6 +6,7 @@
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:paddingHorizontal="24dp"
     android:background="@color/background">
 
     <!-- Logo Area with Glow -->
@@ -74,7 +75,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
         app:cardBackgroundColor="@color/surface"
-        app:cardCornerRadius="16dp"
+        app:cardCornerRadius="20dp"
         app:cardElevation="0dp"
         app:strokeColor="@color/primary"
         app:strokeWidth="1dp"
