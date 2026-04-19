@@ -144,7 +144,13 @@ class PlaylistActivity : AppCompatActivity() {
             .setTitle("选择播放设备")
             .setItems(deviceNames) { _, which ->
                 if (which < devices.size) {
-                    viewModel.selectDlnaDevice(devices[which])
+                    val selectedDevice = devices[which]
+                    viewModel.selectDlnaDevice(selectedDevice)
+                    Toast.makeText(
+                        this,
+                        if (selectedDevice.id == LOCAL_DEVICE_SESSION_ID) "已切换到本机播放" else "已切换到 ${selectedDevice.deviceName}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
             .show()
