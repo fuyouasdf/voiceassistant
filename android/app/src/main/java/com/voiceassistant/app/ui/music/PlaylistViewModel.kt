@@ -8,6 +8,7 @@ import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.core.music.QueueSource
 import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.SessionInfo
+import com.voiceassistant.data.remote.SessionNowPlayingItem
 import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.PlaylistSong
 import com.voiceassistant.domain.repository.MusicRepository
@@ -19,11 +20,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Singleton
 
 private const val PREF_SELECTED_DEVICE_ID = "jellyfin_selected_device_id"
 private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
 private const val LOCAL_DEVICE_NAME = "本机"
 private const val PREF_REMOTE_PLAYBACK_CHANGED = "remote_playback_changed"
+private const val DLNA_SYNC_INITIAL_DELAY_MS = 500L
+private const val DLNA_SYNC_POLL_INTERVAL_MS = 300L
+private const val DLNA_SYNC_MAX_ATTEMPTS = 10
 
 /**
  * 播放列表页面状态
@@ -121,6 +126,18 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 同步 DLNA 会话状态，用于从其他页面返回时刷新状态
+     */
+    fun syncDlnaSessionState() {
+        val savedDeviceId = sharedPreferences.getString(PREF_SELECTED_DEVICE_ID, null)
+        if (savedDeviceId != null && savedDeviceId != LOCAL_DEVICE_SESSION_ID) {
+            viewModelScope.launch {
+                syncRemoteSessionState(savedDeviceId)
+            }
+        }
+    }
+
     private suspend fun syncRemoteSessionState(sessionId: String): SessionInfo? {
         return try {
             // Check if remote playback was changed by voice command (IntentExecutor)
@@ -140,9 +157,14 @@ class PlaylistViewModel @Inject constructor(
             val isCurrentlyPlaying = syncedSession?.nowPlayingItem != null &&
                 (syncedSession.playbackState?.isPaused?.not() ?: false)
 
+            val newIsPlaying = when {
+                remotePlaybackChanged -> isCurrentlyPlaying
+                _uiState.value.selectedDlnaDevice?.id != sessionId -> isCurrentlyPlaying
+                else -> _uiState.value.isPlaying
+            }
             _uiState.value = _uiState.value.copy(
                 selectedDlnaDevice = selectedDevice,
-                isPlaying = if (remotePlaybackChanged) isCurrentlyPlaying else (_uiState.value.selectedDlnaDevice?.id != sessionId && isCurrentlyPlaying)
+                isPlaying = newIsPlaying
             )
 
             // Clear the flag after syncing
@@ -355,27 +377,59 @@ class PlaylistViewModel @Inject constructor(
                         )
                     } else {
                         Timber.d("DLNA playItem succeeded, syncing state...")
-                        // DLNA 设备播放需要时间同步状态，先等待一下再同步
-                        kotlinx.coroutines.delay(500)
-                        val syncedSession = syncRemoteSessionState(session.id)
-                        // 优先检查 nowPlayingItem 是否匹配
-                        val matchedItem = syncedSession?.nowPlayingItem?.id == song.songId
-                        // 检查播放状态（isPaused == false 表示正在播放）
-                        val actualPlaying = syncedSession?.playbackState?.isPaused?.not() ?: true
-                        Timber.d("DLNA sync: matchedItem=$matchedItem, actualPlaying=$actualPlaying, nowPlayingItem=${syncedSession?.nowPlayingItem?.id}")
-                        // 如果 nowPlayingItem 匹配，或者播放状态显示正在播放，则认为成功
-                        if (matchedItem || actualPlaying) {
-                            _uiState.value = _uiState.value.copy(isPlaying = true)
-                        } else {
-                            // DLNA 设备播放需要更多时间同步状态，只要 playItem 成功就认为开始播放
-                            Timber.d("DLNA: playItem success, assuming playback started")
-                            _uiState.value = _uiState.value.copy(isPlaying = true)
-                        }
+                        // 先用用户点击的歌曲信息更新 UI，避免显示空白
+                        val optimisticNowPlaying = SessionNowPlayingItem(
+                            id = song.songId,
+                            name = song.title,
+                            album = song.album,
+                            artists = listOfNotNull(song.artist),
+                            durationTicks = (song.duration * 10000000L),
+                            mediaType = "Audio"
+                        )
+                        val optimisticDevice = session.copy(nowPlayingItem = optimisticNowPlaying)
+                        _uiState.value = _uiState.value.copy(
+                            selectedDlnaDevice = optimisticDevice,
+                            isPlaying = true
+                        )
+
+                        // 启动轮询，持续同步直到 nowPlayingItem 有值或达到最大重试次数
+                        pollDlnaSessionState(session.id, song.songId)
                     }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "播放播放列表歌曲失败")
                 _uiState.value = _uiState.value.copy(error = "播放失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 轮询 DLNA 会话状态，直到 nowPlayingItem 有值或达到最大重试次数
+     * DLNA 设备播放后，Jellyfin Sessions API 需要时间同步状态
+     */
+    private fun pollDlnaSessionState(sessionId: String, expectedSongId: String) {
+        viewModelScope.launch {
+            var attempts = 0
+            // 初始延迟
+            kotlinx.coroutines.delay(DLNA_SYNC_INITIAL_DELAY_MS)
+
+            while (attempts < DLNA_SYNC_MAX_ATTEMPTS) {
+                val syncedSession = syncRemoteSessionState(sessionId)
+                val nowPlayingId = syncedSession?.nowPlayingItem?.id
+
+                if (nowPlayingId != null) {
+                    // 已同步到 nowPlayingItem，停止轮询
+                    Timber.d("DLNA sync completed: nowPlayingItem=$nowPlayingId after ${attempts + 1} attempts")
+                    break
+                }
+
+                attempts++
+                Timber.d("DLNA sync attempt $attempts/$DLNA_SYNC_MAX_ATTEMPTS: nowPlayingItem still null")
+                kotlinx.coroutines.delay(DLNA_SYNC_POLL_INTERVAL_MS)
+            }
+
+            if (attempts >= DLNA_SYNC_MAX_ATTEMPTS) {
+                Timber.w("DLNA sync max attempts reached, nowPlayingItem may not be available")
             }
         }
     }

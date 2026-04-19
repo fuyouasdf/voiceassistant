@@ -47,6 +47,12 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
         startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 同步 DLNA 会话状态
+        playbackViewModel.syncDlnaSessionState()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityPlaylistListBinding.inflate(layoutInflater)
