@@ -3,6 +3,7 @@ package com.voiceassistant.app.ui.music
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -13,17 +14,24 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityPlaylistListBinding
+import com.voiceassistant.app.ui.playback.MiniPlayerFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class PlaylistListActivity : AppCompatActivity() {
+class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerClickListener {
 
     private val viewModel: PlaylistListViewModel by viewModels()
     private lateinit var binding: ActivityPlaylistListBinding
     private lateinit var playlistAdapter: PlaylistListAdapter
+
+    override fun onMiniPlayerClicked() {
+        // 点击 mini player 打开 NowPlayingActivity
+        startActivity(Intent(this, NowPlayingActivity::class.java))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,6 +41,7 @@ class PlaylistListActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setupInsets()
+        setupMiniPlayer(savedInstanceState)
         setupRecyclerView()
         setupListeners()
         observeState()
@@ -43,6 +52,31 @@ class PlaylistListActivity : AppCompatActivity() {
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(view.paddingLeft, insets.top, view.paddingRight, view.paddingBottom)
             windowInsets
+        }
+
+        // RecyclerView needs to adjust padding for bottom insets
+        ViewCompat.setOnApplyWindowInsetsListener(binding.recyclerPlaylists) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bottomPadding = systemBars.bottom
+            view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, bottomPadding)
+            windowInsets
+        }
+
+        // Mini player container needs to adjust for system bars
+        ViewCompat.setOnApplyWindowInsetsListener(binding.miniPlayerContainer) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val params = view.layoutParams as ViewGroup.MarginLayoutParams
+            params.bottomMargin = systemBars.bottom
+            view.layoutParams = params
+            windowInsets
+        }
+    }
+
+    private fun setupMiniPlayer(savedInstanceState: Bundle?) {
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.miniPlayerContainer, MiniPlayerFragment())
+                .commit()
         }
     }
 
