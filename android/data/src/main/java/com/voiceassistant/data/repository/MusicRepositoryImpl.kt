@@ -154,6 +154,20 @@ class MusicRepositoryImpl(
         return jellyfinClient.setVolume(sessionId, volume)
     }
 
+    override suspend fun getVolume(sessionId: String): Result<Int> {
+        return try {
+            val volume = jellyfinClient.getSessionVolume(sessionId)
+            if (volume != null) {
+                Result.success(volume)
+            } else {
+                Result.failure(Exception("无法获取当前音量"))
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "getVolume failed")
+            Result.failure(e)
+        }
+    }
+
     private fun JellyfinSong.toDomainModel(): Song {
         return Song(
             id = id,

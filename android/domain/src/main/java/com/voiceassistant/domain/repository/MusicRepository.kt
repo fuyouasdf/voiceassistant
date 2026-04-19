@@ -87,6 +87,11 @@ interface MusicRepository {
     suspend fun setVolume(sessionId: String, volume: Int): Result<Boolean>
 
     /**
+     * Get current volume (0-100) from a Jellyfin session
+     */
+    suspend fun getVolume(sessionId: String): Result<Int>
+
+    /**
      * Get stream information for a song (includes URL and playback session info)
      */
     suspend fun getStreamInfo(songId: String): Result<StreamInfo>

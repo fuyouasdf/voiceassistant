@@ -325,6 +325,36 @@ class JellyfinBrowseActivity : AppCompatActivity() {
                 updateDlnaDialog(state.dlnaDevices)
             }
         }
+
+        // Update volume indicator for DLNA devices
+        updateVolumeIndicator(state)
+    }
+
+    /**
+     * Update volume indicator based on selected DLNA device
+     */
+    private fun updateVolumeIndicator(state: JellyfinBrowseUiState) {
+        val device = state.selectedDlnaDevice
+        if (device == null || device.id == LOCAL_DEVICE_SESSION_ID) {
+            binding.volumeContainer.visibility = View.GONE
+            return
+        }
+
+        val volumeLevel = device.playbackState?.volumeLevel
+        if (volumeLevel != null) {
+            binding.volumeContainer.visibility = View.VISIBLE
+            binding.tvVolume.text = "${volumeLevel}%"
+
+            // Update volume icon based on level
+            val iconRes = when {
+                volumeLevel == 0 -> android.R.drawable.ic_lock_silent_mode
+                volumeLevel <= 30 -> android.R.drawable.ic_lock_silent_mode_off
+                else -> android.R.drawable.ic_lock_silent_mode_off
+            }
+            binding.ivVolumeIcon.setImageResource(iconRes)
+        } else {
+            binding.volumeContainer.visibility = View.GONE
+        }
     }
 
     private fun renderMiniPlayerForSelectedDevice(state: JellyfinBrowseUiState) {

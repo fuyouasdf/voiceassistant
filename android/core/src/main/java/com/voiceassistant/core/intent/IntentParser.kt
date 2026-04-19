@@ -61,9 +61,12 @@ class IntentParser {
     private fun parseVolumeIntent(text: String): Intent {
         val value = extractNumber(text)
         return when {
-            text.contains("调到") || text.contains("设为") -> Intent(IntentType.VOLUME, action = "set", value = value ?: 50)
-            text.contains("大") || text.contains("高") || text.contains("加") -> Intent(IntentType.VOLUME, action = "up", value = value ?: 10)
-            text.contains("小") || text.contains("低") || text.contains("减") -> Intent(IntentType.VOLUME, action = "down", value = value ?: 10)
+            // 调到XX%、设为XX%、音量到XX% 等都是设置绝对音量
+            text.contains("音量到") || text.contains("音量设为") || text.contains("音量调到") -> Intent(IntentType.VOLUME, action = "set", value = value ?: 50)
+            // 调大、调高、增加 - 相对增加
+            (text.contains("调") && text.contains("大")) || text.contains("高") || text.contains("加") -> Intent(IntentType.VOLUME, action = "up", value = value ?: 10)
+            // 调小、调低、减少 - 相对减少
+            (text.contains("调") && text.contains("小")) || text.contains("低") || text.contains("减") -> Intent(IntentType.VOLUME, action = "down", value = value ?: 10)
             text.contains("静音") -> Intent(IntentType.VOLUME, action = "mute")
             else -> Intent(IntentType.VOLUME, action = "set", value = 50)
         }
@@ -77,8 +80,50 @@ class IntentParser {
         }
     }
 
-    private fun extractNumber(text: String): Int? =
-        NUMBER_REGEX.find(text)?.value?.toIntOrNull()
+    private fun extractNumber(text: String): Int? {
+        // 先尝试阿拉伯数字
+        NUMBER_REGEX.find(text)?.value?.toIntOrNull()?.let { return it }
+
+        // 尝试解析中文数字 "百分之X"
+        val chinesePercentRegex = Regex("百分之([一二三四五六七八九十百]+)")
+        chinesePercentRegex.find(text)?.let { match ->
+            return chineseToNumber(match.groupValues[1])
+        }
+
+        // 尝试解析纯中文数字
+        val chineseRegex = Regex("[一二三四五六七八九十百]+")
+        chineseRegex.find(text)?.let { match ->
+            return chineseToNumber(match.value)
+        }
+
+        return null
+    }
+
+    /**
+     * 中文数字转阿拉伯数字
+     */
+    private fun chineseToNumber(chinese: String): Int {
+        val map = mapOf(
+            "零" to 0, "一" to 1, "二" to 2, "三" to 3, "四" to 4,
+            "五" to 5, "六" to 6, "七" to 7, "八" to 8, "九" to 9, "十" to 10
+        )
+        return when {
+            chinese.contains("百") -> {
+                val parts = chinese.split("百")
+                val hundred = map[parts.getOrNull(0)] ?: 1
+                val tens = if (parts.size > 1) map[parts[1].replace("十", "")] ?: 0 else 0
+                val ones = if (parts.size > 1 && parts[1].contains("十")) 10 else 0
+                hundred * 100 + tens * 10 + ones
+            }
+            chinese.contains("十") -> {
+                val parts = chinese.split("十")
+                val tens = if (parts[0].isEmpty()) 1 else map[parts[0]] ?: 1
+                val ones = if (parts.size > 1 && parts[1].isNotEmpty()) map[parts[1]] ?: 0 else 0
+                tens * 10 + ones
+            }
+            else -> map[chinese] ?: 0
+        }
+    }
 
     companion object {
         private val KEYWORDS_MUSIC = listOf("播放", "暂停", "继续", "停止", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌")

@@ -267,6 +267,34 @@
                     android:textColor="@color/text_tertiary"
                     android:textSize="11sp" />
 
+                <!-- Volume Indicator -->
+                <LinearLayout
+                    android:id="@+id/volumeContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <ImageView
+                        android:id="@+id/ivVolumeIcon"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@android:drawable/ic_lock_silent_mode_off"
+                        app:tint="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/tvVolume"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        tools:text="50%" />
+                </LinearLayout>
+
             </LinearLayout>
 
         </LinearLayout>

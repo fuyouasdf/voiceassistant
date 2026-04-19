@@ -1167,6 +1167,22 @@ class JellyfinClient(
     }
 
     /**
+     * 获取指定会话的音量
+     * @param sessionId 会话ID
+     * @return 当前音量 (0-100)，如果获取失败返回 null
+     */
+    suspend fun getSessionVolume(sessionId: String): Int? = withContext(Dispatchers.IO) {
+        try {
+            val sessions = getSessions()
+            val session = sessions.find { it.id == sessionId }
+            session?.playbackState?.volumeLevel
+        } catch (e: Exception) {
+            Timber.e(e, "获取会话音量失败: sessionId=$sessionId")
+            null
+        }
+    }
+
+    /**
      * 发送播放命令（通过 Playing 端点）
      * 使用 /Sessions/{sessionId}/Playing?ItemIds=xxx&PlayCommand=PlayNow
      */
@@ -1202,11 +1218,13 @@ class JellyfinClient(
     suspend fun sendSessionCommand(sessionId: String, command: String, arguments: Map<String, Any>? = null): Result<Boolean> = withContext(Dispatchers.IO) {
         Timber.d("sendSessionCommand: sessionId=$sessionId, command=$command, arguments=$arguments")
         try {
-            val queryArgs = arguments?.mapValues { (_, value) -> value.toString() } ?: emptyMap()
             val response = if (PLAYSTATE_COMMANDS.contains(command)) {
+                // PlayState commands use query parameters
+                val queryArgs = arguments?.mapValues { (_, value) -> value.toString() } ?: emptyMap()
                 sessionApi.sendPlaystateCommand(sessionId, command, queryArgs)
             } else {
-                sessionApi.sendGeneralCommand(sessionId, command, queryArgs)
+                // General commands use request body with Name and Arguments
+                sessionApi.sendGeneralCommand(sessionId, GeneralCommandBody(command, arguments))
             }
             if (response.isSuccessful || response.code() == 204) {
                 Timber.d("sendSessionCommand成功: $command")
@@ -1409,6 +1427,55 @@ class JellyfinClient(
         return sendSessionCommand(sessionId, "SetVolume", mapOf("Volume" to normalized))
     }
 
+    /**
+     * 音量增加
+     */
+    suspend fun volumeUp(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "VolumeUp")
+
+    /**
+     * 音量减少
+     */
+    suspend fun volumeDown(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "VolumeDown")
+
+    /**
+     * 静音
+     */
+    suspend fun mute(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "Mute")
+
+    /**
+     * 取消静音
+     */
+    suspend fun unmute(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "Unmute")
+
+    /**
+     * 切换静音状态
+     */
+    suspend fun toggleMute(sessionId: String): Result<Boolean> = sendSessionCommand(sessionId, "ToggleMute")
+
+    /**
+     * 设置音轨索引
+     * @param index 音轨索引 (0-based)
+     */
+    suspend fun setAudioStreamIndex(sessionId: String, index: Int): Result<Boolean> {
+        return sendSessionCommand(sessionId, "SetAudioStreamIndex", mapOf("Index" to index))
+    }
+
+    /**
+     * 设置字幕轨索引
+     * @param index 字幕轨索引 (-1 表示关闭字幕)
+     */
+    suspend fun setSubtitleStreamIndex(sessionId: String, index: Int): Result<Boolean> {
+        return sendSessionCommand(sessionId, "SetSubtitleStreamIndex", mapOf("Index" to index))
+    }
+
+    /**
+     * 播放媒体源
+     * @param mediaSourceId 媒体源 ID
+     */
+    suspend fun playMediaSource(sessionId: String, mediaSourceId: String): Result<Boolean> {
+        return sendSessionCommand(sessionId, "PlayMediaSource", mapOf("MediaSourceId" to mediaSourceId))
+    }
+
     companion object {
         private const val PLAYBACK_INFO_CACHE_TTL_MS = 60_000L
         private val PLAYSTATE_COMMANDS = setOf(
@@ -1562,11 +1629,10 @@ interface JellyfinSessionApi {
     suspend fun getSessions(): Response<List<SessionDto>>
 
     // 发送通用命令（Command 端点）
-    @POST("Sessions/{sessionId}/Command/{command}")
+    @POST("Sessions/{sessionId}/Command")
     suspend fun sendGeneralCommand(
         @Path("sessionId") sessionId: String,
-        @Path("command") command: String,
-        @QueryMap query: Map<String, String>
+        @Body command: GeneralCommandBody
     ): Response<Unit>
 
     // 发送播放状态命令（Playstate 端点）
@@ -1822,6 +1888,15 @@ data class PlaybackStopRequest(
     @SerializedName("MediaSourceId") val mediaSourceId: String? = null,
     @SerializedName("PositionTicks") val positionTicks: Long,
     @SerializedName("Failed") val failed: Boolean = false
+)
+
+/**
+ * Jellyfin GeneralCommand 请求体
+ * API: POST /Sessions/{sessionId}/Command
+ */
+data class GeneralCommandBody(
+    @SerializedName("Name") val name: String,
+    @SerializedName("Arguments") val arguments: Map<String, Any>? = null
 )
 
 data class UserItemDataDto(

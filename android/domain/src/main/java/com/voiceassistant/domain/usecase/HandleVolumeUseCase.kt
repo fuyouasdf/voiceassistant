@@ -48,7 +48,9 @@ class HandleVolumeUseCase @Inject constructor(
 
     private suspend fun handleUp(intent: Intent, sessionId: String, repo: MusicRepository): String {
         val increment = (intent.value ?: 10).coerceIn(0, 100)
-        val newVolume = (lastKnownVolume + increment).coerceAtMost(100)
+        // 先获取设备当前音量
+        val currentVolume = repo.getVolume(sessionId).getOrElse { lastKnownVolume }
+        val newVolume = (currentVolume + increment).coerceAtMost(100)
         val result = repo.setVolume(sessionId, newVolume)
         return if (result.isSuccess) {
             lastKnownVolume = newVolume
@@ -60,7 +62,9 @@ class HandleVolumeUseCase @Inject constructor(
 
     private suspend fun handleDown(intent: Intent, sessionId: String, repo: MusicRepository): String {
         val decrement = (intent.value ?: 10).coerceIn(0, 100)
-        val newVolume = (lastKnownVolume - decrement).coerceAtLeast(0)
+        // 先获取设备当前音量
+        val currentVolume = repo.getVolume(sessionId).getOrElse { lastKnownVolume }
+        val newVolume = (currentVolume - decrement).coerceAtLeast(0)
         val result = repo.setVolume(sessionId, newVolume)
         return if (result.isSuccess) {
             lastKnownVolume = newVolume

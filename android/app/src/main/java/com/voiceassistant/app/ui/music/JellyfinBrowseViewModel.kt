@@ -409,6 +409,11 @@ class JellyfinBrowseViewModel @Inject constructor(
                 isPlaying = nextIsPlaying
             )
             persistSelectedDevice(device)
+
+            // 同步远程设备状态以获取最新音量等信息
+            if (device.id != LOCAL_DEVICE_SESSION_ID) {
+                syncRemoteSessionState(device.id)
+            }
         }
     }
 
@@ -550,6 +555,11 @@ class JellyfinBrowseViewModel @Inject constructor(
                 savedDevice != null -> {
                     Timber.d("已恢复上次选择的设备: ${savedDevice.deviceName}")
                 }
+            }
+
+            // 同步远程设备的音量等信息
+            if (selectedDevice.id != LOCAL_DEVICE_SESSION_ID) {
+                syncRemoteSessionState(selectedDevice.id)
             }
         } catch (e: Exception) {
             Timber.e(e, "刷新设备列表失败")
