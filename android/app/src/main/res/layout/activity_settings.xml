@@ -12,7 +12,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingHorizontal="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="32dp">
 
         <!-- Title -->
         <TextView
@@ -22,7 +24,7 @@
             android:text="@string/settings_title"
             android:textColor="@color/text_primary"
             android:textSize="24sp"
-            android:textStyle="bold" />
+            android:textAppearance="@style/TextAppearance.VoiceAssistant.Title.Large" />
 
         <!-- Music Service Section -->
         <TextView
@@ -39,7 +41,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="12dp"
+            app:cardCornerRadius="20dp"
             app:cardElevation="0dp"
             app:strokeColor="@color/surface_elevated"
             app:strokeWidth="1dp">
@@ -81,7 +83,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_jellyfin_url"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etJellyfinUrl"
@@ -99,7 +101,7 @@
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_jellyfin_api_key"
                     app:endIconMode="password_toggle"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etJellyfinApiKey"
@@ -124,7 +126,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/settings_test_jellyfin_connection"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                        style="@style/Widget.VoiceAssistant.Button.Secondary" />
 
                     <ProgressBar
                         android:id="@+id/progressJellyfin"
@@ -162,7 +164,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
             app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="12dp"
+            app:cardCornerRadius="20dp"
             app:cardElevation="0dp"
             app:strokeColor="@color/surface_elevated"
             app:strokeWidth="1dp">
@@ -204,7 +206,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_llm_url"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etLlmUrl"
@@ -222,7 +224,7 @@
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_llm_api_key"
                     app:endIconMode="password_toggle"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etLlmApiKey"
@@ -239,7 +241,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_llm_model"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etLlmModel"
@@ -256,7 +258,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_llm_system_prompt"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etLlmSystemPrompt"
@@ -275,7 +277,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
                     android:hint="@string/settings_llm_router_prompt"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etLlmRouterPrompt"
@@ -293,7 +295,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="@string/settings_llm_command_prompt"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etLlmCommandPrompt"
@@ -365,7 +367,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/settings_test_llm_connection"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                        style="@style/Widget.VoiceAssistant.Button.Secondary" />
 
                     <ProgressBar
                         android:id="@+id/progressLlm"
@@ -403,7 +405,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
             app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="12dp"
+            app:cardCornerRadius="20dp"
             app:cardElevation="0dp"
             app:strokeColor="@color/surface_elevated"
             app:strokeWidth="1dp">
@@ -568,7 +570,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/settings_test_kws"
-                    style="@style/Widget.MaterialComponents.Button.TextButton" />
+                    style="@style/Widget.VoiceAssistant.Button.Ghost" />
 
                 <TextView
                     android:id="@+id/tvKwsStatus"
@@ -592,7 +594,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/settings_wake_words_add"
-                    style="@style/Widget.MaterialComponents.Button.TextButton" />
+                    style="@style/Widget.VoiceAssistant.Button.Ghost" />
 
             </LinearLayout>
 
@@ -605,7 +607,7 @@
             android:layout_height="56dp"
             android:text="@string/settings_save"
             android:textSize="16sp"
-            app:cornerRadius="12dp" />
+            style="@style/Widget.VoiceAssistant.Button.Primary" />
 
     </LinearLayout>
 
