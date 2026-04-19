@@ -183,6 +183,20 @@ class PlaylistActivity : AppCompatActivity() {
             }
         }
 
+        // 监听临时播放列表状态变化
+        lifecycleScope.launch {
+            var wasActive = false
+            musicPlayer.state.collectLatest {
+                val isActive = musicPlayer.isTempPlaylistActive
+                if (isActive && !wasActive) {
+                    Toast.makeText(this@PlaylistActivity, "临时播放列表模式，点击右侧图标退出", Toast.LENGTH_LONG).show()
+                } else if (!isActive && wasActive) {
+                    Toast.makeText(this@PlaylistActivity, "已退出临时播放列表", Toast.LENGTH_SHORT).show()
+                }
+                wasActive = isActive
+            }
+        }
+
         lifecycleScope.launch {
             musicPlayer.state.collectLatest { playerState ->
                 val state = viewModel.uiState.value
