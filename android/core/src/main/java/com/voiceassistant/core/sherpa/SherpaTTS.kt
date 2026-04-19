@@ -13,6 +13,31 @@ interface SherpaTTS {
     fun initialize(modelPath: String): Boolean
 
     /**
+     * Set the synthesis speed
+     * @param speed Speed multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double speed)
+     */
+    fun setSpeed(speed: Float)
+
+    /**
+     * Set the speaker ID (voice selection) for multi-speaker models
+     * @param sid Speaker ID (0 = default/first speaker)
+     */
+    fun setSpeakerId(sid: Int)
+
+    /**
+     * Set the voice pitch/character adjustment
+     * @param pitch Pitch multiplier (0.5 = lower, 1.0 = normal, 2.0 = higher)
+     * Note: This affects noiseScale in VITS models, which modifies voice character
+     */
+    fun setPitch(pitch: Float)
+
+    /**
+     * Get the number of available speakers in the model
+     * @return Number of speakers, or 1 if single-speaker model
+     */
+    fun getSpeakerCount(): Int
+
+    /**
      * Synthesize text to audio
      * @param text Text to synthesize
      * @return Audio samples (float array)

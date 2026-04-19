@@ -11,6 +11,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -255,10 +256,16 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
-        // Mini player container with system bars insets
+        // Mini player container with system bars and IME insets
+        // When keyboard opens (ime.bottom > 0), push mini player up so it's visible above keyboard
+        // When keyboard closes, use systemBars.bottom for navigation bar padding
         ViewCompat.setOnApplyWindowInsetsListener(miniPlayerContainer) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(0, 0, 0, insets.bottom)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomMargin = maxOf(systemBars.bottom, ime.bottom)
+            val params = view.layoutParams as ViewGroup.MarginLayoutParams
+            params.bottomMargin = bottomMargin
+            view.layoutParams = params
             windowInsets
         }
     }

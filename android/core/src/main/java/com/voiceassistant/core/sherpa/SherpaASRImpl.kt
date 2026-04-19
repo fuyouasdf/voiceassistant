@@ -11,8 +11,14 @@ import timber.log.Timber
 class SherpaASRImpl(private val context: Context) : SherpaASR {
 
     private var recognizer: OnlineRecognizer? = null
+    private var endpointConfig: EndpointTimingConfig = EndpointTimingConfig()
 
-    override fun initialize(modelPath: String, provider: String): Boolean {
+    override fun initialize(
+        modelPath: String,
+        provider: String,
+        endpointTimingConfig: EndpointTimingConfig
+    ): Boolean {
+        endpointConfig = endpointTimingConfig
         return try {
             // modelPath 格式: "models/asr"
             // 模型目录名从 modelPath 末尾提取
@@ -35,12 +41,9 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
                     modelType = "zipformer2"  // 新模型使用 zipformer2
                 ),
                 endpointConfig = EndpointConfig(
-                    // 调整静音阈值，避免短命令被过早截断
-                    // rule1: 非语音连续超时（静音多久认为一句话结束）
-                    // rule2: 语音段落后的静音超时（增大到4.0s，避免2-3秒短命令被截断）
-                    rule1 = EndpointRule(false, 4.0f, 0.0f),
-                    rule2 = EndpointRule(true, 4.0f, 0.0f),
-                    rule3 = EndpointRule(false, 0.0f, 30.0f)
+                    rule1 = EndpointRule(endpointConfig.rule1MustStartWithTrailingSilence, endpointConfig.rule1TimeoutSec, endpointConfig.rule1TrailingSilenceSec),
+                    rule2 = EndpointRule(endpointConfig.rule2MustStartWithTrailingSilence, endpointConfig.rule2TimeoutSec, endpointConfig.rule2TrailingSilenceSec),
+                    rule3 = EndpointRule(endpointConfig.rule3MustStartWithTrailingSilence, endpointConfig.rule3TimeoutSec, endpointConfig.rule3TrailingSilenceSec)
                 ),
                 enableEndpoint = true,
                 decodingMethod = "greedy_search"

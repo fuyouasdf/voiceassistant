@@ -54,6 +54,9 @@ dependencies {
     // Gson
     implementation("com.google.code.gson:gson:${versions["gson"]}")
 
+    // Retrofit (for HttpException)
+    implementation("com.squareup.retrofit2:retrofit:${versions["retrofit"]}")
+
     // Media3
     implementation("androidx.media3:media3-common:${versions["media3"]}")
     implementation("androidx.media3:media3-session:${versions["media3"]}")

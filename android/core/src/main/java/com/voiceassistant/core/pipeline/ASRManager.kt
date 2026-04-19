@@ -1,5 +1,6 @@
 package com.voiceassistant.core.pipeline
 
+import com.voiceassistant.core.sherpa.EndpointTimingConfig
 import com.voiceassistant.core.sherpa.SherpaASR
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,7 +18,8 @@ import timber.log.Timber
  */
 class ASRManager(
     private val asr: SherpaASR,
-    private val modelPath: String
+    private val modelPath: String,
+    private val endpointTimingConfig: EndpointTimingConfig = EndpointTimingConfig()
 ) {
     private var isLoaded = false
     private val provider: String = "cpu"  // TODO: 后续调查 GPU 支持问题
@@ -31,7 +33,7 @@ class ASRManager(
         Timber.d("Lazy loading ASR with provider: $provider...")
         withContext(Dispatchers.IO) {
             // 模型实际目录名: sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20
-            val result = asr.initialize(modelPath, provider)
+            val result = asr.initialize(modelPath, provider, endpointTimingConfig)
             Timber.d("ASR initialized: $result")
             isLoaded = true
         }

@@ -1,6 +1,7 @@
 package com.voiceassistant.domain.usecase
 
 import com.voiceassistant.domain.model.Intent
+import com.voiceassistant.domain.repository.ChatContextProvider
 import com.voiceassistant.domain.repository.ModelNotFoundException
 import com.voiceassistant.domain.repository.LLMRepository
 import timber.log.Timber
@@ -12,7 +13,8 @@ import javax.inject.Inject
  * Use case for handling general chat commands.
  */
 class HandleChatUseCase @Inject constructor(
-    private val llmRepository: LLMRepository?
+    private val llmRepository: LLMRepository?,
+    private val chatContextProvider: ChatContextProvider?
 ) {
 
     suspend fun execute(intent: Intent): String {
@@ -20,8 +22,23 @@ class HandleChatUseCase @Inject constructor(
             return "需要联网才能聊天，请配置 LLM API"
         }
 
+        // Build query with conversation context
+        val query = intent.query ?: ""
+        val queryWithContext = chatContextProvider?.let { provider ->
+            val contextString = provider.buildContextString()
+            val contextCount = provider.getContextCount()
+            if (contextCount > 0) {
+                Timber.d("HandleChatUseCase: context available ($contextCount items), prepending context")
+            }
+            if (contextString.isNotEmpty()) {
+                "$contextString\n\n当前消息: $query"
+            } else {
+                query
+            }
+        } ?: query
+
         return try {
-            llmRepository.chat(intent.query ?: "").fold(
+            llmRepository.chat(queryWithContext).fold(
                 onSuccess = { it },
                 onFailure = { e -> getFriendlyErrorMessage(e as? Exception ?: Exception(e.toString())) }
             )

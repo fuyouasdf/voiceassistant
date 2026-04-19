@@ -28,6 +28,9 @@ object ConfigKeys {
     const val LLM_ROUTER_PROMPT = "llm_router_prompt"
     const val LLM_COMMAND_PROMPT = "llm_command_prompt"
     const val LLM_CONTEXT_COUNT = "llm_context_count"
+    const val LLM_MAX_TURNS_BEFORE_RESET = "llm_max_turns_before_reset"
+    const val LLM_CONVERSATION_TIMEOUT_SECONDS = "llm_conversation_timeout_seconds"
+    const val LLM_SUMMARIZATION_THRESHOLD = "llm_summarization_threshold"
 
     const val OPENCLAW_URL = "openclaw_url"
     const val OPENCLAW_TOKEN = "openclaw_token"
@@ -35,5 +38,6 @@ object ConfigKeys {
     const val WAKE_SENSITIVITY = "wake_sensitivity"
     const val WAKE_WORDS = "wake_words"
     const val TTS_SPEED = "tts_speed"
+    const val TTS_PITCH = "tts_pitch"
     const val TTS_ENABLED = "tts_enabled"
 }

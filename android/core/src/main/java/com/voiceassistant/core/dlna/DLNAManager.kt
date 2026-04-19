@@ -33,6 +33,9 @@ class DLNAManager(private val context: Context) {
     // Callback for device discovery
     var onDeviceFound: ((DLNADevice) -> Unit)? = null
 
+    // Callback for device unavailability (when restored device becomes unreachable)
+    var onDeviceUnavailable: ((DLNADevice, String) -> Unit)? = null
+
     // Current/restored device (used as the active DLNA device)
     private var _currentDevice: DLNADevice? = null
 
@@ -329,6 +332,7 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
     /**
      * Restore a previously saved device (e.g., from settings).
      * This device will be used first before starting discovery.
+     * Validates device reachability before use.
      */
     fun restoreDevice(name: String, ipAddress: String, uuid: String) {
         val device = DLNADevice(
@@ -339,6 +343,63 @@ USER-AGENT: Android/1.0 UPnP/1.1 VoiceAssistant/1.0
         _preselectedDevice.value = device
         _currentDevice = device
         Timber.d("DLNA device restored: $name ($uuid) at $ipAddress")
+
+        // Validate device is still reachable in background
+        validateDeviceReachability(device)
+    }
+
+    /**
+     * Validate if a device is still reachable on the network.
+     * @return true if device responds to ping or TCP connection attempt
+     */
+    private fun validateDeviceReachability(device: DLNADevice) {
+        discoveryScope.launch {
+            val isReachable = checkDeviceTcpConnection(device.ipAddress)
+            if (!isReachable) {
+                Timber.w("DLNA device ${device.name} is not reachable at ${device.ipAddress}")
+                onDeviceUnavailable?.invoke(device, "设备${device.name}已离线，正在重新搜索...")
+                // Trigger re-discovery since saved device is unavailable
+                startDiscovery()
+            } else {
+                Timber.d("DLNA device ${device.name} is still reachable at ${device.ipAddress}")
+            }
+        }
+    }
+
+    /**
+     * Check if device is reachable via TCP connection to port 1900 (UPnP) or port 80/443 (HTTP)
+     */
+    private suspend fun checkDeviceTcpConnection(ipAddress: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val portsToCheck = listOf(80, 443, 1900)
+            for (port in portsToCheck) {
+                try {
+                    val socket = java.net.Socket()
+                    socket.connect(java.net.InetSocketAddress(ipAddress, port), 2000)
+                    socket.close()
+                    Timber.d("Device $ipAddress reachable on port $port")
+                    return@withContext true
+                } catch (e: Exception) {
+                    // Try next port
+                }
+            }
+            // If all ports fail, try ping as last resort
+            return@withContext checkPing(ipAddress)
+        }
+    }
+
+    /**
+     * Check if device responds to ICMP ping
+     */
+    private fun checkPing(ipAddress: String): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec("/system/bin/ping -c 1 -W 2 $ipAddress")
+            val exitCode = process.waitFor()
+            exitCode == 0
+        } catch (e: Exception) {
+            Timber.w(e, "Ping check failed for $ipAddress")
+            false
+        }
     }
 
     fun getCurrentDevice(): DLNADevice? = _currentDevice

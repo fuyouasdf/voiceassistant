@@ -1,5 +1,7 @@
 package com.voiceassistant.domain.repository
 
+import com.voiceassistant.domain.model.Album
+import com.voiceassistant.domain.model.LyricsResult
 import com.voiceassistant.domain.model.Song
 
 /**
@@ -15,6 +17,31 @@ interface MusicRepository {
      * Search songs by query
      */
     suspend fun searchSongs(query: String): Result<List<Song>>
+
+    /**
+     * Search albums by query
+     */
+    suspend fun searchAlbums(query: String): Result<List<Album>>
+
+    /**
+     * Get all albums (browsing)
+     */
+    suspend fun getAlbums(): Result<List<Album>>
+
+    /**
+     * Get songs in an album
+     */
+    suspend fun getAlbumSongs(albumId: String): Result<List<Song>>
+
+    /**
+     * Get a single item by ID
+     */
+    suspend fun getItem(itemId: String): Result<Song?>
+
+    /**
+     * Get lyrics for a song
+     */
+    suspend fun getLyrics(itemId: String): Result<LyricsResult?>
 
     /**
      * Get stream URL for a song
@@ -58,4 +85,29 @@ interface MusicRepository {
      * Set volume (0-100) on a Jellyfin session
      */
     suspend fun setVolume(sessionId: String, volume: Int): Result<Boolean>
+
+    /**
+     * Get stream information for a song (includes URL and playback session info)
+     */
+    suspend fun getStreamInfo(songId: String): Result<StreamInfo>
+
+    /**
+     * Refresh stream URL for a song (bypasses cache)
+     * Used when playback fails due to expired URL
+     * @param songId The song ID to refresh
+     * @return Fresh stream URL or failure
+     */
+    suspend fun refreshStreamUrl(songId: String): Result<String>
 }
+
+/**
+ * Stream information for playback
+ */
+data class StreamInfo(
+    val url: String,
+    val playSessionId: String?,
+    val mediaSourceId: String?,
+    val playMethod: String?,
+    val container: String?,
+    val isTranscoding: Boolean
+)

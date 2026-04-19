@@ -165,15 +165,33 @@ class DLNAPlayer @Inject constructor(
     }
 
     private suspend fun getOrDiscoverDevice(): DLNADevice? {
-        // If we already have a device, use it
-        _currentDevice.value?.let { return it }
+        // If we already have a device, verify it's still usable
+        val currentDeviceValue = _currentDevice.value
+        if (currentDeviceValue != null) {
+            // Verify device is still reachable before using
+            if (isDeviceReachable(currentDeviceValue)) {
+                return currentDeviceValue
+            } else {
+                // Device no longer reachable, clear it and discover a new one
+                Timber.w("Current DLNA device ${currentDeviceValue.name} is no longer reachable")
+                _currentDevice.value = null
+                _isPlaying.value = false
+            }
+        }
 
         // Check if there is a restored/preselected device from settings
         val restoredDevice = dlnaManager.getCurrentDevice()
         if (restoredDevice != null) {
-            _currentDevice.value = restoredDevice
-            Timber.d("Using restored DLNA device: ${restoredDevice.name}")
-            return restoredDevice
+            // Verify restored device is still reachable
+            if (isDeviceReachable(restoredDevice)) {
+                _currentDevice.value = restoredDevice
+                Timber.d("Using restored DLNA device: ${restoredDevice.name}")
+                return restoredDevice
+            } else {
+                // Restored device is offline, will trigger re-discovery via DLNAManager callback
+                Timber.w("Restored DLNA device ${restoredDevice.name} is not reachable")
+                _currentDevice.value = null
+            }
         }
 
         // Check if there are any discovered devices
@@ -201,6 +219,28 @@ class DLNAPlayer @Inject constructor(
         }
 
         return null
+    }
+
+    /**
+     * Check if a device is still reachable on the network
+     */
+    private fun isDeviceReachable(device: DLNADevice): Boolean {
+        return try {
+            val socket = java.net.Socket()
+            socket.connect(java.net.InetSocketAddress(device.ipAddress, 1900), 1500)
+            socket.close()
+            true
+        } catch (e: Exception) {
+            // Try HTTP port as fallback
+            try {
+                val socket = java.net.Socket()
+                socket.connect(java.net.InetSocketAddress(device.ipAddress, 80), 1500)
+                socket.close()
+                true
+            } catch (e2: Exception) {
+                false
+            }
+        }
     }
 
     private fun setTransportURI(device: DLNADevice, url: String, title: String, artist: String): Result<Unit> {
@@ -246,5 +286,36 @@ class DLNAPlayer @Inject constructor(
             "SetVolume",
             DLNASoapClient.buildSetVolumeBody(volume)
         )
+    }
+
+    /**
+     * Release all resources held by the DLNA player.
+     * Call this when DLNA is disabled or app terminates.
+     */
+    fun release() {
+        try {
+            // Stop any current playback
+            _currentDevice.value?.let { device ->
+                try {
+                    stopPlayback(device)
+                } catch (e: Exception) {
+                    Timber.w(e, "Error stopping playback during release")
+                }
+            }
+
+            // Clear state
+            _isPlaying.value = false
+            _currentDevice.value = null
+            currentUrl = null
+            currentTitle = null
+            currentArtist = null
+
+            // Release the DLNA manager resources
+            dlnaManager.release()
+
+            Timber.d("DLNAPlayer released successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "Error releasing DLNAPlayer")
+        }
     }
 }

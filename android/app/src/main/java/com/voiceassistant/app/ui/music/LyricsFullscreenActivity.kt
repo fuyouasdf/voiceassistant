@@ -24,8 +24,8 @@ import coil.request.SuccessResult
 import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityLyricsFullscreenBinding
 import com.voiceassistant.core.music.MusicPlayer
-import com.voiceassistant.data.remote.JellyfinClient
-import com.voiceassistant.data.remote.LyricLine
+import com.voiceassistant.domain.model.LyricLine
+import com.voiceassistant.domain.repository.MusicRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +42,7 @@ class LyricsFullscreenActivity : AppCompatActivity() {
     lateinit var musicPlayer: MusicPlayer
 
     @Inject
-    lateinit var jellyfinClient: JellyfinClient
+    lateinit var musicRepository: MusicRepository
 
     @Inject
     lateinit var imageLoader: ImageLoader
@@ -271,8 +271,8 @@ class LyricsFullscreenActivity : AppCompatActivity() {
         if (songId == null) return
 
         lyricsJob = lifecycleScope.launch {
-            val result = jellyfinClient.getLyrics(songId)
-            currentLyrics = result?.lines.orEmpty()
+            val result = musicRepository.getLyrics(songId)
+            currentLyrics = result.getOrNull()?.lines.orEmpty()
             if (currentLyrics.isEmpty()) {
                 renderLyricsState("当前歌曲没有可用歌词", "当前歌曲没有可用歌词")
             } else {

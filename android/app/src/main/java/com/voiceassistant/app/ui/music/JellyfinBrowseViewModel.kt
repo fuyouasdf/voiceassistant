@@ -6,18 +6,17 @@ import androidx.lifecycle.viewModelScope
 import com.voiceassistant.core.music.MusicItem
 import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.core.music.QueueSource
-import com.voiceassistant.data.remote.JellyfinAlbum
 import com.voiceassistant.data.remote.JellyfinClient
-import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.remote.SessionInfo
+import com.voiceassistant.domain.model.Album
 import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.Song
+import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -33,15 +32,15 @@ private const val PREF_REMOTE_PLAYBACK_CHANGED = "remote_playback_changed"
  */
 data class JellyfinBrowseUiState(
     val isLoading: Boolean = false,
-    val albums: List<JellyfinAlbum> = emptyList(),
-    val songs: List<JellyfinSong> = emptyList(),
+    val albums: List<Album> = emptyList(),
+    val songs: List<Song> = emptyList(),
     val searchQuery: String = "",
     val isSearching: Boolean = false,
     val isViewingAlbum: Boolean = false,
     val currentAlbumId: String? = null,
     val currentAlbumName: String = "",
     val error: String? = null,
-    val currentSong: JellyfinSong? = null,
+    val currentSong: Song? = null,
     val isPlaying: Boolean = false,
     val dlnaDevices: List<SessionInfo> = emptyList(),
     val selectedDlnaDevice: SessionInfo? = null,
@@ -51,6 +50,7 @@ data class JellyfinBrowseUiState(
 @HiltViewModel
 class JellyfinBrowseViewModel @Inject constructor(
     private val jellyfinClient: JellyfinClient,
+    private val musicRepository: MusicRepository,
     private val sharedPreferences: SharedPreferences,
     private val playlistRepository: PlaylistRepository,
     private val musicPlayer: MusicPlayer
@@ -101,34 +101,28 @@ class JellyfinBrowseViewModel @Inject constructor(
         }
     }
 
-    private fun warmupPlaybackInfo(songs: List<JellyfinSong>) {
-        val songIds = songs.take(2).map { it.id }
-        if (songIds.isEmpty()) return
-        viewModelScope.launch {
-            jellyfinClient.prefetchPlaybackInfo(songIds)
-        }
-    }
-
     /**
      * 加载专辑列表
      */
     fun loadAlbums() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            try {
-                val albums = jellyfinClient.getAlbums()
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    albums = albums,
-                    isViewingAlbum = false
-                )
-            } catch (e: Exception) {
-                Timber.e(e, "加载专辑失败")
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "加载专辑失败: ${e.message}"
-                )
-            }
+            musicRepository.getAlbums().fold(
+                onSuccess = { albums ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        albums = albums,
+                        isViewingAlbum = false
+                    )
+                },
+                onFailure = { e ->
+                    Timber.e(e, "加载专辑失败")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "加载专辑失败: ${e.message}"
+                    )
+                }
+            )
         }
     }
 
@@ -153,48 +147,50 @@ class JellyfinBrowseViewModel @Inject constructor(
                 isSearching = true,
                 error = null
             )
-            try {
-                val songs = jellyfinClient.searchSongs(query)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    songs = songs,
-                    albums = emptyList()
-                )
-                warmupPlaybackInfo(songs)
-            } catch (e: Exception) {
-                Timber.e(e, "搜索失败")
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "搜索失败: ${e.message}"
-                )
-            }
+            musicRepository.searchSongs(query).fold(
+                onSuccess = { songs ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        songs = songs,
+                        albums = emptyList()
+                    )
+                },
+                onFailure = { e ->
+                    Timber.e(e, "搜索失败")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "搜索失败: ${e.message}"
+                    )
+                }
+            )
         }
     }
 
     /**
      * 点击专辑，加载专辑中的歌曲
      */
-    fun openAlbum(album: JellyfinAlbum) {
+    fun openAlbum(album: Album) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            try {
-                val songs = jellyfinClient.getItems(album.id)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    songs = songs,
-                    isViewingAlbum = true,
-                    currentAlbumId = album.id,
-                    currentAlbumName = album.name,
-                    albums = emptyList()
-                )
-                warmupPlaybackInfo(songs)
-            } catch (e: Exception) {
-                Timber.e(e, "加载专辑歌曲失败")
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "加载歌曲失败: ${e.message}"
-                )
-            }
+            musicRepository.getAlbumSongs(album.id).fold(
+                onSuccess = { songs ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        songs = songs,
+                        isViewingAlbum = true,
+                        currentAlbumId = album.id,
+                        currentAlbumName = album.name,
+                        albums = emptyList()
+                    )
+                },
+                onFailure = { e ->
+                    Timber.e(e, "加载专辑歌曲失败")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "加载歌曲失败: ${e.message}"
+                    )
+                }
+            )
         }
     }
 
@@ -214,7 +210,7 @@ class JellyfinBrowseViewModel @Inject constructor(
     /**
      * 播放歌曲到DLNA设备（通过Jellyfin会话控制）
      */
-    fun playSong(song: JellyfinSong) {
+    fun playSong(song: Song) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(currentSong = song)
 
@@ -253,7 +249,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                         return@launch
                     }
                     // 保持与 d4590d71 一致：只通过 Jellyfin Session API playItem 发起远程播放
-                    val result = jellyfinClient.playItem(session.id, song.id)
+                    val result = musicRepository.playItem(session.id, song.id)
                     if (result.isFailure) {
                         _uiState.value = _uiState.value.copy(
                             error = "播放失败: ${result.exceptionOrNull()?.message}"
@@ -282,33 +278,35 @@ class JellyfinBrowseViewModel @Inject constructor(
         }
     }
 
-    private suspend fun buildMusicItems(songs: List<JellyfinSong>): List<MusicItem> {
+    private suspend fun buildMusicItems(songs: List<Song>): List<MusicItem> {
         return songs.mapNotNull { listSong ->
-            try {
-                val streamInfo = jellyfinClient.getStreamInfo(listSong.id)
-                if (streamInfo.url.isBlank()) {
-                    Timber.w("跳过无可用播放地址的歌曲: songId=${listSong.id}")
+            musicRepository.getStreamInfo(listSong.id).fold(
+                onSuccess = { streamInfo ->
+                    if (streamInfo.url.isBlank()) {
+                        Timber.w("跳过无可用播放地址的歌曲: songId=${listSong.id}")
+                        null
+                    } else {
+                        MusicItem(
+                            id = listSong.id,
+                            title = listSong.title,
+                            artist = listSong.artist,
+                            album = listSong.album,
+                            duration = listSong.duration,
+                            streamUrl = streamInfo.url,
+                            coverUrl = listSong.coverUrl,
+                            playbackSessionId = streamInfo.playSessionId,
+                            mediaSourceId = streamInfo.mediaSourceId,
+                            streamContainer = streamInfo.container,
+                            streamPlayMethod = streamInfo.playMethod,
+                            isTranscoding = streamInfo.isTranscoding
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    Timber.w(e, "构建本机播放列表失败，跳过歌曲: songId=${listSong.id}")
                     null
-                } else {
-                    MusicItem(
-                        id = listSong.id,
-                        title = listSong.title,
-                        artist = listSong.artist,
-                        album = listSong.album,
-                        duration = listSong.duration,
-                        streamUrl = streamInfo.url,
-                        coverUrl = listSong.coverUrl,
-                        playbackSessionId = streamInfo.playSessionId,
-                        mediaSourceId = streamInfo.mediaSourceId,
-                        streamContainer = streamInfo.container,
-                        streamPlayMethod = streamInfo.playMethod?.name,
-                        isTranscoding = streamInfo.isTranscoding
-                    )
                 }
-            } catch (e: Exception) {
-                Timber.w(e, "构建本机播放列表失败，跳过歌曲: songId=${listSong.id}")
-                null
-            }
+            )
         }
     }
 
@@ -335,7 +333,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                             sessionId = session.id,
                             desiredPlaying = false
                         ) {
-                            jellyfinClient.pause(session.id)
+                            musicRepository.pause(session.id)
                         }
                         if (result.isFailure) {
                             _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
@@ -345,7 +343,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                             sessionId = session.id,
                             desiredPlaying = true
                         ) {
-                            jellyfinClient.unpause(session.id)
+                            musicRepository.unpause(session.id)
                         }
                         if (result.isFailure) {
                             _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
@@ -376,7 +374,7 @@ class JellyfinBrowseViewModel @Inject constructor(
                         )
                         return@launch
                     }
-                    jellyfinClient.stop(session.id)
+                    musicRepository.stop(session.id)
                 }
                 _uiState.value = _uiState.value.copy(currentSong = null, isPlaying = false)
             } catch (e: Exception) {
@@ -578,26 +576,27 @@ class JellyfinBrowseViewModel @Inject constructor(
     /**
      * 添加歌曲到播放列表
      */
-    fun addToPlaylist(playlistId: Long, song: JellyfinSong) {
+    fun addToPlaylist(playlistId: Long, song: Song) {
         viewModelScope.launch {
-            try {
-                // 获取流 URL 以便离线播放
-                val streamUrl = jellyfinClient.getStreamUrl(song.id)
-                Timber.d("addToPlaylist: song.id=${song.id}, streamUrl=$streamUrl")
-                val domainSong = Song(
-                    id = song.id,
-                    title = song.title,
-                    artist = song.artist,
-                    album = song.album,
-                    duration = song.duration,
-                    url = streamUrl,
-                    coverUrl = song.coverUrl
-                )
-                playlistRepository.addSongToPlaylist(playlistId, domainSong)
-            } catch (e: Exception) {
-                Timber.e(e, "添加到播放列表失败")
-                _uiState.value = _uiState.value.copy(error = "添加到播放列表失败: ${e.message}")
-            }
+            musicRepository.getStreamUrl(song.id).fold(
+                onSuccess = { streamUrl ->
+                    Timber.d("addToPlaylist: song.id=${song.id}, streamUrl=$streamUrl")
+                    val domainSong = Song(
+                        id = song.id,
+                        title = song.title,
+                        artist = song.artist,
+                        album = song.album,
+                        duration = song.duration,
+                        url = streamUrl,
+                        coverUrl = song.coverUrl
+                    )
+                    playlistRepository.addSongToPlaylist(playlistId, domainSong)
+                },
+                onFailure = { e ->
+                    Timber.e(e, "添加到播放列表失败")
+                    _uiState.value = _uiState.value.copy(error = "添加到播放列表失败: ${e.message}")
+                }
+            )
         }
     }
 

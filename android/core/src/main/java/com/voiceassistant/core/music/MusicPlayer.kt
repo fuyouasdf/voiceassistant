@@ -8,6 +8,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -97,7 +102,7 @@ data class MusicItem(
 class MusicPlayer @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playbackReporter: PlaybackReporter = NoOpPlaybackReporter()
-) {
+) : AudioManager.OnAudioFocusChangeListener {
     companion object {
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "music_player_channel"
@@ -165,10 +170,44 @@ class MusicPlayer @Inject constructor(
     private var seekCallback: SeekCallback? = null
 
     /**
+     * Stream URL 刷新回调接口
+     * 当播放失败（URL 过期或无效）时，通过此接口刷新 URL 并重试播放
+     */
+    interface StreamUrlRefresher {
+        /**
+         * 刷新指定歌曲的流 URL
+         * @param songId 歌曲 ID
+         * @param currentItem 当前的 MusicItem
+         * @return 新的 MusicItem（包含刷新后的 URL），如果刷新失败则返回 null
+         */
+        suspend fun refreshStreamUrl(songId: String, currentItem: MusicItem): MusicItem?
+    }
+    private var streamUrlRefresher: StreamUrlRefresher? = null
+
+    // 是否正在刷新 URL（防止重复刷新）
+    private var isRefreshingUrl = false
+
+    // Audio Focus management
+    private val audioManager: AudioManager by lazy {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var wasPlayingBeforeFocusLoss = false
+    private var hasAudioFocus = false
+
+    /**
      * 设置 Seek 回调
      */
     fun setSeekCallback(callback: SeekCallback?) {
         seekCallback = callback
+    }
+
+    /**
+     * 设置 Stream URL 刷新回调
+     * 当播放失败（URL 过期或无效）时，调用此回调刷新 URL
+     */
+    fun setStreamUrlRefresher(refresher: StreamUrlRefresher?) {
+        streamUrlRefresher = refresher
     }
 
     // MediaSession for external control (bluetooth, car audio, etc.)
@@ -214,6 +253,75 @@ class MusicPlayer @Inject constructor(
         }
     }
 
+    // AudioManager.OnAudioFocusChangeListener implementation
+    override fun onAudioFocusChange(focusChange: Int) {
+        android.util.Log.i("♪", "onAudioFocusChange: $focusChange")
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // Permanent loss - pause playback permanently
+                pause()
+                hasAudioFocus = false
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Transient loss (e.g., phone call) - pause and remember to resume
+                wasPlayingBeforeFocusLoss = exoPlayer?.isPlaying == true
+                pause()
+                hasAudioFocus = false
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Can duck - lower volume to ~30%
+                exoPlayer?.volume = 0.3f
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                // Regain focus - restore volume and resume if was playing
+                exoPlayer?.volume = 1.0f
+                if (wasPlayingBeforeFocusLoss) {
+                    resume()
+                    wasPlayingBeforeFocusLoss = false
+                }
+                hasAudioFocus = true
+            }
+        }
+    }
+
+    /**
+     * Request audio focus before playback starts
+     * @return true if audio focus was granted
+     */
+    private fun requestAudioFocus(): Boolean {
+        if (hasAudioFocus) {
+            return true
+        }
+
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+
+        audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+            .setAudioAttributes(audioAttributes)
+            .setOnAudioFocusChangeListener(this)
+            .setWillPauseWhenDucked(false)
+            .build()
+
+        val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        android.util.Log.i("♪", "requestAudioFocus: ${if (hasAudioFocus) "GRANTED" else "DENIED"}")
+        return hasAudioFocus
+    }
+
+    /**
+     * Abandon audio focus when playback stops
+     */
+    private fun abandonAudioFocus() {
+        audioFocusRequest?.let {
+            audioManager.abandonAudioFocusRequest(it)
+            android.util.Log.i("♪", "abandonAudioFocus")
+        }
+        audioFocusRequest = null
+        hasAudioFocus = false
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             android.util.Log.i("♪", "onIsPlayingChanged: $isPlaying")
@@ -229,6 +337,11 @@ class MusicPlayer @Inject constructor(
             Timber.e("Player error stack: ${error.stackTraceToString()}")
             _playbackError = error
             updateMediaSessionPlaybackState()
+
+            // 检查是否为 URL 过期错误（HTTP 4XX），尝试刷新 URL 并重试
+            if (shouldRetryWithRefresh(error)) {
+                handleUrlExpiration()
+            }
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -319,12 +432,13 @@ class MusicPlayer @Inject constructor(
                 setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             }
 
+            val bufferConfig = getAdaptiveBufferConfig()
             val loadControl = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    1500,  // minBufferMs
-                    5000,  // maxBufferMs
-                    250,   // bufferForPlaybackMs
-                    750    // bufferForPlaybackAfterRebufferMs
+                    bufferConfig.minBufferMs,
+                    bufferConfig.maxBufferMs,
+                    bufferConfig.bufferForPlaybackMs,
+                    bufferConfig.bufferForPlaybackAfterRebufferMs
                 )
                 .build()
 
@@ -333,10 +447,50 @@ class MusicPlayer @Inject constructor(
                 .build().also {
                     it.addListener(playerListener)
                 }
-            Timber.d("MusicPlayer: 创建 ExoPlayer with FFmpeg decoder extension and low-latency load control")
+            Timber.d("MusicPlayer: 创建 ExoPlayer with FFmpeg decoder extension, buffer config: $bufferConfig")
         }
         return exoPlayer!!
     }
+
+    /**
+     * 根据网络类型获取自适应缓冲配置
+     * 慢速网络(2G/3G)使用更大缓冲，快速网络(wifi/ethernet)使用较小缓冲
+     */
+    private fun getAdaptiveBufferConfig(): BufferConfig {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val network = connectivityManager?.activeNetwork
+        val capabilities = network?.let { connectivityManager.getNetworkCapabilities(it) }
+
+        val isWifiOrEthernet = capabilities?.let {
+            it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } ?: false
+
+        return if (isWifiOrEthernet) {
+            // 快速网络：较小缓冲，降低延迟
+            BufferConfig(
+                minBufferMs = 1500,
+                maxBufferMs = 5000,
+                bufferForPlaybackMs = 250,
+                bufferForPlaybackAfterRebufferMs = 750
+            )
+        } else {
+            // 慢速网络(2G/3G/4G mobile)：更大缓冲，避免频繁重新缓冲
+            BufferConfig(
+                minBufferMs = 5000,
+                maxBufferMs = 15000,
+                bufferForPlaybackMs = 1500,
+                bufferForPlaybackAfterRebufferMs = 3000
+            )
+        }
+    }
+
+    private data class BufferConfig(
+        val minBufferMs: Int,
+        val maxBufferMs: Int,
+        val bufferForPlaybackMs: Int,
+        val bufferForPlaybackAfterRebufferMs: Int
+    )
 
     /**
      * 检查 URL 是否为 HLS 流
@@ -371,6 +525,12 @@ class MusicPlayer @Inject constructor(
         seekedPositionMs = null
         lastSeekPosition = null
         lastSeekRealtimeMs = 0L
+
+        // 请求音频焦点
+        if (!requestAudioFocus()) {
+            android.util.Log.w("♪", "Failed to obtain audio focus, aborting playback")
+            return
+        }
 
         val player = getOrCreatePlayer()
         player.stop()
@@ -415,6 +575,12 @@ class MusicPlayer @Inject constructor(
      */
     fun playPlaylist(items: List<MusicItem>, startIndex: Int = 0, source: QueueSource = QueueSource.UNKNOWN) {
         if (items.isEmpty()) return
+
+        // 请求音频焦点
+        if (!requestAudioFocus()) {
+            android.util.Log.w("♪", "Failed to obtain audio focus, aborting playback")
+            return
+        }
 
         val player = getOrCreatePlayer()
         player.stop()
@@ -622,6 +788,11 @@ class MusicPlayer @Inject constructor(
      * 继续播放
      */
     fun resume() {
+        // 请求音频焦点
+        if (!requestAudioFocus()) {
+            android.util.Log.w("♪", "Failed to obtain audio focus, cannot resume")
+            return
+        }
         val player = exoPlayer ?: return
         if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) {
             player.prepare()
@@ -642,6 +813,9 @@ class MusicPlayer @Inject constructor(
 
         // 上报播放停止
         itemId?.let { reportPlaybackStopped(it, position) }
+
+        // 放弃音频焦点
+        abandonAudioFocus()
 
         updateState { it.copy(isPlaying = false, currentPosition = 0) }
     }
@@ -1268,6 +1442,9 @@ class MusicPlayer @Inject constructor(
         // 上报播放停止
         itemId?.let { reportPlaybackStopped(it, position) }
 
+        // 放弃音频焦点
+        abandonAudioFocus()
+
         exoPlayer?.release()
         exoPlayer = null
         mediaSession.isActive = false
@@ -1275,6 +1452,110 @@ class MusicPlayer @Inject constructor(
         _state.value = MusicPlayerState()
         playlist = emptyList()
         originalPlaylist = emptyList()
+    }
+
+    /**
+     * 检查是否应该通过刷新 URL 重试播放
+     * 网络连接错误通常表示 URL 过期、认证失败或网络问题
+     */
+    private fun shouldRetryWithRefresh(error: androidx.media3.common.PlaybackException): Boolean {
+        // 网络连接错误通常表示 URL 过期、认证失败或网络问题
+        // 这些错误可能通过刷新 URL 解决
+        val errorCode = error.errorCode
+        return errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+    }
+
+    /**
+     * 处理 URL 过期：尝试刷新 URL 并重试播放
+     */
+    private fun handleUrlExpiration() {
+        val refresher = streamUrlRefresher
+        if (refresher == null) {
+            Timber.w("handleUrlExpiration: no StreamUrlRefresher available, cannot refresh URL")
+            return
+        }
+
+        if (isRefreshingUrl) {
+            Timber.w("handleUrlExpiration: already refreshing URL, ignoring")
+            return
+        }
+
+        val currentIndex = _state.value.currentIndex
+        val currentItem = playlist.getOrNull(currentIndex)
+        if (currentItem == null) {
+            Timber.w("handleUrlExpiration: no current item to refresh")
+            return
+        }
+
+        isRefreshingUrl = true
+        Timber.d("handleUrlExpiration: refreshing URL for song: ${currentItem.title}, id: ${currentItem.id}")
+
+        playerScope.launch {
+            try {
+                val newItem = refresher.refreshStreamUrl(currentItem.id, currentItem)
+                if (newItem != null) {
+                    Timber.d("handleUrlExpiration: got new URL, updating playlist and retrying")
+                    // 更新播放列表中的项
+                    val updatedPlaylist = playlist.toMutableList()
+                    updatedPlaylist[currentIndex] = newItem
+                    playlist = updatedPlaylist
+
+                    // 更新状态
+                    updateState { it.copy(playlist = playlist) }
+
+                    // 重试播放
+                    retryPlaybackWithNewUrl(newItem)
+                } else {
+                    Timber.w("handleUrlExpiration: refresh returned null, cannot retry")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "handleUrlExpiration: refresh failed")
+            } finally {
+                isRefreshingUrl = false
+            }
+        }
+    }
+
+    /**
+     * 使用新的 URL 重试播放
+     */
+    private fun retryPlaybackWithNewUrl(item: MusicItem) {
+        val player = exoPlayer ?: return
+
+        android.util.Log.i("♪", "retryPlaybackWithNewUrl: ${item.title}")
+        _playbackError = null
+
+        // 清除 seek 相关状态
+        seekedPositionMs = null
+        lastSeekPosition = null
+        lastSeekRealtimeMs = 0L
+
+        player.stop()
+        player.clearMediaItems()
+
+        val mediaItem = MediaItem.fromUri(item.streamUrl)
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        player.play()
+
+        // 更新状态
+        updateState {
+            it.copy(
+                currentSongId = item.id,
+                currentSongTitle = item.title,
+                isPlaying = true
+            )
+        }
+
+        // 更新 MediaSession metadata
+        updateMediaSessionMetadata(item)
+
+        // 显示通知
+        showNotification(item)
+
+        // 上报播放开始
+        reportPlaybackStart(item.id)
     }
 
     private fun updateState(update: (MusicPlayerState) -> MusicPlayerState) {

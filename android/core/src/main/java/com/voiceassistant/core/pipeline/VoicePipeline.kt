@@ -25,7 +25,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import timber.log.Timber
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 /**
  * Main voice pipeline controller
@@ -42,6 +45,8 @@ class VoicePipeline(
     private val audioCapture: AudioCapture,
     private val audioPlayer: AudioPlayer = AudioPlayer(),
     private val ttsEnabledProvider: () -> Boolean = { true },
+    private val ttsSpeedProvider: () -> Float = { 1.0f },
+    private val ttsPitchProvider: () -> Float = { 1.0f },
     private val wakeSensitivityProvider: () -> Float = { 0.5f },
     private val wakeWordManager: WakeWordManager? = null,
     private val statefulVadFactory: (() -> StatefulVad)? = null
@@ -85,6 +90,20 @@ class VoicePipeline(
 
     // Ring buffer for pre-wake audio (500ms @ 16kHz = 8000 samples)
     private val preWakeBuffer = RingBuffer(capacitySamples = 8000)
+
+    // Buffer lifecycle management: track when buffer was last cleared
+    private var preWakeBufferClearTimeMs = 0L
+
+    // Maximum age of pre-wake buffer audio before discarding (3 seconds)
+    // Prevents stale audio from being prepended to recording
+    private val preWakeBufferMaxAgeMs = 3000L
+
+    // Periodic flush: if no successful wake within this many ms, flush buffer
+    private val preWakeBufferPeriodicFlushMs = 10000L
+
+    // Track consecutive failed wake detections to trigger periodic flush
+    private var wakeDetectionAttempts = 0
+    private val maxWakeDetectionAttemptsBeforeFlush = 50
 
     // Wake word detector with per-keyword thresholds and cooldown
     private val wakeWordDetector = WakeWordDetector(
@@ -551,6 +570,8 @@ class VoicePipeline(
         // Reset preprocessor state for fresh listening
         audioPreprocessor.reset()
         preWakeBuffer.clear()
+        preWakeBufferClearTimeMs = System.currentTimeMillis()
+        wakeDetectionAttempts = 0
 
         // Start wake word detection
         try {
@@ -562,6 +583,24 @@ class VoicePipeline(
 
                     // Write to pre-wake buffer for ASR context
                     preWakeBuffer.write(audioChunk)
+
+                    // Check buffer age and periodic flush to prevent stale audio accumulation
+                    val bufferAge = System.currentTimeMillis() - preWakeBufferClearTimeMs
+                    wakeDetectionAttempts++
+
+                    if (bufferAge > preWakeBufferMaxAgeMs) {
+                        // Buffer audio is too old, discard it
+                        preWakeBuffer.clear()
+                        preWakeBufferClearTimeMs = System.currentTimeMillis()
+                        wakeDetectionAttempts = 0
+                        Timber.d("Pre-wake buffer flushed: audio too old (${bufferAge}ms)")
+                    } else if (wakeDetectionAttempts >= maxWakeDetectionAttemptsBeforeFlush) {
+                        // Too many KWS attempts without success, periodic flush
+                        preWakeBuffer.clear()
+                        preWakeBufferClearTimeMs = System.currentTimeMillis()
+                        wakeDetectionAttempts = 0
+                        Timber.d("Pre-wake buffer flushed: periodic flush after ${maxWakeDetectionAttemptsBeforeFlush} attempts")
+                    }
 
                     // Process audio through preprocessor
                     val processedAudio = audioPreprocessor.process(audioChunk)
@@ -630,9 +669,17 @@ class VoicePipeline(
         audioBuffer.clear()
         silenceFrames = 0
 
-        // Get pre-wake audio to prepend to recording
-        val preWakeAudio = preWakeBuffer.read()
-        Timber.d("Pre-wake audio available: ${preWakeAudio.size} samples")
+        // Clear pre-wake buffer to ensure we only capture audio AFTER wake word detection
+        // This prevents stale audio from being prepended to the recording
+        preWakeBuffer.clear()
+        preWakeBufferClearTimeMs = System.currentTimeMillis()
+        wakeDetectionAttempts = 0
+
+        // Note: pre-wake audio is intentionally not used here because:
+        // 1. The wake word itself was already detected and should not be in ASR input
+        // 2. Any audio captured between wake detection and recording start is stale
+        // 3. Fresh audio from this point forward is what we want to recognize
+        Timber.d("Pre-wake buffer cleared for fresh recording")
 
         // Reset stateful VAD for a fresh utterance boundary detection session
         try {
@@ -653,9 +700,9 @@ class VoicePipeline(
                     val elapsed = System.currentTimeMillis() - recordingStartTime
                     if (elapsed > maxSilenceMs && !hasSpeech) {
                         scope.launch {
-                            // Combine pre-wake audio with recorded audio
+                            // Use only recorded audio (pre-wake buffer cleared for fresh recording)
                             val recordedAudio = audioBuffer.flattenToFloatArray()
-                            val audioData = combineAudio(preWakeAudio, recordedAudio)
+                            val audioData = recordedAudio
                             Timber.d("Recording stopped: 5s silence timeout, totalAudioSize=${audioData.size}")
                             if (audioData.isNotEmpty()) {
                                 startRecognition(audioData)
@@ -689,7 +736,7 @@ class VoicePipeline(
                             }
                             if (hasSpeech && vadResult.speechEnded) {
                                 val recordedAudio = audioBuffer.flattenToFloatArray()
-                                val speechAudio = combineAudio(preWakeAudio, recordedAudio)
+                                val speechAudio = recordedAudio
                                 Timber.d("Recording stopped: StatefulVad speech end detected, audioSize=${speechAudio.size}")
                                 scope.launch {
                                     startRecognition(speechAudio)
@@ -707,7 +754,7 @@ class VoicePipeline(
                     val maxBufferSize = config.sampleRate * 5 / config.frameSize // 5 seconds
                     if (audioBuffer.size > maxBufferSize) {
                         val recordedAudio = audioBuffer.flattenToFloatArray()
-                        val speechAudio = combineAudio(preWakeAudio, recordedAudio)
+                        val speechAudio = recordedAudio
                         Timber.d("Recording stopped: max duration reached, audioSize=${speechAudio.size}")
                         scope.launch {
                             startRecognition(speechAudio)
@@ -790,12 +837,69 @@ class VoicePipeline(
     private suspend fun processIntent(text: String) {
         transitionTo(PipelineState.THINKING, message = text, recognizedText = text)
 
-        try {
-            val response = intentRouter.handle(text)
-            speak(response)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to process intent")
-            speak("处理失败，请重试")
+        val maxRetries = 2
+        var lastException: Exception? = null
+
+        for (attempt in 0..maxRetries) {
+            try {
+                val response = intentRouter.handle(text)
+                speak(response)
+                return
+            } catch (e: Exception) {
+                lastException = e
+                Timber.w(e, "processIntent attempt ${attempt + 1} failed")
+
+                // Only retry on transient failures
+                if (!isTransientFailure(e) || attempt == maxRetries) {
+                    break
+                }
+
+                // Exponential backoff: 500ms, 1000ms
+                val backoffMs = 500L shl attempt
+                Timber.d("Retrying after ${backoffMs}ms...")
+                delay(backoffMs)
+            }
+        }
+
+        // All retries exhausted or non-transient error
+        val errorMessage = getFriendlyErrorMessage(lastException ?: Exception("Unknown error"))
+        speak(errorMessage)
+    }
+
+    /**
+     * Check if the exception represents a transient failure that should be retried
+     */
+    private fun isTransientFailure(e: Exception): Boolean {
+        return when (e) {
+            is SocketTimeoutException -> true
+            is UnknownHostException -> true
+            is java.net.ConnectException -> true
+            is java.io.IOException -> true
+            is HttpException -> e.code() >= 500 // Server errors are transient
+            else -> false
+        }
+    }
+
+    /**
+     * Get user-friendly error message based on exception type
+     */
+    private fun getFriendlyErrorMessage(e: Exception?): String {
+        if (e == null) return "处理失败，请重试"
+
+        return when (e) {
+            is SocketTimeoutException -> "请求超时，请检查网络"
+            is UnknownHostException -> "无法连接到服务器，请检查网络"
+            is java.net.ConnectException -> "无法连接服务器，请检查服务是否可用"
+            is HttpException -> when (e.code()) {
+                401 -> "API密钥无效，请检查设置"
+                403 -> "访问被拒绝，请检查API权限"
+                404 -> "服务地址无效，请检查设置"
+                429 -> "请求过于频繁，请稍后重试"
+                in 500..599 -> "服务暂时不可用，请稍后重试"
+                else -> "服务暂时不可用，请稍后重试"
+            }
+            is java.io.IOException -> "网络错误，请检查网络连接"
+            else -> "处理失败，请重试"
         }
     }
 
@@ -824,6 +928,10 @@ class VoicePipeline(
         try {
             // Ensure TTS is initialized
             ensureTtsInitialized()
+
+            // Apply TTS speed from settings
+            tts.setSpeed(ttsSpeedProvider())
+            tts.setPitch(ttsPitchProvider())
 
             // Split long text into sentences for faster initial response
             val sentences = splitIntoSentences(text)
@@ -973,5 +1081,18 @@ data class PipelineConfig(
     val silenceTimeoutSec: Float = 0.8f,
     val maxRecordingSec: Int = 30,
     val llmTimeoutMs: Long = 30000,
-    val modelPath: String = "models" // Relative to assets
+    val modelPath: String = "models", // Relative to assets
+    // ASR endpoint timing configuration
+    // rule1: non-transducer (must_start_with_trailing_silence=false), timeout 4s, trailing 0s
+    val asrEndpointRule1MustStartWithTrailingSilence: Boolean = false,
+    val asrEndpointRule1TimeoutSec: Float = 4.0f,
+    val asrEndpointRule1TrailingSilenceSec: Float = 0.0f,
+    // rule2: transducer (must_start_with_trailing_silence=true), timeout 4s, trailing 0s
+    val asrEndpointRule2MustStartWithTrailingSilence: Boolean = true,
+    val asrEndpointRule2TimeoutSec: Float = 4.0f,
+    val asrEndpointRule2TrailingSilenceSec: Float = 0.0f,
+    // rule3: non-transducer, disabled (timeout 0s), trailing 30s
+    val asrEndpointRule3MustStartWithTrailingSilence: Boolean = false,
+    val asrEndpointRule3TimeoutSec: Float = 0.0f,
+    val asrEndpointRule3TrailingSilenceSec: Float = 30.0f
 )

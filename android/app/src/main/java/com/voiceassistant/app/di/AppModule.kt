@@ -3,6 +3,7 @@ package com.voiceassistant.app.di
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
+import java.io.File
 import coil.ImageLoader
 import com.voiceassistant.app.ui.music.JellyfinPlaybackReporter
 import com.voiceassistant.core.audio.AudioCapture
@@ -10,8 +11,6 @@ import com.voiceassistant.core.audio.AudioPlayer
 import com.voiceassistant.core.dlna.DLNAManager
 import com.voiceassistant.core.dlna.DLNAPlayer
 import com.voiceassistant.core.ConversationContextManager
-import com.voiceassistant.core.intent.ConversationContext
-import com.voiceassistant.core.intent.IntentExecutor
 import com.voiceassistant.core.intent.IntentRouter
 import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.core.music.PlaybackReporter
@@ -21,6 +20,7 @@ import com.voiceassistant.core.pipeline.VoicePipeline
 import com.voiceassistant.core.pipeline.WakeWordManager
 import com.voiceassistant.core.playback.state.PlaybackStateManager
 import com.voiceassistant.core.playback.state.PlaybackStateManagerImpl
+import com.voiceassistant.core.sherpa.EndpointTimingConfig
 import com.voiceassistant.core.sherpa.SherpaASR
 import com.voiceassistant.core.sherpa.SherpaASRImpl
 import com.voiceassistant.core.sherpa.SherpaKWS
@@ -40,12 +40,15 @@ import com.voiceassistant.data.remote.LLMApi
 import com.voiceassistant.data.repository.LLMRepositoryImpl
 import com.voiceassistant.data.repository.MusicRepositoryImpl
 import com.voiceassistant.data.repository.MessageRepositoryImpl
+import com.voiceassistant.data.repository.PlaybackQueueManagerImpl
 import com.voiceassistant.data.repository.PlaylistRepositoryImpl
 import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.data.repository.SettingsRepositoryImpl
+import com.voiceassistant.domain.repository.ChatContextProvider
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.MessageRepository
 import com.voiceassistant.domain.repository.MusicRepository
+import com.voiceassistant.domain.repository.PlaybackQueueManager
 import com.voiceassistant.domain.repository.PlayerRepository
 import com.voiceassistant.domain.repository.PlaylistRepository
 import dagger.Module
@@ -102,16 +105,23 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun providePlaybackQueueManager(): PlaybackQueueManager {
+        return PlaybackQueueManagerImpl()
+    }
+
+    @Provides
+    @Singleton
     fun provideMessageRepository(chatMessageDao: ChatMessageDao): MessageRepository {
         return MessageRepositoryImpl(chatMessageDao)
     }
 
     @Provides
     @Singleton
-    fun provideJellyfinClient(configHolder: ConfigHolder): JellyfinClient {
+    fun provideJellyfinClient(@ApplicationContext context: Context, configHolder: ConfigHolder): JellyfinClient {
         return JellyfinClient(
             baseUrl = configHolder.jellyfinUrl.ifEmpty { "http://localhost:8096" },
-            apiKey = configHolder.jellyfinApiKey
+            apiKey = configHolder.jellyfinApiKey,
+            cacheDir = context.cacheDir
         )
     }
 
@@ -142,13 +152,18 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideLLMApi(configHolder: ConfigHolder): LLMApi {
+    fun provideLLMApi(@ApplicationContext context: Context, configHolder: ConfigHolder): LLMApi {
+        // HTTP response cache - 10 MB
+        val cacheDir = File(context.cacheDir, "http_cache")
+        val cache = okhttp3.Cache(cacheDir, 10 * 1024 * 1024)
+
         // Use dynamic URL and API key from settings
         return Retrofit.Builder()
             .baseUrl("https://localhost/") // Placeholder, actual URL set in interceptor
             .addConverterFactory(GsonConverterFactory.create())
             .client(
                 okhttp3.OkHttpClient.Builder()
+                    .cache(cache)
                     .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                     .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                     .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -277,30 +292,27 @@ object AppModule {
     fun provideASRManager(
         sherpaASR: SherpaASR
     ): ASRManager {
+        // Use PipelineConfig defaults for endpoint timing
+        // Endpoint timing values from PipelineConfig defaults
+        val endpointTimingConfig = EndpointTimingConfig(
+            rule1MustStartWithTrailingSilence = false,
+            rule1TimeoutSec = 4.0f,
+            rule1TrailingSilenceSec = 0.0f,
+            rule2MustStartWithTrailingSilence = true,
+            rule2TimeoutSec = 4.0f,
+            rule2TrailingSilenceSec = 0.0f,
+            rule3MustStartWithTrailingSilence = false,
+            rule3TimeoutSec = 0.0f,
+            rule3TrailingSilenceSec = 30.0f
+        )
         // ASR 模型: sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30
-        return ASRManager(sherpaASR, "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30")
+        return ASRManager(sherpaASR, "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30", endpointTimingConfig)
     }
 
     @Provides
     @Singleton
     fun provideSherpaTTS(@ApplicationContext context: Context): SherpaTTS {
         return SherpaTTSImpl(context)
-    }
-
-    @Provides
-    @Singleton
-    fun provideIntentRouter(
-        intentExecutor: IntentExecutor,
-        llmRepository: LLMRepository?,
-        handleChatUseCase: com.voiceassistant.domain.usecase.HandleChatUseCase,
-        conversationContext: ConversationContext
-    ): IntentRouter {
-        return IntentRouter(
-            intentExecutor,
-            llmRepository,
-            handleChatUseCase,
-            conversationContext
-        )
     }
 
     @Provides
@@ -333,6 +345,8 @@ object AppModule {
             audioCapture = audioCapture,
             audioPlayer = audioPlayer,
             ttsEnabledProvider = { configHolder.ttsEnabled },
+            ttsSpeedProvider = { configHolder.ttsSpeed },
+            ttsPitchProvider = { configHolder.ttsPitch },
             wakeSensitivityProvider = { configHolder.wakeSensitivity },
             wakeWordManager = wakeWordManager,
             statefulVadFactory = { StatefulVadImpl(context) }
@@ -349,16 +363,25 @@ object AppModule {
     @Provides
     @Singleton
     fun provideConversationContextManager(
-        messageRepository: MessageRepository
+        messageRepository: MessageRepository,
+        configHolder: ConfigHolder
     ): ConversationContextManager {
-        return ConversationContextManager(messageRepository)
+        val manager = ConversationContextManager(messageRepository)
+        // Initialize with settings from ConfigHolder
+        manager.updateSettings(
+            maxContextCount = configHolder.maxContextCount,
+            maxTurnsBeforeReset = configHolder.maxTurnsBeforeReset,
+            conversationTimeoutSeconds = configHolder.conversationTimeoutSeconds,
+            summarizationThreshold = configHolder.summarizationThreshold
+        )
+        return manager
     }
 
     @Provides
     @Singleton
     fun provideConversationContext(
         conversationContextManager: ConversationContextManager
-    ): ConversationContext {
+    ): ChatContextProvider {
         return conversationContextManager
     }
 }

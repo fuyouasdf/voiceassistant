@@ -20,7 +20,6 @@ import com.google.android.material.chip.Chip
 import com.voiceassistant.app.R
 import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.data.remote.JellyfinAlbum
-import com.voiceassistant.data.remote.JellyfinSong
 import com.voiceassistant.data.remote.SessionInfo
 import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.Song
@@ -49,7 +48,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     // Adapters
     private lateinit var albumAdapter: AlbumAdapter
     private lateinit var songAdapter: SongAdapter
-    private var lastKnownSong: JellyfinSong? = null
+    private var lastKnownSong: Song? = null
 
     // Device Dialog
     private var dlnaDialog: AlertDialog? = null
@@ -107,9 +106,11 @@ class JellyfinBrowseActivity : AppCompatActivity() {
 
     private fun setupRecyclerViews() {
         // Album grid - 2 columns
-        albumAdapter = AlbumAdapter { album ->
-            viewModel.openAlbum(album)
-        }
+        albumAdapter = AlbumAdapter(
+            onAlbumClick = { album ->
+                viewModel.openAlbum(album)
+            }
+        )
         binding.recyclerAlbums.apply {
             layoutManager = GridLayoutManager(this@JellyfinBrowseActivity, 2)
             adapter = albumAdapter
@@ -481,7 +482,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     /**
      * 显示添加到播放列表对话框
      */
-    private fun showAddToPlaylistDialog(song: JellyfinSong) {
+    private fun showAddToPlaylistDialog(song: Song) {
         val playlists = viewModel.playlists.value
 
         if (playlists.isEmpty()) {
@@ -514,7 +515,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     /**
      * 显示创建播放列表对话框
      */
-    private fun showCreatePlaylistDialog(song: JellyfinSong) {
+    private fun showCreatePlaylistDialog(song: Song) {
         val editText = EditText(this).apply {
             hint = getString(R.string.playlist_name_hint)
         }
@@ -541,7 +542,7 @@ class JellyfinBrowseActivity : AppCompatActivity() {
     /**
      * 创建播放列表并添加歌曲
      */
-    private fun createPlaylistAndAddSong(playlistName: String, song: JellyfinSong) {
+    private fun createPlaylistAndAddSong(playlistName: String, song: Song) {
         lifecycleScope.launch {
             try {
                 val playlistId = viewModel.createPlaylist(playlistName)

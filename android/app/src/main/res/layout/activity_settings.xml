@@ -509,6 +509,42 @@
 
                 </LinearLayout>
 
+                <!-- TTS Pitch -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/settings_tts_pitch"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/sliderTtsPitch"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:valueFrom="0.5"
+                        android:valueTo="2.0"
+                        android:stepSize="0.1"
+                        android:value="1.0" />
+
+                    <TextView
+                        android:id="@+id/tvTtsPitch"
+                        android:layout_width="48dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="1.0x"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+
+                </LinearLayout>
+
                 <!-- Wake Words Management -->
                 <TextView
                     android:layout_width="wrap_content"

@@ -91,7 +91,7 @@ class MiniPlayerFragment : Fragment() {
                 launch {
                     playbackViewModel.song.collectLatest { song ->
                         binding.tvSongTitle.text = song?.title ?: "暂无播放"
-                        binding.tvArtist.text = song?.artist ?: ""
+                        binding.tvArtist.text = song?.artist ?: binding.root.context.getString(R.string.artist_unknown)
                         binding.ivCover.load(song?.coverUrl) {
                             placeholder(R.drawable.ic_music)
                             error(R.drawable.ic_music)

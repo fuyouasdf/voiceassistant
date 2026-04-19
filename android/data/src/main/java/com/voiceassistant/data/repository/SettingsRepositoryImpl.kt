@@ -101,6 +101,14 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun getLLMContextCount(): Int = getString(ConfigKeys.LLM_CONTEXT_COUNT, "5").toIntOrNull() ?: 5
     override suspend fun setLLMContextCount(count: Int) = setString(ConfigKeys.LLM_CONTEXT_COUNT, count.toString())
 
+    // Conversation Management
+    override suspend fun getLLMMaxTurnsBeforeReset(): Int = getString(ConfigKeys.LLM_MAX_TURNS_BEFORE_RESET, "10").toIntOrNull() ?: 10
+    override suspend fun setLLMMaxTurnsBeforeReset(turns: Int) = setString(ConfigKeys.LLM_MAX_TURNS_BEFORE_RESET, turns.toString())
+    override suspend fun getLLMConversationTimeoutSeconds(): Int = getString(ConfigKeys.LLM_CONVERSATION_TIMEOUT_SECONDS, "300").toIntOrNull() ?: 300
+    override suspend fun setLLMConversationTimeoutSeconds(seconds: Int) = setString(ConfigKeys.LLM_CONVERSATION_TIMEOUT_SECONDS, seconds.toString())
+    override suspend fun getLLMSummarizationThreshold(): Int = getString(ConfigKeys.LLM_SUMMARIZATION_THRESHOLD, "20").toIntOrNull() ?: 20
+    override suspend fun setLLMSummarizationThreshold(threshold: Int) = setString(ConfigKeys.LLM_SUMMARIZATION_THRESHOLD, threshold.toString())
+
     // Voice Settings
     override suspend fun getWakeSensitivity(): Float = getString(ConfigKeys.WAKE_SENSITIVITY, "0.5").toFloatOrNull() ?: 0.5f
     override suspend fun setWakeSensitivity(sensitivity: Float) = setString(ConfigKeys.WAKE_SENSITIVITY, sensitivity.toString())
@@ -117,6 +125,9 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun getTtsSpeed(): Float = getString(ConfigKeys.TTS_SPEED, "1.0").toFloatOrNull() ?: 1.0f
     override suspend fun setTtsSpeed(speed: Float) = setString(ConfigKeys.TTS_SPEED, speed.toString())
+
+    override suspend fun getTtsPitch(): Float = getString(ConfigKeys.TTS_PITCH, "1.0").toFloatOrNull() ?: 1.0f
+    override suspend fun setTtsPitch(pitch: Float) = setString(ConfigKeys.TTS_PITCH, pitch.toString())
 
     override suspend fun getTtsEnabled(): Boolean = getString(ConfigKeys.TTS_ENABLED, "true").toBooleanStrictOrNull() ?: true
     override suspend fun setTtsEnabled(enabled: Boolean) = setString(ConfigKeys.TTS_ENABLED, enabled.toString())
@@ -157,6 +168,14 @@ interface SettingsRepository {
     suspend fun getLLMContextCount(): Int
     suspend fun setLLMContextCount(count: Int)
 
+    // Conversation Management
+    suspend fun getLLMMaxTurnsBeforeReset(): Int
+    suspend fun setLLMMaxTurnsBeforeReset(turns: Int)
+    suspend fun getLLMConversationTimeoutSeconds(): Int
+    suspend fun setLLMConversationTimeoutSeconds(seconds: Int)
+    suspend fun getLLMSummarizationThreshold(): Int
+    suspend fun setLLMSummarizationThreshold(threshold: Int)
+
     // Voice Settings
     suspend fun getWakeSensitivity(): Float
     suspend fun setWakeSensitivity(sensitivity: Float)
@@ -164,6 +183,8 @@ interface SettingsRepository {
     suspend fun setWakeWords(words: List<String>)
     suspend fun getTtsSpeed(): Float
     suspend fun setTtsSpeed(speed: Float)
+    suspend fun getTtsPitch(): Float
+    suspend fun setTtsPitch(pitch: Float)
     suspend fun getTtsEnabled(): Boolean
     suspend fun setTtsEnabled(enabled: Boolean)
 }

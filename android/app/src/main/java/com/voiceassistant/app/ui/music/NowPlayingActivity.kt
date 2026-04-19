@@ -17,8 +17,8 @@ import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.FragmentNowPlayingBinding
 import com.voiceassistant.core.music.MusicPlayer
 import com.voiceassistant.core.music.RepeatMode
-import com.voiceassistant.data.remote.JellyfinClient
-import com.voiceassistant.data.remote.LyricLine
+import com.voiceassistant.domain.model.LyricLine
+import com.voiceassistant.domain.repository.MusicRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -33,7 +33,7 @@ class NowPlayingActivity : AppCompatActivity() {
     lateinit var musicPlayer: MusicPlayer
 
     @Inject
-    lateinit var jellyfinClient: JellyfinClient
+    lateinit var musicRepository: MusicRepository
 
     private lateinit var binding: FragmentNowPlayingBinding
     private var progressJob: Job? = null
@@ -364,8 +364,8 @@ class NowPlayingActivity : AppCompatActivity() {
         if (songId == null) return
 
         lyricsJob = lifecycleScope.launch {
-            val result = jellyfinClient.getLyrics(songId)
-            currentLyrics = result?.lines.orEmpty()
+            val result = musicRepository.getLyrics(songId)
+            currentLyrics = result.getOrNull()?.lines.orEmpty()
             if (currentLyrics.isEmpty()) {
                 lyricsAdapter.submitLyrics(emptyList(), -1)
                 renderLyricsState(

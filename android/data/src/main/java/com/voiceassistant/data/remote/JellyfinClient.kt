@@ -5,9 +5,13 @@ import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
+
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -31,19 +35,31 @@ import java.util.concurrent.TimeUnit
 class JellyfinClient(
     private var baseUrl: String,
     private var apiKey: String = "",
-    private val deviceId: String = "voice-assistant-android"
+    private val deviceId: String = "voice-assistant-android",
+    cacheDir: File? = null
 ) {
     private val gson = Gson()
     private var cachedUserId: String? = null
     private var cachedAccessToken: String? = null
-    private val playbackInfoCache = mutableMapOf<String, CachedPlaybackInfo>()
+    private val playbackInfoCache = ConcurrentHashMap<String, CachedPlaybackInfo>()
     private val lyricsCache = mutableMapOf<String, CachedLyrics>()
+
+    // Session failure tracking - detect dead sessions
+    private var lastSessionErrorCode: Int? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
+    // HTTP response cache - 10 MB for caching GET requests (browsing)
+    private val httpCache: Cache? = cacheDir?.let {
+        Cache(File(it, "jellyfin_http_cache"), 10 * 1024 * 1024)
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
+        .apply {
+            httpCache?.let { cache(it) }
+        }
         .addInterceptor { chain ->
             val requestBuilder = chain.request().newBuilder()
                 .addHeader("Content-Type", "application/json")
@@ -155,6 +171,33 @@ class JellyfinClient(
     }
 
     /**
+     * 清除所有缓存（播放信息、歌词）
+     * 当 Jellyfin 服务器配置变更时调用
+     */
+    fun invalidateAll() {
+        Timber.d("invalidateAll: 清除所有缓存")
+        playbackInfoCache.clear()
+        lyricsCache.clear()
+    }
+
+    /**
+     * 清除会话相关缓存（access token）
+     * 当会话失效时调用，会导致重新认证
+     */
+    fun clearSession() {
+        Timber.d("clearSession: 清除会话缓存")
+        cachedAccessToken = null
+        lastSessionErrorCode = null
+    }
+
+    /**
+     * 检查上一个会话操作是否因认证失败（401/403）失败
+     */
+    fun hasSessionError(): Boolean {
+        return lastSessionErrorCode == 401 || lastSessionErrorCode == 403
+    }
+
+    /**
      * 搜索歌曲
      * 使用 /Items 端点（与 Jellyfin Web 相同），需要 userId 才能返回结果
      * 当服务器返回 404 时（通常是缓存的 userId 失效），会自动重试一次
@@ -191,7 +234,7 @@ class JellyfinClient(
                         val song = JellyfinSong(
                             id = item.id ?: return@mapNotNull null,
                             title = item.name ?: return@mapNotNull null,
-                            artist = item.artists?.firstOrNull(),
+                            artist = item.artists?.firstOrNull() ?: item.albumArtist,
                             album = item.albumName,
                             duration = ((item.runTimeTicks ?: 0) / 10000000).toInt(),
                             coverUrl = getCoverUrl(item.id ?: return@mapNotNull null)
@@ -385,7 +428,7 @@ class JellyfinClient(
                         val song = JellyfinSong(
                             id = item.id ?: return@mapNotNull null,
                             title = item.name ?: return@mapNotNull null,
-                            artist = item.artists?.firstOrNull(),
+                            artist = item.artists?.firstOrNull() ?: item.albumArtist,
                             album = item.albumName,
                             duration = ((item.runTimeTicks ?: 0) / 10000000).toInt(),
                             coverUrl = getCoverUrl(item.id ?: return@mapNotNull null)
@@ -450,7 +493,7 @@ class JellyfinClient(
                             id = id,
                             name = item.name ?: return@mapNotNull null,
                             type = item.type ?: return@mapNotNull null,
-                            artist = item.artists?.firstOrNull(),
+                            artist = item.artists?.firstOrNull() ?: item.albumArtist,
                             albumName = item.albumName,
                             runTimeTicks = item.runTimeTicks
                         )
@@ -508,7 +551,7 @@ class JellyfinClient(
                         val song = JellyfinSong(
                             id = item.id ?: return@mapNotNull null,
                             title = item.name ?: return@mapNotNull null,
-                            artist = item.artists?.firstOrNull(),
+                            artist = item.artists?.firstOrNull() ?: item.albumArtist,
                             album = item.albumName,
                             duration = ((item.runTimeTicks ?: 0) / 10000000).toInt(),
                             coverUrl = getCoverUrl(item.id ?: return@mapNotNull null)
@@ -675,6 +718,56 @@ class JellyfinClient(
                 Timber.w(e, "prefetchPlaybackInfo failed for songId=$songId")
             }
         }
+    }
+
+    /**
+     * 刷新指定歌曲的流媒体 URL（绕过缓存）
+     * 当播放失败（URL 过期）时调用此方法获取新的 URL
+     * @param songId 歌曲 ID
+     * @return 新的流媒体 URL，如果刷新失败则返回空字符串
+     */
+    suspend fun refreshStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
+        Timber.d("refreshStreamUrl: songId=$songId, invalidating cache")
+        // 清除该歌曲的缓存，确保获取新的播放信息
+        playbackInfoCache.remove(songId)
+
+        // 获取新的播放信息
+        val result = getPlaybackInfo(songId) ?: run {
+            Timber.e("refreshStreamUrl: 无法获取播放信息，返回空URL")
+            return@withContext ""
+        }
+
+        val streamUrl = buildStreamUrl(songId, result)
+        Timber.d("refreshStreamUrl: 新的streamUrl: $streamUrl")
+        streamUrl
+    }
+
+    /**
+     * 刷新指定歌曲的流媒体信息（绕过缓存）
+     * @param songId 歌曲 ID
+     * @return 新的 StreamInfo，如果刷新失败则返回 null
+     */
+    suspend fun refreshStreamInfo(songId: String): StreamInfo? = withContext(Dispatchers.IO) {
+        Timber.d("refreshStreamInfo: songId=$songId, invalidating cache")
+        // 清除该歌曲的缓存
+        playbackInfoCache.remove(songId)
+
+        // 获取新的播放信息
+        val result = getPlaybackInfo(songId) ?: run {
+            Timber.e("refreshStreamInfo: 无法获取播放信息，返回null")
+            return@withContext null
+        }
+
+        val url = result.let { buildStreamUrl(songId, it) }
+        val isContainerForcedTranscode = result?.container?.let { requiresContainerTranscode(it) } ?: false
+        StreamInfo(
+            url = url,
+            playSessionId = result?.playSessionId,
+            mediaSourceId = result?.mediaSourceId?.replace("-", ""),
+            playMethod = result?.playMethod,
+            container = result?.container,
+            isTranscoding = result?.playMethod == PlayMethodType.TRANSCODE || isContainerForcedTranscode
+        )
     }
 
     private fun buildStreamUrl(songId: String, result: PlaybackResult): String {
@@ -882,7 +975,7 @@ class JellyfinClient(
                     JellyfinSong(
                         id = item.id ?: "",
                         title = item.name ?: "未知歌曲",
-                        artist = item.artists?.firstOrNull(),
+                        artist = item.artists?.firstOrNull() ?: item.albumArtist,
                         album = item.albumName,
                         duration = ((item.runTimeTicks ?: 0) / 10000000).toInt(),
                         coverUrl = getCoverUrl(item.id ?: "")
@@ -1085,8 +1178,16 @@ class JellyfinClient(
                 Timber.d("playToSession成功")
                 Result.success(true)
             } else {
-                Timber.e("playToSession失败: ${response.code()}")
-                Result.failure(Exception("Failed: ${response.code()}"))
+                val code = response.code()
+                // Track session errors for diagnosis
+                if (code == 401 || code == 403) {
+                    lastSessionErrorCode = code
+                    Timber.e("playToSession会话失效: $code，可能需要重新认证")
+                    Result.failure(SessionExpiredException("Session expired: $code", code))
+                } else {
+                    Timber.e("playToSession失败: $code")
+                    Result.failure(Exception("Failed: $code"))
+                }
             }
         } catch (e: Exception) {
             Timber.e(e, "playToSession异常")
@@ -1111,8 +1212,16 @@ class JellyfinClient(
                 Timber.d("sendSessionCommand成功: $command")
                 Result.success(true)
             } else {
-                Timber.e("sendSessionCommand失败: ${response.code()}")
-                Result.failure(Exception("Failed: ${response.code()}"))
+                val code = response.code()
+                // Track session errors for diagnosis
+                if (code == 401 || code == 403) {
+                    lastSessionErrorCode = code
+                    Timber.e("sendSessionCommand会话失效: $code，可能需要重新认证")
+                    Result.failure(SessionExpiredException("Session expired: $code", code))
+                } else {
+                    Timber.e("sendSessionCommand失败: $code")
+                    Result.failure(Exception("Failed: $code"))
+                }
             }
         } catch (e: Exception) {
             Timber.e(e, "sendSessionCommand异常")
@@ -1308,8 +1417,7 @@ class JellyfinClient(
             "Unpause",
             "NextTrack",
             "PreviousTrack",
-            "Seek",
-            "SetVolume"
+            "Seek"
         )
     }
 }
@@ -1848,3 +1956,12 @@ data class LoginResult(
     val userName: String,
     val accessToken: String
 )
+
+/**
+ * 会话过期异常
+ * 当 Jellyfin 会话因 401/403 失效时抛出
+ */
+class SessionExpiredException(
+    message: String,
+    val statusCode: Int
+) : Exception(message)

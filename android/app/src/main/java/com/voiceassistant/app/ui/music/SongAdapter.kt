@@ -6,15 +6,15 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.voiceassistant.app.databinding.ItemSongBinding
-import com.voiceassistant.data.remote.JellyfinSong
+import com.voiceassistant.domain.model.Song
 
 /**
  * 歌曲列表适配器
  */
 class SongAdapter(
-    private val onSongClick: (JellyfinSong) -> Unit,
-    private val onAddToPlaylistClick: (JellyfinSong) -> Unit
-) : ListAdapter<JellyfinSong, SongAdapter.ViewHolder>(DiffCallback()) {
+    private val onSongClick: (Song) -> Unit,
+    private val onAddToPlaylistClick: (Song) -> Unit
+) : ListAdapter<Song, SongAdapter.ViewHolder>(DiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val binding = ItemSongBinding.inflate(
@@ -33,7 +33,7 @@ class SongAdapter(
         private val binding: ItemSongBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(song: JellyfinSong) {
+        fun bind(song: Song) {
             binding.tvTitle.text = song.title
             binding.tvArtist.text = song.artist ?: "未知艺术家"
             binding.tvDuration.text = formatDuration(song.duration)
@@ -60,12 +60,12 @@ class SongAdapter(
         }
     }
 
-    class DiffCallback : DiffUtil.ItemCallback<JellyfinSong>() {
-        override fun areItemsTheSame(oldItem: JellyfinSong, newItem: JellyfinSong): Boolean {
+    class DiffCallback : DiffUtil.ItemCallback<Song>() {
+        override fun areItemsTheSame(oldItem: Song, newItem: Song): Boolean {
             return oldItem.id == newItem.id
         }
 
-        override fun areContentsTheSame(oldItem: JellyfinSong, newItem: JellyfinSong): Boolean {
+        override fun areContentsTheSame(oldItem: Song, newItem: Song): Boolean {
             return oldItem == newItem
         }
     }

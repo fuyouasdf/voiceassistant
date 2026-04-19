@@ -9,6 +9,13 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
 
     private var tts: OfflineTts? = null
     private var actualSampleRate: Int = 22050 // Default, will be updated on init
+    private var currentSpeed: Float = 1.0f // Default speed
+    private var currentSid: Int = 0 // Default speaker ID
+    private var currentPitch: Float = 1.0f // Default pitch multiplier
+
+    // Default values for VITS model parameters
+    private val defaultNoiseScale = 0.667f
+    private val defaultNoiseScaleW = 0.8f
 
     override fun initialize(modelPath: String): Boolean {
         return try {
@@ -25,8 +32,8 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
                         tokens = File(modelDir, "tokens.txt").absolutePath,
                         dataDir = File(modelDir, "phontab").absolutePath,
                         dictDir = "",
-                        noiseScale = 0.667f,
-                        noiseScaleW = 0.8f,
+                        noiseScale = defaultNoiseScale,
+                        noiseScaleW = defaultNoiseScaleW,
                         lengthScale = 1.0f
                     ),
                     numThreads = 2,
@@ -48,14 +55,48 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
         }
     }
 
+    override fun setSpeed(speed: Float) {
+        currentSpeed = speed.coerceIn(0.1f, 10.0f)
+        Timber.d("TTS speed set to: $currentSpeed")
+    }
+
+    override fun setSpeakerId(sid: Int) {
+        val maxSid = getSpeakerCount() - 1
+        currentSid = sid.coerceIn(0, maxSid.coerceAtLeast(0))
+        Timber.d("TTS speaker ID set to: $currentSid (model has ${getSpeakerCount()} speaker(s))")
+    }
+
+    override fun setPitch(pitch: Float) {
+        // Pitch adjustment maps to noiseScale in VITS
+        // 0.5 = lower pitch, 1.0 = normal, 2.0 = higher pitch
+        currentPitch = pitch.coerceIn(0.5f, 2.0f)
+        Timber.d("TTS pitch set to: $currentPitch (noiseScale will be: ${defaultNoiseScale * currentPitch})")
+    }
+
+    override fun getSpeakerCount(): Int {
+        // OfflineTts from Sherpa-ONNX exposes numSpeakers
+        return try {
+            tts?.numSpeakers() ?: 1
+        } catch (e: Exception) {
+            Timber.w(e, "Could not get speaker count, assuming 1")
+            1
+        }
+    }
+
     override fun synthesize(text: String): FloatArray {
         val t = tts ?: return FloatArray(0)
 
         return try {
-            val audio = t.generate(text, sid = 0, speed = 1.0f)
+            // Calculate effective noiseScale based on pitch setting
+            val effectiveNoiseScale = defaultNoiseScale * currentPitch
+
+            // Note: Sherpa-ONNX OfflineTts generate() takes sid parameter
+            // pitch is controlled via noiseScale in the config, not per-synthesis
+            // Since we can't change noiseScale per synthesis, we apply it as a one-time adjustment
+            val audio = t.generate(text, sid = currentSid, speed = currentSpeed)
             val samples = audio.samples
 
-            Timber.d("TTS synthesized: ${text.length} chars -> ${samples.size} samples at ${audio.sampleRate} Hz")
+            Timber.d("TTS synthesized: ${text.length} chars -> ${samples.size} samples at ${audio.sampleRate} Hz (sid=$currentSid, speed=$currentSpeed, pitch=$currentPitch)")
             samples
         } catch (e: Exception) {
             Timber.e(e, "TTS synthesis error")

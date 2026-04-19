@@ -5,7 +5,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.voiceassistant.app.databinding.ItemLyricLineBinding
-import com.voiceassistant.data.remote.LyricLine
+import com.voiceassistant.domain.model.LyricLine
 import kotlin.math.abs
 
 data class LyricUiItem(

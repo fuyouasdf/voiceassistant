@@ -113,6 +113,7 @@ class AudioPlayer {
 
     /**
      * Play audio samples with specified sample rate and call onComplete when done
+     * Reuses an existing prepared AudioTrack if available and compatible
      */
     fun play(samples: FloatArray, sampleRate: Int = 44100, onComplete: () -> Unit) {
         if (samples.isEmpty()) {
@@ -121,31 +122,40 @@ class AudioPlayer {
             return
         }
 
-        val minBuffer = AudioTrack.getMinBufferSize(
-            sampleRate,
-            AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
+        val reusePreparedTrack = audioTrack != null && isStreamPrepared && currentSampleRate == sampleRate
 
-        audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
+        if (!reusePreparedTrack) {
+            // Create new AudioTrack only if no prepared track is available
+            val minBuffer = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
             )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-            )
-            .setBufferSizeInBytes(minBuffer * 2)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
 
-        audioTrack?.play()
+            // Release existing track if incompatible
+            release()
+
+            audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(minBuffer * 2)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+
+            audioTrack?.play()
+            isStreamPrepared = false // We're managing it manually now
+        }
 
         // Play in background using coroutine
         playJob = kotlinx.coroutines.MainScope().launch {
@@ -157,16 +167,20 @@ class AudioPlayer {
 
                 audioTrack?.write(shortSamples, 0, shortSamples.size)
 
-                audioTrack?.stop()
-                audioTrack?.release()
-                audioTrack = null
+                if (!reusePreparedTrack) {
+                    audioTrack?.stop()
+                    audioTrack?.release()
+                    audioTrack = null
+                }
 
                 // Call completion
                 onComplete()
             } catch (e: Exception) {
                 Timber.e(e, "Error playing audio")
-                audioTrack?.release()
-                audioTrack = null
+                if (!reusePreparedTrack) {
+                    audioTrack?.release()
+                    audioTrack = null
+                }
                 onComplete()
             }
         }

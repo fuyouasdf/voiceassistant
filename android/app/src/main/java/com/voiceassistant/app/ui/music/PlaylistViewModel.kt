@@ -10,6 +10,7 @@ import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.remote.SessionInfo
 import com.voiceassistant.domain.model.Playlist
 import com.voiceassistant.domain.model.PlaylistSong
+import com.voiceassistant.domain.repository.MusicRepository
 import com.voiceassistant.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,7 @@ data class PlaylistUiState(
 @HiltViewModel
 class PlaylistViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
+    private val musicRepository: MusicRepository,
     private val jellyfinClient: JellyfinClient,
     private val musicPlayer: MusicPlayer,
     private val sharedPreferences: SharedPreferences
@@ -70,6 +72,40 @@ class PlaylistViewModel @Inject constructor(
         loadSavedDevice()
         // 刷新设备列表
         refreshDevices()
+        // 设置 Stream URL 刷新回调，用于播放失败时刷新过期 URL
+        setupStreamUrlRefresher()
+    }
+
+    /**
+     * 设置 Stream URL 刷新回调
+     * 当播放失败（URL 过期）时，MusicPlayer 会调用此回调刷新 URL 并重试播放
+     */
+    private fun setupStreamUrlRefresher() {
+        musicPlayer.setStreamUrlRefresher(object : MusicPlayer.StreamUrlRefresher {
+            override suspend fun refreshStreamUrl(songId: String, currentItem: MusicItem): MusicItem? {
+                Timber.d("StreamUrlRefresher: refreshing URL for song: ${currentItem.title}, id: $songId")
+                return try {
+                    val streamInfo = musicRepository.getStreamInfo(songId).getOrNull()
+                    if (streamInfo != null && streamInfo.url.isNotBlank()) {
+                        Timber.d("StreamUrlRefresher: got new URL for song: ${currentItem.title}")
+                        currentItem.copy(
+                            streamUrl = streamInfo.url,
+                            playbackSessionId = streamInfo.playSessionId,
+                            mediaSourceId = streamInfo.mediaSourceId,
+                            streamContainer = streamInfo.container,
+                            streamPlayMethod = streamInfo.playMethod,
+                            isTranscoding = streamInfo.isTranscoding
+                        )
+                    } else {
+                        Timber.w("StreamUrlRefresher: failed to get new URL for song: ${currentItem.title}")
+                        null
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "StreamUrlRefresher: error refreshing URL for song: ${currentItem.title}")
+                    null
+                }
+            }
+        })
     }
 
     private fun loadSavedDevice() {
@@ -308,7 +344,7 @@ class PlaylistViewModel @Inject constructor(
                         return@launch
                     }
                     // 通过 Jellyfin Session API 发起远程播放
-                    val result = jellyfinClient.playItem(session.id, song.songId)
+                    val result = musicRepository.playItem(session.id, song.songId)
                     if (result.isFailure) {
                         _uiState.value = _uiState.value.copy(
                             error = "播放失败: ${result.exceptionOrNull()?.message}"
@@ -360,7 +396,7 @@ class PlaylistViewModel @Inject constructor(
                             sessionId = session.id,
                             desiredPlaying = false
                         ) {
-                            jellyfinClient.pause(session.id)
+                            musicRepository.pause(session.id)
                         }
                         if (result.isFailure) {
                             _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
@@ -370,7 +406,7 @@ class PlaylistViewModel @Inject constructor(
                             sessionId = session.id,
                             desiredPlaying = true
                         ) {
-                            jellyfinClient.unpause(session.id)
+                            musicRepository.unpause(session.id)
                         }
                         if (result.isFailure) {
                             _uiState.value = _uiState.value.copy(error = "播放控制失败: ${result.exceptionOrNull()?.message}")
@@ -435,7 +471,7 @@ class PlaylistViewModel @Inject constructor(
                         )
                         return@launch
                     }
-                    jellyfinClient.stop(session.id)
+                    musicRepository.stop(session.id)
                 }
                 _uiState.value = _uiState.value.copy(currentSong = null, isPlaying = false)
             } catch (e: Exception) {
@@ -447,31 +483,33 @@ class PlaylistViewModel @Inject constructor(
 
     private suspend fun buildMusicItems(songs: List<PlaylistSong>): List<MusicItem> {
         return songs.mapNotNull { playlistSong ->
-            try {
-                val streamInfo = jellyfinClient.getStreamInfo(playlistSong.songId)
-                if (streamInfo.url.isBlank()) {
-                    Timber.w("跳过无可用播放地址的播放列表歌曲: songId=${playlistSong.songId}")
+            musicRepository.getStreamInfo(playlistSong.songId).fold(
+                onSuccess = { streamInfo ->
+                    if (streamInfo.url.isBlank()) {
+                        Timber.w("跳过无可用播放地址的播放列表歌曲: songId=${playlistSong.songId}")
+                        null
+                    } else {
+                        MusicItem(
+                            id = playlistSong.songId,
+                            title = playlistSong.title,
+                            artist = playlistSong.artist,
+                            album = playlistSong.album,
+                            duration = playlistSong.duration,
+                            streamUrl = streamInfo.url,
+                            coverUrl = playlistSong.coverUrl,
+                            playbackSessionId = streamInfo.playSessionId,
+                            mediaSourceId = streamInfo.mediaSourceId,
+                            streamContainer = streamInfo.container,
+                            streamPlayMethod = streamInfo.playMethod,
+                            isTranscoding = streamInfo.isTranscoding
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    Timber.w(e, "构建播放列表队列失败，跳过歌曲: songId=${playlistSong.songId}")
                     null
-                } else {
-                    MusicItem(
-                        id = playlistSong.songId,
-                        title = playlistSong.title,
-                        artist = playlistSong.artist,
-                        album = playlistSong.album,
-                        duration = playlistSong.duration,
-                        streamUrl = streamInfo.url,
-                        coverUrl = playlistSong.coverUrl,
-                        playbackSessionId = streamInfo.playSessionId,
-                        mediaSourceId = streamInfo.mediaSourceId,
-                        streamContainer = streamInfo.container,
-                        streamPlayMethod = streamInfo.playMethod?.name,
-                        isTranscoding = streamInfo.isTranscoding
-                    )
                 }
-            } catch (e: Exception) {
-                Timber.w(e, "构建播放列表队列失败，跳过歌曲: songId=${playlistSong.songId}")
-                null
-            }
+            )
         }
     }
 

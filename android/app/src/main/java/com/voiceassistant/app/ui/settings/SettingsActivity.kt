@@ -91,6 +91,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var switchTtsEnabled: SwitchMaterial
     private lateinit var sliderTtsSpeed: Slider
     private lateinit var tvTtsSpeed: TextView
+    private lateinit var sliderTtsPitch: Slider
+    private lateinit var tvTtsPitch: TextView
     private lateinit var rvWakeWords: RecyclerView
     private lateinit var btnAddWakeWord: MaterialButton
     private lateinit var btnTestKws: MaterialButton
@@ -167,6 +169,8 @@ class SettingsActivity : AppCompatActivity() {
         switchTtsEnabled = findViewById(R.id.switchTtsEnabled)
         sliderTtsSpeed = findViewById(R.id.sliderTtsSpeed)
         tvTtsSpeed = findViewById(R.id.tvTtsSpeed)
+        sliderTtsPitch = findViewById(R.id.sliderTtsPitch)
+        tvTtsPitch = findViewById(R.id.tvTtsPitch)
         rvWakeWords = findViewById(R.id.rvWakeWords)
         btnAddWakeWord = findViewById(R.id.btnAddWakeWord)
         btnTestKws = findViewById(R.id.btnTestKws)
@@ -206,6 +210,11 @@ class SettingsActivity : AppCompatActivity() {
         sliderTtsSpeed.addOnChangeListener { _, value, _ ->
             if (isLoading) return@addOnChangeListener
             tvTtsSpeed.text = String.format("%.1fx", value)
+        }
+
+        sliderTtsPitch.addOnChangeListener { _, value, _ ->
+            if (isLoading) return@addOnChangeListener
+            tvTtsPitch.text = String.format("%.1fx", value)
         }
 
         sliderLlmContextCount.addOnChangeListener { _, value, _ ->
@@ -287,6 +296,10 @@ class SettingsActivity : AppCompatActivity() {
             val ttsSpeed = settingsRepository.getTtsSpeed()
             sliderTtsSpeed.value = ttsSpeed
             tvTtsSpeed.text = String.format("%.1fx", ttsSpeed)
+
+            val ttsPitch = settingsRepository.getTtsPitch()
+            sliderTtsPitch.value = ttsPitch
+            tvTtsPitch.text = String.format("%.1fx", ttsPitch)
 
             // Load Wake Words
             val storedWords = settingsRepository.getWakeWords()
@@ -609,6 +622,7 @@ class SettingsActivity : AppCompatActivity() {
                 // Save Voice Settings
                 settingsRepository.setWakeSensitivity(sliderWakeSensitivity.value)
                 settingsRepository.setTtsSpeed(sliderTtsSpeed.value)
+                settingsRepository.setTtsPitch(sliderTtsPitch.value)
                 settingsRepository.setTtsEnabled(switchTtsEnabled.isChecked)
 
                 val unsupportedWords = wakeWordsList
@@ -627,6 +641,9 @@ class SettingsActivity : AppCompatActivity() {
                 // Update ConfigHolder for immediate use
                 configHolder.settingsRepository = settingsRepository
                 configHolder.reload()
+
+                // Reload JellyfinClient with new server config and clear caches
+                jellyfinClient.reload(configHolder.jellyfinUrl, configHolder.jellyfinApiKey)
 
                 // Hot apply wake sensitivity immediately (no restart required)
                 voicePipeline.applyWakeSensitivity(sliderWakeSensitivity.value)

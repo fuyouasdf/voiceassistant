@@ -34,10 +34,10 @@ class IntentExecutor @Inject constructor(
     private val handleDeviceUseCase: HandleDeviceUseCase,
     private val handleQueryUseCase: HandleQueryUseCase,
     private val handleChatUseCase: HandleChatUseCase,
-    private val musicRepository: MusicRepository?,
+    private val musicRepository: MusicRepository,
     private val sharedPreferences: SharedPreferences,
     private val musicPlayer: MusicPlayer,
-    private val playlistRepository: PlaylistRepository?
+    private val playlistRepository: PlaylistRepository
 ) {
     companion object {
         private const val PREF_LAST_SESSION_ID = "jellyfin_selected_device_id"
@@ -113,7 +113,7 @@ class IntentExecutor @Inject constructor(
     }
 
     private suspend fun handlePlay(intent: Intent, sessionId: String): String {
-        val repo = musicRepository ?: return "音乐服务未配置"
+        val repo = musicRepository
 
         val query = intent.query ?: ""
         if (query.isEmpty()) {
@@ -197,8 +197,7 @@ class IntentExecutor @Inject constructor(
         val song = songs.first()
         playSong(song, sessionId)
 
-        val artistInfo = if (artist.isNullOrEmpty()) "" else "（$artist）"
-        return "即将播放「${song.title}」$artistInfo"
+        return "现在播放：${song.title} - ${song.artist ?: "未知艺术家"}"
     }
 
     /**
@@ -285,7 +284,7 @@ class IntentExecutor @Inject constructor(
     }
 
     private suspend fun handlePlayRandom(sessionId: String): String {
-        val playlistRepo = playlistRepository ?: return "播放列表服务未配置"
+        val playlistRepo = playlistRepository
 
         val playlists = playlistRepo.getAllPlaylists().first()
         if (playlists.isEmpty()) {
