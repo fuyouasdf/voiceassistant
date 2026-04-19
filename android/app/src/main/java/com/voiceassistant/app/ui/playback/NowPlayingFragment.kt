@@ -21,7 +21,7 @@ import androidx.media3.ui.TimeBar
 import coil.load
 import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.FragmentNowPlayingBinding
-import com.voiceassistant.core.playback.state.RepeatMode
+import com.voiceassistant.core.music.RepeatMode
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -194,7 +194,7 @@ class NowPlayingFragment : Fragment() {
 
     private fun updateRepeatButton(mode: RepeatMode) {
         when (mode) {
-            RepeatMode.NONE -> {
+            RepeatMode.OFF -> {
                 binding.btnRepeat.setImageResource(R.drawable.ic_repeat)
                 binding.btnRepeat.alpha = 0.5f
             }
@@ -203,7 +203,7 @@ class NowPlayingFragment : Fragment() {
                 binding.btnRepeat.alpha = 1f
                 binding.btnRepeat.setColorFilter(requireContext().getColor(R.color.primary))
             }
-            RepeatMode.TRACK -> {
+            RepeatMode.ONE -> {
                 binding.btnRepeat.setImageResource(R.drawable.ic_repeat_one)
                 binding.btnRepeat.alpha = 1f
                 binding.btnRepeat.setColorFilter(requireContext().getColor(R.color.primary))
