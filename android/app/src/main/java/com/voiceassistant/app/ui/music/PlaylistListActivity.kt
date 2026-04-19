@@ -1,6 +1,7 @@
 package com.voiceassistant.app.ui.music
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -17,19 +18,32 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityPlaylistListBinding
 import com.voiceassistant.app.ui.playback.MiniPlayerFragment
+import com.voiceassistant.data.remote.JellyfinClient
+import com.voiceassistant.data.remote.SessionInfo
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
+private const val PREF_SELECTED_DEVICE_ID = "jellyfin_selected_device_id"
 
 @AndroidEntryPoint
 class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerClickListener {
 
     private val viewModel: PlaylistListViewModel by viewModels()
+    private val playbackViewModel: PlaylistViewModel by viewModels()
     private lateinit var binding: ActivityPlaylistListBinding
     private lateinit var playlistAdapter: PlaylistListAdapter
+    private var dlnaDialog: AlertDialog? = null
+
+    @Inject
+    lateinit var sharedPreferences: SharedPreferences
+
+    @Inject
+    lateinit var jellyfinClient: JellyfinClient
 
     override fun onMiniPlayerClicked() {
-        // 点击 mini player 打开 NowPlayingActivity
         startActivity(Intent(this, NowPlayingActivity::class.java))
     }
 
@@ -45,6 +59,7 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
         setupRecyclerView()
         setupListeners()
         observeState()
+        observePlayback()
     }
 
     private fun setupInsets() {
@@ -54,7 +69,6 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
             windowInsets
         }
 
-        // RecyclerView needs to adjust padding for bottom insets
         ViewCompat.setOnApplyWindowInsetsListener(binding.recyclerPlaylists) { view, windowInsets ->
             val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val bottomPadding = systemBars.bottom
@@ -62,11 +76,18 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
             windowInsets
         }
 
-        // Mini player container needs to adjust for system bars
         ViewCompat.setOnApplyWindowInsetsListener(binding.miniPlayerContainer) { view, windowInsets ->
             val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val params = view.layoutParams as ViewGroup.MarginLayoutParams
             params.bottomMargin = systemBars.bottom
+            view.layoutParams = params
+            windowInsets
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.cardNowPlaying) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val params = view.layoutParams as ViewGroup.MarginLayoutParams
+            params.bottomMargin = systemBars.bottom + resources.getDimensionPixelSize(R.dimen.spacing_lg)
             view.layoutParams = params
             windowInsets
         }
@@ -97,6 +118,65 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
     private fun setupListeners() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnCreatePlaylist.setOnClickListener { showCreatePlaylistDialog() }
+
+        binding.chipDlnaDevice.setOnClickListener {
+            showDlnaDeviceDialog()
+        }
+
+        binding.btnPlayPauseMini.setOnClickListener {
+            playbackViewModel.togglePlayPause()
+        }
+
+        binding.btnPreviousMini.setOnClickListener {
+            // DLNA 不支持上一首
+        }
+
+        binding.btnNextMini.setOnClickListener {
+            // DLNA 不支持下一首
+        }
+
+        binding.btnStopMini.setOnClickListener {
+            playbackViewModel.stopPlayback()
+        }
+    }
+
+    private fun showDlnaDeviceDialog() {
+        lifecycleScope.launch {
+            val devices = jellyfinClient.getSessions()
+                .filter { it.supportsMediaControl && it.isActive }
+
+            val localDevice = SessionInfo(
+                id = LOCAL_DEVICE_SESSION_ID,
+                deviceName = "本机",
+                deviceId = LOCAL_DEVICE_SESSION_ID,
+                client = "VoiceAssistant",
+                userName = null,
+                userId = null,
+                isActive = true,
+                supportsMediaControl = true,
+                supportedCommands = listOf("Pause", "Unpause", "Stop", "Seek", "NextTrack", "PreviousTrack"),
+                playbackState = null,
+                nowPlayingItem = null
+            )
+            val allDevices = listOf(localDevice) + devices
+
+            val deviceNames = allDevices.map { it.deviceName }.toTypedArray()
+            dlnaDialog?.dismiss()
+            dlnaDialog = AlertDialog.Builder(this@PlaylistListActivity)
+                .setTitle("选择播放设备")
+                .setItems(deviceNames) { _, which ->
+                    if (which < allDevices.size) {
+                        val selectedDevice = allDevices[which]
+                        playbackViewModel.selectDlnaDevice(selectedDevice)
+                        Toast.makeText(
+                            this@PlaylistListActivity,
+                            if (selectedDevice.id == LOCAL_DEVICE_SESSION_ID) "已切换到本机播放" else "已切换到 ${selectedDevice.deviceName}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                .show()
+        }
     }
 
     private fun observeState() {
@@ -116,6 +196,61 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
                 }
             }
         }
+    }
+
+    private fun observePlayback() {
+        lifecycleScope.launch {
+            playbackViewModel.uiState.collectLatest { state ->
+                val deviceId = state.selectedDlnaDevice?.id
+                val isLocalDevice = deviceId == null || deviceId == LOCAL_DEVICE_SESSION_ID
+
+                // 更新 chip 显示
+                binding.chipDlnaDevice.text = state.selectedDlnaDevice?.deviceName ?: "本机"
+
+                if (isLocalDevice) {
+                    binding.miniPlayerContainer.visibility = View.VISIBLE
+                    binding.cardNowPlaying.visibility = View.GONE
+                } else {
+                    binding.miniPlayerContainer.visibility = View.GONE
+                    binding.cardNowPlaying.visibility = View.VISIBLE
+                    updateDlnaNowPlaying(state)
+                }
+            }
+        }
+    }
+
+    private fun updateDlnaNowPlaying(state: PlaylistUiState) {
+        val session = state.selectedDlnaDevice
+        val isPlaying = state.isPlaying
+        val nowPlayingItem = session?.nowPlayingItem
+
+        val playbackStateText = if (isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
+
+        if (nowPlayingItem != null) {
+            binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
+            val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
+            binding.tvNowPlayingArtist.text = "$playbackStateText · $artist"
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "--:-- / --:--"
+        } else if (isPlaying) {
+            binding.tvNowPlayingTitle.text = getString(R.string.state_playing)
+            binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "--:-- / --:--"
+        } else {
+            binding.tvNowPlayingTitle.text = getString(R.string.waiting_for_playback)
+            binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "--:-- / --:--"
+        }
+        binding.tvNowPlayingStatus.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+
+        binding.btnPlayPauseMini.setImageResource(
+            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        )
+
+        binding.btnPreviousMini.isEnabled = false
+        binding.btnNextMini.isEnabled = false
     }
 
     private fun showCreatePlaylistDialog() {

@@ -50,10 +50,27 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="16dp"
-        android:paddingBottom="8dp"
+        android:paddingBottom="4dp"
         android:textColor="@color/text_secondary"
         android:textSize="14sp"
         tools:text="3 个播放列表" />
+
+    <!-- DLNA Device Selector -->
+    <com.google.android.material.chip.Chip
+        android:id="@+id/chipDlnaDevice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="8dp"
+        android:text="本机"
+        android:textColor="@color/text_primary"
+        app:chipBackgroundColor="@color/surface"
+        app:chipStrokeWidth="1dp"
+        app:chipStrokeColor="@color/glass_border"
+        app:chipIcon="@drawable/ic_remote_play"
+        app:chipIconTint="@color/primary"
+        app:chipIconVisible="true"
+        app:closeIconVisible="false" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -108,11 +125,155 @@
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Mini Player Container -->
+    <!-- Mini Player Container (for local playback) -->
     <FrameLayout
         android:id="@+id/miniPlayerContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom" />
+
+    <!-- Now Playing Bar (for DLNA remote playback) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardNowPlaying"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/surface_elevated"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
+        app:strokeWidth="0dp"
+        android:layout_gravity="bottom"
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/ivNowPlayingCover"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@android:drawable/ic_menu_slideshow"
+                    android:scaleType="centerCrop"
+                    android:background="@color/surface" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="12dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvNowPlayingTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="Song Title" />
+
+                    <TextView
+                        android:id="@+id/tvNowPlayingArtist"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        tools:text="Artist Name" />
+
+                    <TextView
+                        android:id="@+id/tvNowPlayingStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/secondary"
+                        android:textSize="11sp"
+                        tools:text="正在投放到: 设备名" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progressNowPlaying"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:max="1000"
+                android:progress="0"
+                android:indeterminate="false"
+                app:indicatorColor="@color/primary"
+                app:trackColor="@color/text_tertiary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/btnPreviousMini"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_previous"
+                    android:contentDescription="上一首"
+                    app:tint="@color/text_secondary" />
+
+                <ImageButton
+                    android:id="@+id/btnPlayPauseMini"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_play"
+                    android:contentDescription="播放"
+                    app:tint="@color/primary" />
+
+                <ImageButton
+                    android:id="@+id/btnNextMini"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_next"
+                    android:contentDescription="下一首"
+                    app:tint="@color/text_secondary" />
+
+                <ImageButton
+                    android:id="@+id/btnStopMini"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_stop"
+                    android:contentDescription="停止"
+                    app:tint="@color/text_secondary" />
+
+                <TextView
+                    android:id="@+id/tvNowPlayingTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="00:00 / 00:00"
+                    android:textColor="@color/text_tertiary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>
