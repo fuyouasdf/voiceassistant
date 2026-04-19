@@ -907,8 +907,8 @@ class MusicPlayer @Inject constructor(
             player.hasPreviousMediaItem() -> {
                 player.seekToPreviousMediaItem()
             }
-            // 列表循环则跳到最后一首
-            state.repeatMode == RepeatMode.ALL -> {
+            // 列表循环则跳到最后一首（临时列表模式始终循环）
+            state.repeatMode == RepeatMode.ALL || tempPlaylistState.isActive -> {
                 val lastIndex = player.mediaItemCount - 1
                 if (lastIndex >= 0) {
                     player.seekTo(lastIndex, 0)
