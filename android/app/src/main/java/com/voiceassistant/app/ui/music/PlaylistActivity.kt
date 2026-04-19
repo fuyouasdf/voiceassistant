@@ -27,12 +27,17 @@ private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
  * 用于显示和管理播放列表中的歌曲
  */
 @AndroidEntryPoint
-class PlaylistActivity : AppCompatActivity() {
+class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerClickListener {
 
     private val viewModel: PlaylistViewModel by viewModels()
     private lateinit var binding: ActivityPlaylistBinding
     private lateinit var songAdapter: PlaylistAdapter
     private var dlnaDialog: AlertDialog? = null
+
+    override fun onMiniPlayerClicked() {
+        // 点击 mini player 打开 NowPlayingActivity
+        startActivity(Intent(this, NowPlayingActivity::class.java))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,11 +124,6 @@ class PlaylistActivity : AppCompatActivity() {
 
         binding.chipDlnaDevice.setOnClickListener {
             showDlnaDeviceDialog()
-        }
-
-        // Mini player click opens NowPlayingActivity
-        binding.miniPlayerContainer.setOnClickListener {
-            startActivity(Intent(this, NowPlayingActivity::class.java))
         }
     }
 

@@ -6,6 +6,7 @@
 
 package com.voiceassistant.app.ui.playback
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -34,6 +35,25 @@ class MiniPlayerFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val playbackViewModel: PlaybackViewModel by activityViewModels()
+
+    /** 点击回调接口 */
+    interface OnMiniPlayerClickListener {
+        fun onMiniPlayerClicked()
+    }
+
+    private var clickListener: OnMiniPlayerClickListener? = null
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        if (context is OnMiniPlayerClickListener) {
+            clickListener = context
+        }
+    }
+
+    override fun onDetach() {
+        super.onDetach()
+        clickListener = null
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -68,12 +88,18 @@ class MiniPlayerFragment : Fragment() {
     }
 
     private fun setupListeners() {
+        // 点击 mini player 主体区域
         binding.root.setOnClickListener {
-            // Open full playback panel
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, NowPlayingFragment())
-                .addToBackStack(null)
-                .commit()
+            // 如果 Activity 实现了 OnMiniPlayerClickListener，调用它；否则使用默认行为
+            if (clickListener != null) {
+                clickListener?.onMiniPlayerClicked()
+            } else {
+                // 默认行为：打开 NowPlayingFragment
+                parentFragmentManager.beginTransaction()
+                    .replace(R.id.fragmentContainer, NowPlayingFragment())
+                    .addToBackStack(null)
+                    .commit()
+            }
         }
 
         binding.btnPlayPause.setOnClickListener {
