@@ -32,7 +32,7 @@
             android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="16dp"
+            android:layout_marginHorizontal="24dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_player_surface"
             android:gravity="center_vertical"
@@ -61,17 +61,14 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="歌词"
-                    android:textColor="@color/text_primary"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    style="@style/TextAppearance.VoiceAssistant.Title" />
 
                 <TextView
                     android:id="@+id/tvPlaybackTime"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
+                    style="@style/TextAppearance.VoiceAssistant.Caption"
                     tools:text="01:42 / 04:52" />
             </LinearLayout>
         </LinearLayout>
@@ -91,9 +88,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:maxLines="2"
-                android:textColor="@color/text_primary"
-                android:textSize="24sp"
-                android:textStyle="bold"
+                style="@style/TextAppearance.VoiceAssistant.Title.Large"
                 tools:text="不流泪的机场" />
 
             <TextView
@@ -103,8 +98,7 @@
                 android:layout_marginTop="6dp"
                 android:gravity="center"
                 android:maxLines="1"
-                android:textColor="@color/text_secondary"
-                android:textSize="15sp"
+                style="@style/TextAppearance.VoiceAssistant.Body.Secondary"
                 tools:text="林俊杰" />
 
             <TextView
@@ -113,8 +107,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:gravity="center"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
+                style="@style/TextAppearance.VoiceAssistant.Caption"
                 tools:text="已加载 64 行歌词，可点击歌词跳转" />
         </LinearLayout>
 
@@ -135,7 +128,7 @@
             android:clipToPadding="false"
             android:nestedScrollingEnabled="false"
             android:overScrollMode="never"
-            android:paddingHorizontal="20dp"
+            android:paddingHorizontal="24dp"
             android:paddingTop="96dp"
             android:paddingBottom="160dp"
             tools:listitem="@layout/item_lyric_line" />

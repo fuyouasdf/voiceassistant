@@ -10,7 +10,7 @@
         android:id="@+id/topBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_marginHorizontal="24dp"
         android:layout_marginTop="12dp"
         android:background="@drawable/bg_player_surface"
         android:gravity="center_vertical"
@@ -42,17 +42,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="播放队列"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/TextAppearance.VoiceAssistant.Title" />
 
             <TextView
                 android:id="@+id/tvQueueSummary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
+                style="@style/TextAppearance.VoiceAssistant.Body.Secondary"
                 tools:text="共 12 首，当前第 3 首" />
         </LinearLayout>
 
@@ -104,9 +101,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="当前队列为空"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            style="@style/TextAppearance.VoiceAssistant.Title" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
@@ -114,7 +109,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:clipToPadding="false"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="24dp"
         android:paddingTop="12dp"
         android:paddingBottom="24dp"
         app:layout_constraintBottom_toBottomOf="parent"
