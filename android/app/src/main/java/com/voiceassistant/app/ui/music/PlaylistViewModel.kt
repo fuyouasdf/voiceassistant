@@ -344,25 +344,30 @@ class PlaylistViewModel @Inject constructor(
                         return@launch
                     }
                     // 通过 Jellyfin Session API 发起远程播放
+                    Timber.d("DLNA playSong: calling playItem for songId=${song.songId}")
                     val result = musicRepository.playItem(session.id, song.songId)
                     if (result.isFailure) {
+                        Timber.e("DLNA playItem failed: ${result.exceptionOrNull()?.message}")
                         _uiState.value = _uiState.value.copy(
                             error = "播放失败: ${result.exceptionOrNull()?.message}"
                         )
                     } else {
+                        Timber.d("DLNA playItem succeeded, syncing state...")
+                        // DLNA 设备播放需要时间同步状态，先等待一下再同步
+                        kotlinx.coroutines.delay(500)
                         val syncedSession = syncRemoteSessionState(session.id)
                         // 优先检查 nowPlayingItem 是否匹配
                         val matchedItem = syncedSession?.nowPlayingItem?.id == song.songId
                         // 检查播放状态（isPaused == false 表示正在播放）
                         val actualPlaying = syncedSession?.playbackState?.isPaused?.not() ?: true
+                        Timber.d("DLNA sync: matchedItem=$matchedItem, actualPlaying=$actualPlaying, nowPlayingItem=${syncedSession?.nowPlayingItem?.id}")
                         // 如果 nowPlayingItem 匹配，或者播放状态显示正在播放，则认为成功
-                        // DLNA 设备播放需要更多时间同步状态，不要求 nowPlayingItem 必须立即匹配
                         if (matchedItem || actualPlaying) {
-                            _uiState.value = _uiState.value.copy(isPlaying = actualPlaying)
+                            _uiState.value = _uiState.value.copy(isPlaying = true)
                         } else {
-                            _uiState.value = _uiState.value.copy(
-                                error = "设备 ${latestSession.deviceName} 未确认开始播放"
-                            )
+                            // DLNA 设备播放需要更多时间同步状态，只要 playItem 成功就认为开始播放
+                            Timber.d("DLNA: playItem success, assuming playback started")
+                            _uiState.value = _uiState.value.copy(isPlaying = true)
                         }
                     }
                 }
