@@ -243,20 +243,25 @@ class PlaylistActivity : AppCompatActivity() {
                     val session = state.selectedDlnaDevice
                     val isPlaying = state.isPlaying
                     val nowPlayingItem = session?.nowPlayingItem
-
-                    if (nowPlayingItem == null) {
-                        binding.cardNowPlaying.visibility = View.GONE
-                        return@collectLatest
-                    }
-
-                    binding.cardNowPlaying.visibility = View.VISIBLE
-                    binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
-                    val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
                     val playbackState = if (isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
-                    binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+
+                    // 远程播放时，只要选择了设备就显示 NowPlayingBar
+                    // DLNA 设备需要时间加载，nowPlayingItem 可能还没更新
+                    binding.cardNowPlaying.visibility = View.VISIBLE
+
+                    if (nowPlayingItem != null) {
+                        binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
+                        val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
+                        binding.tvNowPlayingArtist.text = "$playbackState · $artist"
+                        binding.progressNowPlaying.progress = 0
+                        binding.tvNowPlayingTime.text = "--:-- / --:--"
+                    } else {
+                        binding.tvNowPlayingTitle.text = getString(R.string.waiting_for_playback)
+                        binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+                        binding.progressNowPlaying.progress = 0
+                        binding.tvNowPlayingTime.text = "--:-- / --:--"
+                    }
                     binding.tvNowPlayingStatus.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
-                    binding.progressNowPlaying.progress = 0
-                    binding.tvNowPlayingTime.text = "--:-- / --:--"
                     binding.btnPreviousMini.isEnabled = false
                     binding.btnNextMini.isEnabled = false
                 }
