@@ -89,6 +89,35 @@
         <item name="android:background">@drawable/bg_icon_button</item>
     </style>
 
+    <!-- TextInputLayout 统一样式 -->
+    <style name="Widget.VoiceAssistant.TextInputLayout" parent="Widget.Material3.TextInputLayout.FilledBox">
+        <item name="boxBackgroundColor">@color/surface</item>
+        <item name="boxCornerRadiusTopStart">16dp</item>
+        <item name="boxCornerRadiusTopEnd">16dp</item>
+        <item name="boxCornerRadiusBottomStart">16dp</item>
+        <item name="boxCornerRadiusBottomEnd">16dp</item>
+        <item name="hintTextColor">@color/text_secondary</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="boxStrokeColor">@color/text_tertiary</item>
+    </style>
+
+    <!-- Chip 统一样式 -->
+    <style name="Widget.VoiceAssistant.Chip" parent="Widget.Material3.Chip.Assist">
+        <item name="chipBackgroundColor">@color/surface</item>
+        <item name="chipCornerRadius">20dp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="chipIconTint">@color/primary</item>
+        <item name="chipStrokeWidth">0dp</item>
+    </style>
+
+    <!-- 列表项卡片样式 -->
+    <style name="Widget.VoiceAssistant.Card.ListItem">
+        <item name="cardBackgroundColor">@color/surface</item>
+        <item name="cardCornerRadius">16dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
     <!-- ========================================
          Text Styles
          ======================================== -->
