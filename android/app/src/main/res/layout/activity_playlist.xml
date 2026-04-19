@@ -15,7 +15,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="24dp"
         android:paddingVertical="12dp">
 
         <ImageButton
@@ -33,9 +33,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="8dp"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
-            android:textStyle="bold"
+            android:textAppearance="@style/TextAppearance.VoiceAssistant.Headline"
             android:maxLines="1"
             android:ellipsize="end"
             tools:text="播放列表名称" />
@@ -55,7 +53,7 @@
         android:id="@+id/chipDlnaDevice"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_marginHorizontal="24dp"
         android:layout_marginBottom="8dp"
         android:text="本机"
         android:textColor="@color/text_primary"
@@ -72,10 +70,9 @@
         android:id="@+id/tvSongCount"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="24dp"
         android:paddingBottom="8dp"
-        android:textColor="@color/text_secondary"
-        android:textSize="14sp"
+        android:textAppearance="@style/TextAppearance.VoiceAssistant.Caption"
         tools:text="5 首歌曲" />
 
     <!-- Content -->
@@ -121,16 +118,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:text="播放列表是空的"
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp" />
+                android:textAppearance="@style/TextAppearance.VoiceAssistant.Body.Secondary" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="从 Jellyfin 浏览页面添加歌曲"
-                android:textColor="@color/text_tertiary"
-                android:textSize="14sp" />
+                android:textAppearance="@style/TextAppearance.VoiceAssistant.Caption" />
         </LinearLayout>
 
     </FrameLayout>
@@ -149,11 +144,11 @@
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:cardBackgroundColor="@color/surface_elevated"
-        app:cardCornerRadius="16dp"
+        app:cardCornerRadius="20dp"
         app:cardElevation="8dp"
         app:strokeWidth="0dp"
         android:layout_gravity="bottom"
-        android:layout_marginHorizontal="8dp"
+        android:layout_marginHorizontal="24dp"
         android:layout_marginBottom="8dp">
 
         <LinearLayout
@@ -191,9 +186,7 @@
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
+                        android:textAppearance="@style/TextAppearance.VoiceAssistant.Title"
                         tools:text="Song Title" />
 
                     <TextView
@@ -202,8 +195,7 @@
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
+                        android:textAppearance="@style/TextAppearance.VoiceAssistant.Caption"
                         tools:text="Artist Name" />
 
                     <TextView
@@ -213,7 +205,7 @@
                         android:ellipsize="end"
                         android:maxLines="1"
                         android:textColor="@color/secondary"
-                        android:textSize="11sp"
+                        android:textAppearance="@style/TextAppearance.VoiceAssistant.Caption"
                         tools:text="正在投放到: 设备名" />
 
                 </LinearLayout>
