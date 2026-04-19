@@ -237,7 +237,14 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
             val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
             binding.tvNowPlayingArtist.text = "$playbackStateText · $artist"
             binding.progressNowPlaying.progress = 0
-            binding.tvNowPlayingTime.text = "--:-- / --:--"
+            // 显示时长（DLNA 无法获取实时进度，进度始终为 0）
+            val durationSeconds = if (nowPlayingItem.durationTicks > 0) {
+                (nowPlayingItem.durationTicks / 10000000).toInt()
+            } else {
+                0
+            }
+            val totalTime = if (durationSeconds > 0) formatTime(durationSeconds * 1000L) else "--:--"
+            binding.tvNowPlayingTime.text = "00:00 / $totalTime"
         } else if (isPlaying) {
             binding.tvNowPlayingTitle.text = getString(R.string.state_playing)
             binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
@@ -257,6 +264,13 @@ class PlaylistListActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlaye
 
         binding.btnPreviousMini.isEnabled = false
         binding.btnNextMini.isEnabled = false
+    }
+
+    private fun formatTime(positionMs: Long): String {
+        val totalSeconds = positionMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%02d:%02d", minutes, seconds)
     }
 
     private fun showCreatePlaylistDialog() {

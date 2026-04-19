@@ -265,8 +265,18 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
             binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
             val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
             binding.tvNowPlayingArtist.text = "$playbackStateText · $artist"
+
+            // DLNA 无法获取实时进度，进度始终为 0
             binding.progressNowPlaying.progress = 0
-            binding.tvNowPlayingTime.text = "--:-- / --:--"
+
+            // 显示时长（如果有）
+            val durationSeconds = if (nowPlayingItem.durationTicks > 0) {
+                (nowPlayingItem.durationTicks / 10000000).toInt()
+            } else {
+                0
+            }
+            val totalTime = if (durationSeconds > 0) formatTime(durationSeconds * 1000L) else "--:--"
+            binding.tvNowPlayingTime.text = "00:00 / $totalTime"
         } else if (isPlaying) {
             // 正在播放但还没有歌曲信息（DLNA 同步延迟）
             binding.tvNowPlayingTitle.text = getString(R.string.state_playing)
@@ -313,6 +323,13 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun formatTime(positionMs: Long): String {
+        val totalSeconds = positionMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%02d:%02d", minutes, seconds)
     }
 
     companion object {
