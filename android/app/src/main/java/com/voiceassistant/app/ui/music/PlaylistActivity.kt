@@ -16,9 +16,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.voiceassistant.app.R
 import com.voiceassistant.app.databinding.ActivityPlaylistBinding
 import com.voiceassistant.app.ui.playback.MiniPlayerFragment
+import com.voiceassistant.core.music.MusicPlayer
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 private const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
 
@@ -33,6 +35,9 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
     private lateinit var binding: ActivityPlaylistBinding
     private lateinit var songAdapter: PlaylistAdapter
     private var dlnaDialog: AlertDialog? = null
+
+    @Inject
+    lateinit var musicPlayer: MusicPlayer
 
     override fun onMiniPlayerClicked() {
         // 点击 mini player 打开 NowPlayingActivity
@@ -60,6 +65,7 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
         setupMiniPlayer(savedInstanceState)
         setupListeners()
         observeState()
+        observePlayback()
 
         // Load playlist
         viewModel.setPlaylistId(playlistId)
@@ -87,6 +93,17 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
             val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
             val params = view.layoutParams as ViewGroup.MarginLayoutParams
             params.bottomMargin = maxOf(systemBars.bottom, ime.bottom)
+            view.layoutParams = params
+            windowInsets
+        }
+
+        // Card now playing needs to adjust for system bars and IME
+        ViewCompat.setOnApplyWindowInsetsListener(binding.cardNowPlaying) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val params = view.layoutParams as ViewGroup.MarginLayoutParams
+            params.bottomMargin = maxOf(systemBars.bottom, ime.bottom) +
+                resources.getDimensionPixelSize(R.dimen.spacing_lg)
             view.layoutParams = params
             windowInsets
         }
@@ -124,6 +141,23 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
 
         binding.chipDlnaDevice.setOnClickListener {
             showDlnaDeviceDialog()
+        }
+
+        // Card NowPlaying controls for DLNA
+        binding.btnPlayPauseMini.setOnClickListener {
+            viewModel.togglePlayPause()
+        }
+
+        binding.btnPreviousMini.setOnClickListener {
+            // DLNA 不支持上一首
+        }
+
+        binding.btnNextMini.setOnClickListener {
+            // DLNA 不支持下一首
+        }
+
+        binding.btnStopMini.setOnClickListener {
+            viewModel.stopPlayback()
         }
     }
 
@@ -179,6 +213,73 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
                 }
             }
         }
+    }
+
+    /**
+     * 监听播放状态，控制 MiniPlayerFragment 和 CardNowPlaying 的显示
+     */
+    private fun observePlayback() {
+        // 监听 ViewModel 的播放状态（用于 DLNA）
+        lifecycleScope.launch {
+            viewModel.uiState.collectLatest { state ->
+                val isLocalDevice = state.selectedDlnaDevice == null ||
+                    state.selectedDlnaDevice?.id == LOCAL_DEVICE_SESSION_ID
+
+                if (isLocalDevice) {
+                    // 本机播放：显示 MiniPlayerFragment，隐藏 CardNowPlaying
+                    binding.miniPlayerContainer.visibility = View.VISIBLE
+                    binding.cardNowPlaying.visibility = View.GONE
+                } else {
+                    // DLNA 播放：显示 CardNowPlaying，隐藏 MiniPlayerFragment
+                    binding.miniPlayerContainer.visibility = View.GONE
+                    binding.cardNowPlaying.visibility = View.VISIBLE
+
+                    // 更新 DLNA 播放状态
+                    updateDlnaNowPlaying(state)
+                }
+            }
+        }
+
+        // 监听 MusicPlayer 状态（用于本机播放的临时播放列表提示）
+        lifecycleScope.launch {
+            musicPlayer.state.collectLatest {
+                // 临时播放列表状态已在 MiniPlayerFragment 中处理
+            }
+        }
+    }
+
+    /**
+     * 更新 DLNA NowPlaying 显示
+     */
+    private fun updateDlnaNowPlaying(state: PlaylistUiState) {
+        val session = state.selectedDlnaDevice
+        val isPlaying = state.isPlaying
+        val nowPlayingItem = session?.nowPlayingItem
+
+        val playbackStateText = if (isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
+
+        if (nowPlayingItem != null) {
+            binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
+            val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
+            binding.tvNowPlayingArtist.text = "$playbackStateText · $artist"
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "--:-- / --:--"
+        } else {
+            binding.tvNowPlayingTitle.text = getString(R.string.waiting_for_playback)
+            binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "--:-- / --:--"
+        }
+        binding.tvNowPlayingStatus.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+
+        // 更新播放/暂停按钮
+        binding.btnPlayPauseMini.setImageResource(
+            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        )
+
+        // DLNA 不支持上一首/下一首
+        binding.btnPreviousMini.isEnabled = false
+        binding.btnNextMini.isEnabled = false
     }
 
     private fun showDeleteSongDialog(songId: String, songTitle: String) {
