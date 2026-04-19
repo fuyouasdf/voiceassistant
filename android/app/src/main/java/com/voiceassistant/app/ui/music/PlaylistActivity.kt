@@ -261,12 +261,20 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
         val playbackStateText = if (isPlaying) getString(R.string.state_playing) else getString(R.string.state_paused)
 
         if (nowPlayingItem != null) {
+            // 已有歌曲信息，显示歌曲详情
             binding.tvNowPlayingTitle.text = nowPlayingItem.name ?: getString(R.string.unknown)
             val artist = nowPlayingItem.artists.firstOrNull() ?: getString(R.string.artist_unknown)
             binding.tvNowPlayingArtist.text = "$playbackStateText · $artist"
             binding.progressNowPlaying.progress = 0
             binding.tvNowPlayingTime.text = "--:-- / --:--"
+        } else if (isPlaying) {
+            // 正在播放但还没有歌曲信息（DLNA 同步延迟）
+            binding.tvNowPlayingTitle.text = getString(R.string.state_playing)
+            binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
+            binding.progressNowPlaying.progress = 0
+            binding.tvNowPlayingTime.text = "--:-- / --:--"
         } else {
+            // 等待播放
             binding.tvNowPlayingTitle.text = getString(R.string.waiting_for_playback)
             binding.tvNowPlayingArtist.text = getString(R.string.casting_to_device, session?.deviceName ?: "")
             binding.progressNowPlaying.progress = 0
