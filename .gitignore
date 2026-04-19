@@ -50,6 +50,7 @@ Thumbs.db
 **/models/asr
 **/models/tts
 .claude
+.worktrees/
 
 # Local libs (Sherpa-ONNX AAR - see QUICKSTART.md)
 **/libs/
