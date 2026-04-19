@@ -11,6 +11,7 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
         android:paddingBottom="24dp">
 
         <LinearLayout
@@ -116,7 +117,7 @@
             android:layout_marginTop="20dp"
             android:elevation="4dp"
             app:cardBackgroundColor="@android:color/transparent"
-            app:cardCornerRadius="24dp"
+            app:cardCornerRadius="20dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/coverCard"
@@ -136,9 +137,7 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:maxLines="2"
-                    android:textColor="@color/text_primary"
-                    android:textSize="26sp"
-                    android:textStyle="bold"
+                    android:textAppearance="@style/TextAppearance.VoiceAssistant.Title"
                     tools:text="不流泪的机场" />
 
                 <TextView
@@ -148,9 +147,7 @@
                     android:layout_marginTop="10dp"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="17sp"
-                    android:textStyle="bold"
+                    android:textAppearance="@style/TextAppearance.VoiceAssistant.Body.Secondary"
                     tools:text="林俊杰" />
 
                 <TextView
@@ -178,9 +175,7 @@
                         android:background="@drawable/bg_player_chip"
                         android:paddingHorizontal="12dp"
                         android:paddingVertical="6dp"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
+                        android:textAppearance="@style/TextAppearance.VoiceAssistant.Body"
                         tools:text="本机播放" />
 
                     <TextView
@@ -208,7 +203,7 @@
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
             app:cardBackgroundColor="@android:color/transparent"
-            app:cardCornerRadius="24dp"
+            app:cardCornerRadius="20dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/infoCard"
@@ -246,9 +241,7 @@
                         android:id="@+id/tvCurrentTime"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
+                        android:textAppearance="@style/TextAppearance.VoiceAssistant.Body.Secondary"
                         tools:text="01:24" />
 
                     <View
@@ -260,9 +253,7 @@
                         android:id="@+id/tvTotalTime"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
+                        android:textAppearance="@style/TextAppearance.VoiceAssistant.Body.Secondary"
                         tools:text="04:52" />
                 </LinearLayout>
             </LinearLayout>
@@ -275,7 +266,7 @@
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
             app:cardBackgroundColor="@android:color/transparent"
-            app:cardCornerRadius="28dp"
+            app:cardCornerRadius="20dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/progressCard"
@@ -450,7 +441,7 @@
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
             app:cardBackgroundColor="@android:color/transparent"
-            app:cardCornerRadius="24dp"
+            app:cardCornerRadius="20dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/controlsCard"
