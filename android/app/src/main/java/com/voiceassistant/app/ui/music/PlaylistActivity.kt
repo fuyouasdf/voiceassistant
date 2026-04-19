@@ -222,8 +222,10 @@ class PlaylistActivity : AppCompatActivity(), MiniPlayerFragment.OnMiniPlayerCli
         // 监听 ViewModel 的播放状态（用于 DLNA）
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
-                val isLocalDevice = state.selectedDlnaDevice == null ||
-                    state.selectedDlnaDevice?.id == LOCAL_DEVICE_SESSION_ID
+                val deviceId = state.selectedDlnaDevice?.id
+                val isLocalDevice = deviceId == null || deviceId == LOCAL_DEVICE_SESSION_ID
+
+                android.util.Log.i("PlaylistActivity", "observePlayback: deviceId=$deviceId, isLocalDevice=$isLocalDevice, isPlaying=${state.isPlaying}")
 
                 if (isLocalDevice) {
                     // 本机播放：显示 MiniPlayerFragment，隐藏 CardNowPlaying

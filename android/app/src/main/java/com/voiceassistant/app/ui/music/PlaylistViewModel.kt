@@ -193,6 +193,7 @@ class PlaylistViewModel @Inject constructor(
      * 选择播放设备
      */
     fun selectDlnaDevice(device: SessionInfo) {
+        android.util.Log.i("PlaylistViewModel", "selectDlnaDevice: deviceId=${device.id}, deviceName=${device.deviceName}")
         val previousDevice = _uiState.value.selectedDlnaDevice
         val switchedFromLocalToRemote =
             previousDevice?.id == LOCAL_DEVICE_SESSION_ID && device.id != LOCAL_DEVICE_SESSION_ID
@@ -310,6 +311,7 @@ class PlaylistViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(currentSong = song)
 
             val session = _uiState.value.selectedDlnaDevice
+            android.util.Log.i("PlaylistViewModel", "playSong: session=${session?.id}, sessionName=${session?.deviceName}")
             if (session == null) {
                 _uiState.value = _uiState.value.copy(error = "请先选择播放设备")
                 return@launch
@@ -471,9 +473,6 @@ class PlaylistViewModel @Inject constructor(
                 } else {
                     val latestSession = syncRemoteSessionState(session.id) ?: session
                     if (!latestSession.supportsCommand("Stop")) {
-                        _uiState.value = _uiState.value.copy(
-                            error = "设备 ${latestSession.deviceName} 不支持停止"
-                        )
                         return@launch
                     }
                     musicRepository.stop(session.id)
