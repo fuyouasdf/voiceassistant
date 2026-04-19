@@ -83,6 +83,10 @@ class MiniPlayerFragment : Fragment() {
         binding.btnNext.setOnClickListener {
             playbackViewModel.next()
         }
+
+        binding.btnTempPlaylist.setOnClickListener {
+            playbackViewModel.exitTempPlaylist()
+        }
     }
 
     private fun observePlaybackState() {
@@ -115,6 +119,12 @@ class MiniPlayerFragment : Fragment() {
                         if (durationDs > 0) {
                             // Progress bar update - will be added when layout is finalized
                         }
+                    }
+                }
+
+                launch {
+                    playbackViewModel.isTempPlaylistActive.collectLatest { isTemp ->
+                        binding.btnTempPlaylist.visibility = if (isTemp) View.VISIBLE else View.GONE
                     }
                 }
             }

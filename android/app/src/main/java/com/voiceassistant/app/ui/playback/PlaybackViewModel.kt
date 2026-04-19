@@ -22,28 +22,28 @@ package com.voiceassistant.app.ui.playback
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceassistant.core.music.MusicItem
-import com.voiceassistant.core.playback.state.PlaybackStateManager
-import com.voiceassistant.core.playback.state.Progression
-import com.voiceassistant.core.playback.state.RepeatMode
+import com.voiceassistant.core.music.MusicPlayer
+import com.voiceassistant.core.music.QueueSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * UI-facing wrapper around [PlaybackStateManager].
+ * UI-facing wrapper around [MusicPlayer].
  * Exposes playback state as [StateFlow] and provides control methods for the UI.
  */
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(
-    private val playbackManager: PlaybackStateManager,
-) : ViewModel(), PlaybackStateManager.Listener {
+    private val musicPlayer: MusicPlayer,
+) : ViewModel() {
 
     private val _song = MutableStateFlow<MusicItem?>(null)
     val song: StateFlow<MusicItem?> = _song.asStateFlow()
@@ -54,8 +54,8 @@ class PlaybackViewModel @Inject constructor(
     private val _positionDs = MutableStateFlow(0L)
     val positionDs: StateFlow<Long> = _positionDs.asStateFlow()
 
-    private val _repeatMode = MutableStateFlow(RepeatMode.NONE)
-    val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
+    private val _repeatMode = MutableStateFlow<com.voiceassistant.core.music.RepeatMode>(com.voiceassistant.core.music.RepeatMode.OFF)
+    val repeatMode: StateFlow<com.voiceassistant.core.music.RepeatMode> = _repeatMode.asStateFlow()
 
     private val _isShuffled = MutableStateFlow(false)
     val isShuffled: StateFlow<Boolean> = _isShuffled.asStateFlow()
@@ -69,95 +69,67 @@ class PlaybackViewModel @Inject constructor(
     private val _durationDs = MutableStateFlow(0L)
     val durationDs: StateFlow<Long> = _durationDs.asStateFlow()
 
+    private val _isTempPlaylistActive = MutableStateFlow(false)
+    val isTempPlaylistActive: StateFlow<Boolean> = _isTempPlaylistActive.asStateFlow()
+
     private var positionUpdateJob: Job? = null
 
     init {
-        playbackManager.addListener(this)
+        observeMusicPlayerState()
         startPositionUpdates()
     }
 
     override fun onCleared() {
         super.onCleared()
-        playbackManager.removeListener(this)
         positionUpdateJob?.cancel()
+    }
+
+    private fun observeMusicPlayerState() {
+        viewModelScope.launch {
+            musicPlayer.state.collectLatest { state ->
+                _isPlaying.value = state.isPlaying
+                _queue.value = state.playlist
+                _queueIndex.value = state.currentIndex
+                _isShuffled.value = state.isShuffleEnabled
+                _repeatMode.value = state.repeatMode
+
+                // Find current song from playlist
+                val currentSong = state.playlist.getOrNull(state.currentIndex)
+                _song.value = currentSong
+
+                // Update duration from current song
+                if (currentSong != null) {
+                    _durationDs.value = currentSong.duration * 10L // seconds to deci-seconds
+                }
+
+                // Update temp playlist state
+                _isTempPlaylistActive.value = musicPlayer.isTempPlaylistActive
+
+                Timber.d("MusicPlayer state updated: isPlaying=${state.isPlaying}, song=${currentSong?.title}, index=${state.currentIndex}")
+            }
+        }
     }
 
     private fun startPositionUpdates() {
         positionUpdateJob?.cancel()
         positionUpdateJob = viewModelScope.launch {
             while (isActive) {
-                val progression = playbackManager.progression
-                _positionDs.value = progression.calculateElapsedPositionMs() / 100 // deci-seconds
-                _isPlaying.value = progression.isPlaying
-
-                // Update duration from current song
-                val currentSong = _song.value
-                if (currentSong != null) {
-                    _durationDs.value = currentSong.duration * 10L // seconds to deci-seconds
-                }
+                val state = musicPlayer.getState()
+                _positionDs.value = state.currentPosition / 100 // ms to deci-seconds
 
                 delay(100)
             }
         }
     }
 
-    // --- PlaybackStateManager.Listener implementation ---
-
-    override fun onIndexMoved(index: Int) {
-        _queueIndex.value = index
-        _song.value = _queue.value.getOrNull(index)
-        Timber.d("Index moved to $index, song: ${_song.value?.title}")
-    }
-
-    override fun onQueueChanged(queue: List<MusicItem>, index: Int) {
-        _queue.value = queue
-        _queueIndex.value = index
-        _song.value = queue.getOrNull(index)
-        Timber.d("Queue changed: ${queue.size} items, index: $index")
-    }
-
-    override fun onQueueReordered(queue: List<MusicItem>, index: Int, isShuffled: Boolean) {
-        _queue.value = queue
-        _queueIndex.value = index
-        _isShuffled.value = isShuffled
-        _song.value = queue.getOrNull(index)
-        Timber.d("Queue reordered, shuffled: $isShuffled")
-    }
-
-    override fun onNewPlayback(queue: List<MusicItem>, index: Int, isShuffled: Boolean) {
-        _queue.value = queue
-        _queueIndex.value = index
-        _isShuffled.value = isShuffled
-        _song.value = queue.getOrNull(index)
-        Timber.d("New playback: ${queue.size} items, shuffled: $isShuffled")
-    }
-
-    override fun onProgressionChanged(progression: Progression) {
-        _isPlaying.value = progression.isPlaying
-        _positionDs.value = progression.calculateElapsedPositionMs() / 100
-    }
-
-    override fun onRepeatModeChanged(repeatMode: RepeatMode) {
-        _repeatMode.value = repeatMode
-        Timber.d("Repeat mode changed to $repeatMode")
-    }
-
-    override fun onSessionEnded() {
-        _song.value = null
-        _isPlaying.value = false
-        _queue.value = emptyList()
-        _queueIndex.value = -1
-        Timber.d("Session ended")
-    }
-
     // --- Playback controls ---
 
     fun play() {
-        playbackManager.playing(true)
+        musicPlayer.resume()
     }
 
     fun pause() {
-        playbackManager.playing(false)
+        musicPlayer.pause()
     }
 
     fun togglePlaying() {
@@ -169,66 +141,69 @@ class PlaybackViewModel @Inject constructor(
     }
 
     fun next() {
-        playbackManager.next()
+        musicPlayer.playNext()
     }
 
     fun prev() {
-        playbackManager.prev()
+        musicPlayer.playPrevious()
     }
 
     fun seekTo(positionDs: Long) {
-        playbackManager.seekTo(positionDs * 100) // deci-seconds to milliseconds
+        musicPlayer.seekTo(positionDs * 100) // deci-seconds to milliseconds
     }
 
     fun seekToMs(positionMs: Long) {
-        playbackManager.seekTo(positionMs)
+        musicPlayer.seekTo(positionMs)
     }
 
     fun goto(index: Int) {
-        playbackManager.goto(index)
+        musicPlayer.seekToIndex(index)
     }
 
     fun toggleShuffle() {
-        playbackManager.shuffled(!_isShuffled.value)
+        musicPlayer.toggleShuffle()
     }
 
     fun toggleRepeat() {
-        val newMode = _repeatMode.value.increment()
-        playbackManager.repeatMode(newMode)
+        musicPlayer.toggleRepeat()
     }
 
     fun playSong(item: MusicItem) {
-        val index = _queue.value.indexOf(item)
-        if (index >= 0) {
-            goto(index)
-        } else {
-            // Play the song as a new queue
-            playbackManager.play(listOf(item), 0, false)
-        }
+        musicPlayer.play(item)
     }
 
     fun playAll(items: List<MusicItem>, startIndex: Int = 0, shuffled: Boolean = false) {
         if (items.isEmpty()) return
-        playbackManager.play(items, startIndex, shuffled)
+        musicPlayer.playPlaylist(items, startIndex, QueueSource.PLAYLIST)
+    }
+
+    fun playAsTempPlaylist(items: List<MusicItem>, startIndex: Int = 0, source: QueueSource = QueueSource.PLAYLIST) {
+        if (items.isEmpty()) return
+        musicPlayer.playAsTempPlaylist(items, startIndex, source)
+    }
+
+    fun exitTempPlaylist() {
+        musicPlayer.restoreOriginalPlaylist()
     }
 
     fun playNext(item: MusicItem) {
-        playbackManager.playNext(item)
+        // MusicPlayer.playNext() doesn't support adding item to queue
+        // This would require implementing queue management in MusicPlayer
     }
 
     fun addToQueue(item: MusicItem) {
-        playbackManager.addToQueue(item)
+        // MusicPlayer doesn't support adding items to queue
     }
 
     fun moveQueueItem(src: Int, dst: Int) {
-        playbackManager.moveQueueItem(src, dst)
+        // MusicPlayer doesn't expose this directly
     }
 
     fun removeQueueItem(at: Int) {
-        playbackManager.removeQueueItem(at)
+        // MusicPlayer doesn't expose this directly
     }
 
     fun stop() {
-        playbackManager.endSession()
+        musicPlayer.stop()
     }
 }

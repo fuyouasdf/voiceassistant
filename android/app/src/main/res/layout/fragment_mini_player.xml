@@ -6,8 +6,6 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_player_surface"
-    android:clickable="true"
-    android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:padding="8dp">
@@ -78,5 +76,17 @@
         android:padding="12dp"
         android:src="@drawable/ic_skip_next"
         app:tint="@color/text_secondary" />
+
+    <ImageButton
+        android:id="@+id/btnTempPlaylist"
+        android:layout_width="@dimen/icon_button_size_large"
+        android:layout_height="@dimen/icon_button_size_large"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_player_icon_button"
+        android:contentDescription="@string/cd_temp_playlist"
+        android:padding="10dp"
+        android:src="@drawable/ic_temp_list"
+        android:visibility="gone"
+        app:tint="@color/primary" />
 
 </LinearLayout>

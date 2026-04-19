@@ -43,6 +43,7 @@
     <string name="cd_play_pause">播放/暂停</string>
     <string name="cd_next">下一首</string>
     <string name="cd_previous">上一首</string>
+    <string name="cd_temp_playlist">临时播放列表，点击退出</string>
 
     <!-- Settings Screen -->
     <string name="settings_title">设置</string>
