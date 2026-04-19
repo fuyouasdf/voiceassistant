@@ -57,6 +57,16 @@ data class MusicPlayerState(
 )
 
 /**
+ * 临时播放列表状态
+ */
+data class TempPlaylistState(
+    val isActive: Boolean = false,
+    val originalQueue: List<MusicItem> = emptyList(),
+    val originalIndex: Int = -1,
+    val originalRepeatMode: RepeatMode = RepeatMode.OFF
+)
+
+/**
  * 重复播放模式
  */
 enum class RepeatMode {
@@ -153,6 +163,9 @@ class MusicPlayer @Inject constructor(
 
     // Favorite state
     private var isFavorite = false
+
+    // 临时播放列表状态
+    private var tempPlaylistState = TempPlaylistState()
 
     /**
      * Seek 回调接口，用于获取带起始位置的流 URL
@@ -503,6 +516,11 @@ class MusicPlayer @Inject constructor(
      * 播放歌曲
      */
     fun play(item: MusicItem) {
+        // 如果有临时播放列表，先恢复原列表再播单曲
+        if (tempPlaylistState.isActive) {
+            restoreOriginalPlaylist()
+        }
+
         // 如果正在播放同一首歌且 URL 相同，不重新创建播放器
         val currentItem = _state.value.playlist.getOrNull(_state.value.currentIndex)
         if (currentItem != null && currentItem.id == item.id && exoPlayer != null) {
@@ -617,6 +635,35 @@ class MusicPlayer @Inject constructor(
 
         // 开始进度更新
         startProgressUpdates()
+    }
+
+    /**
+     * 生成临时播放列表并播放
+     * 适用于播放歌手歌曲或播放列表场景
+     * @param songs 歌曲列表
+     * @param startIndex 起始索引
+     * @param source 队列来源
+     */
+    fun playAsTempPlaylist(songs: List<MusicItem>, startIndex: Int = 0, source: QueueSource = QueueSource.UNKNOWN) {
+        if (songs.isEmpty()) return
+
+        // 保存当前播放状态到临时列表
+        val currentState = _state.value
+        if (currentState.playlist.isNotEmpty()) {
+            tempPlaylistState = TempPlaylistState(
+                isActive = true,
+                originalQueue = currentState.playlist,
+                originalIndex = currentState.currentIndex,
+                originalRepeatMode = currentState.repeatMode
+            )
+            android.util.Log.i("♪", "TempPlaylist: saved original queue, ${currentState.playlist.size} songs")
+        }
+
+        // 使用 playPlaylist 播放临时列表
+        playPlaylist(songs, startIndex, source)
+
+        // 确保列表循环模式开启（临时列表播完从头播放）
+        updateState { it.copy(repeatMode = RepeatMode.ALL) }
     }
 
     /**
@@ -835,8 +882,8 @@ class MusicPlayer @Inject constructor(
 
         if (player.hasNextMediaItem()) {
             player.seekToNextMediaItem()
-        } else if (state.repeatMode == RepeatMode.ALL) {
-            // 循环播放到第一首
+        } else if (state.repeatMode == RepeatMode.ALL || tempPlaylistState.isActive) {
+            // 循环播放到第一首（临时列表模式始终循环）
             player.seekTo(0, 0)
         }
         // repeatMode.OFF 且没有下一首时不做任何操作
@@ -970,9 +1017,39 @@ class MusicPlayer @Inject constructor(
     }
 
     /**
+     * 切回原播放列表
+     * 临时播放列表播完后可调用此方法恢复原列表
+     */
+    fun restoreOriginalPlaylist() {
+        val original = tempPlaylistState
+        if (!original.isActive || original.originalQueue.isEmpty()) {
+            android.util.Log.i("♪", "TempPlaylist: no original playlist to restore")
+            return
+        }
+
+        android.util.Log.i("♪", "TempPlaylist: restoring original playlist, ${original.originalQueue.size} songs")
+
+        // 恢复原始播放列表
+        val targetIndex = original.originalIndex.coerceIn(0, original.originalQueue.lastIndex)
+        playPlaylist(original.originalQueue, targetIndex, QueueSource.PLAYLIST)
+
+        // 恢复原始重复模式
+        updateState { it.copy(repeatMode = original.originalRepeatMode) }
+
+        // 清除临时状态
+        tempPlaylistState = TempPlaylistState()
+    }
+
+    /**
      * 获取当前 shuffle 状态
      */
     fun isShuffleEnabled(): Boolean = shuffleMode
+
+    /**
+     * 当前是否在临时播放列表模式
+     */
+    val isTempPlaylistActive: Boolean
+        get() = tempPlaylistState.isActive
 
     /**
      * 获取当前 repeat 模式

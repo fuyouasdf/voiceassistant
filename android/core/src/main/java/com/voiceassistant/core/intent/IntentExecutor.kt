@@ -3,6 +3,7 @@ package com.voiceassistant.core.intent
 import android.content.SharedPreferences
 import com.voiceassistant.core.music.MusicItem
 import com.voiceassistant.core.music.MusicPlayer
+import com.voiceassistant.core.music.QueueSource
 import com.voiceassistant.domain.model.Intent
 import com.voiceassistant.domain.model.IntentType
 import com.voiceassistant.domain.model.Song
@@ -194,10 +195,26 @@ class IntentExecutor @Inject constructor(
         playQueue.addAll(songs)
         currentIndex = 0
 
-        val song = songs.first()
-        playSong(song, sessionId)
-
-        return "现在播放：${song.title} - ${song.artist ?: "未知艺术家"}"
+        return if (isLocalSession(sessionId)) {
+            // 播放所有匹配的歌曲（临时列表）
+            val musicItems = songs.map { song ->
+                MusicItem(
+                    id = song.id,
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    duration = song.duration,
+                    streamUrl = song.url ?: "",
+                    coverUrl = song.coverUrl
+                )
+            }
+            musicPlayer.playAsTempPlaylist(musicItems, 0, QueueSource.BROWSER)
+            "现在播放：${songs.size} 首歌曲"
+        } else {
+            // 远程播放使用原来的单首播放
+            val song = songs.first()
+            playSong(song, sessionId)
+        }
     }
 
     /**

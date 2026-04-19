@@ -331,7 +331,7 @@ class PlaylistViewModel @Inject constructor(
                     Timber.d(
                         "playlist playSong (local): queueSize=${musicItems.size}, startIndex=$startIndex, songId=${song.songId}, playMethod=${currentItem?.streamPlayMethod}, container=${currentItem?.streamContainer}"
                     )
-                    musicPlayer.playPlaylist(musicItems, startIndex, QueueSource.PLAYLIST)
+                    musicPlayer.playAsTempPlaylist(musicItems, startIndex, QueueSource.PLAYLIST)
                     _uiState.value = _uiState.value.copy(isPlaying = true)
                 } else {
                     // 远程播放 - 先停止本机
