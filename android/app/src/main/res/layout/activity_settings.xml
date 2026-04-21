@@ -26,17 +26,35 @@
             android:textSize="24sp"
             android:textAppearance="@style/TextAppearance.VoiceAssistant.Title.Large" />
 
-        <!-- Music Service Section -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- Music Service Section Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:text="@string/settings_category_music"
-            android:textColor="@color/secondary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_category_music"
+                android:textColor="@color/secondary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/btnCollapseMusic"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="收缩/展开"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="@color/text_secondary" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardMusicService"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
@@ -149,17 +167,35 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- AI Service Section -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- AI Service Section Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:text="@string/settings_category_ai"
-            android:textColor="@color/secondary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_category_ai"
+                android:textColor="@color/secondary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/btnCollapseAi"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="收缩/展开"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="@color/text_secondary" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardAiService"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
@@ -390,17 +426,35 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Voice Settings Section -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- Voice Settings Section Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:text="@string/settings_category_voice"
-            android:textColor="@color/secondary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_category_voice"
+                android:textColor="@color/secondary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/btnCollapseVoice"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="收缩/展开"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="@color/text_secondary" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardVoiceSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
@@ -546,55 +600,6 @@
                         android:textSize="14sp" />
 
                 </LinearLayout>
-
-                <!-- Wake Words Management -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/settings_wake_words"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/settings_wake_words_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnTestKws"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/settings_test_kws"
-                    style="@style/Widget.VoiceAssistant.Button.Ghost" />
-
-                <TextView
-                    android:id="@+id/tvKwsStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:visibility="gone" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvWakeWords"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:nestedScrollingEnabled="false" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnAddWakeWord"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/settings_wake_words_add"
-                    style="@style/Widget.VoiceAssistant.Button.Ghost" />
 
             </LinearLayout>
 
