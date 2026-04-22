@@ -33,7 +33,7 @@ class MusicSkill @Inject constructor(
     override val name: String = "music"
 
     override val keywords: List<String> = listOf(
-        "播放", "暂停", "继续", "停止", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌"
+        "播放", "暂停", "继续", "停止", "下一首", "上一首", "来一首", "放歌", "听歌", "切歌", "换一首", "听"
     )
 
     override val priority: Int = 10
@@ -63,7 +63,7 @@ class MusicSkill @Inject constructor(
             input.contains("继续") -> "resume"
             input.contains("下一首") || input.contains("换一首") || input.contains("切歌") -> "next"
             input.contains("上一首") -> "previous"
-            input.contains("播放") || input.contains("来一首") || input.contains("放歌") -> "play"
+            input.contains("播放") || input.contains("来一首") || input.contains("放歌") || input.contains("听") -> "play"
             else -> null
         }
     }

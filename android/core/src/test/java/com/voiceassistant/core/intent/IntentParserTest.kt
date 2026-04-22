@@ -49,6 +49,22 @@ class IntentParserTest {
     }
 
     @Test
+    fun `parse music - 我想听周杰伦的歌曲`() {
+        val result = parser.parse("我想听周杰伦的歌曲")
+        assertEquals(IntentType.MUSIC, result.type)
+        assertEquals("play", result.action)
+        assertEquals("周杰伦的歌曲", result.query)
+    }
+
+    @Test
+    fun `parse music - 放一首古典音乐`() {
+        val result = parser.parse("放一首古典音乐")
+        assertEquals(IntentType.MUSIC, result.type)
+        assertEquals("play", result.action)
+        assertEquals("古典音乐", result.query)
+    }
+
+    @Test
     fun `parse music - 暂停`() {
         val result = parser.parse("暂停")
         assertEquals(IntentType.MUSIC, result.type)
@@ -78,10 +94,9 @@ class IntentParserTest {
 
     @Test
     fun `parse music - 换一首`() {
-        // "换一首" is NOT in KEYWORDS_MUSIC (only "下一首" and "切歌" are)
         val result = parser.parse("换一首")
-        assertEquals(IntentType.CHAT, result.type)
-        assertEquals("换一首", result.query)
+        assertEquals(IntentType.MUSIC, result.type)
+        assertEquals("next", result.action)
     }
 
     @Test
@@ -119,15 +134,6 @@ class IntentParserTest {
         val result = parser.parse("我想听摇滚")
         assertEquals(IntentType.CHAT, result.type)
         assertEquals("我想听摇滚", result.query)
-    }
-
-    @Test
-    fun `parse music - 放一首古典音乐`() {
-        // "放一首古典音乐" doesn't contain any KEYWORDS_MUSIC exactly
-        // Falls to CHAT
-        val result = parser.parse("放一首古典音乐")
-        assertEquals(IntentType.CHAT, result.type)
-        assertEquals("放一首古典音乐", result.query)
     }
 
     // ==================== Volume Intent Tests ====================
@@ -174,11 +180,10 @@ class IntentParserTest {
 
     @Test
     fun `parse volume - 高一点`() {
-        // "高一点" does not match any KEYWORDS_VOLUME (音量, 声音, 大声, 小声, 静音)
-        // so it falls to CHAT
         val result = parser.parse("高一点")
-        assertEquals(IntentType.CHAT, result.type)
-        assertEquals("高一点", result.query)
+        assertEquals(IntentType.VOLUME, result.type)
+        assertEquals("up", result.action)
+        assertEquals(10, result.value)
     }
 
     @Test
@@ -215,11 +220,10 @@ class IntentParserTest {
 
     @Test
     fun `parse volume - 低一点`() {
-        // "低一点" does not match any KEYWORDS_VOLUME (音量, 声音, 大声, 小声, 静音)
-        // so it falls to CHAT
         val result = parser.parse("低一点")
-        assertEquals(IntentType.CHAT, result.type)
-        assertEquals("低一点", result.query)
+        assertEquals(IntentType.VOLUME, result.type)
+        assertEquals("down", result.action)
+        assertEquals(10, result.value)
     }
 
     @Test
@@ -316,17 +320,15 @@ class IntentParserTest {
 
     @Test
     fun `parse query - 现在几点了`() {
-        // "现在几点了" does not contain "时间", so it's CHAT not QUERY
         val result = parser.parse("现在几点了")
-        assertEquals(IntentType.CHAT, result.type)
+        assertEquals(IntentType.QUERY, result.type)
         assertEquals("现在几点了", result.query)
     }
 
     @Test
     fun `parse query - 今天几号`() {
-        // "今天几号" does not contain "日期", so it's CHAT not QUERY
         val result = parser.parse("今天几号")
-        assertEquals(IntentType.CHAT, result.type)
+        assertEquals(IntentType.QUERY, result.type)
         assertEquals("今天几号", result.query)
     }
 
@@ -464,10 +466,12 @@ class IntentParserTest {
     }
 
     @Test
-    fun `parse - 我想听我想听`() {
-        // "我想听" is not in KEYWORDS_MUSIC, so it's CHAT
-        val result = parser.parse("我想听我想听古典音乐")
-        assertEquals(IntentType.CHAT, result.type)
-        assertEquals("我想听我想听古典音乐", result.query)
+    fun `parse - 我想听古典音乐`() {
+        // "听" is now in KEYWORDS_MUSIC, so it's parsed as MUSIC
+        // MUSIC_QUERY_REGEX strips "我想听", leaving "古典音乐"
+        val result = parser.parse("我想听古典音乐")
+        assertEquals(IntentType.MUSIC, result.type)
+        assertEquals("play", result.action)
+        assertEquals("古典音乐", result.query)
     }
 }
