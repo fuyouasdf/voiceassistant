@@ -1,4 +1,3 @@
-<!-- PROJECT_NAME_START -->
 # 🤖 Voice Assistant
 
 <p align="center">
@@ -147,7 +146,7 @@ See [Voice Pipeline Docs](ARCHITECTURE_VOICE_PIPELINE.md) for state machine deta
 
 ```bash
 # 1. Clone the project
-git clone https://github.com/your-repo/voice-assistant.git
+git clone https://github.com/fuyouasdf/voiceassistant.git
 cd voice-assistant
 
 # 2. Enter Android project
@@ -294,7 +293,7 @@ See [LICENSE](LICENSE) for details.
 
 ## 📞 Contact
 
-- GitHub Issues: [https://github.com/your-repo/voice-assistant/issues](https://github.com/your-repo/voice-assistant/issues)
+- GitHub Issues: [https://github.com/fuyouasdf/voiceassistant/issues](https://github.com/fuyouasdf/voiceassistant/issues)
 - Email: fuyouasdf@gmail.com
 
 ---

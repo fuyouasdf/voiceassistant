@@ -1,4 +1,3 @@
-<!-- PROJECT_NAME_START -->
 # 🤖 Voice Assistant
 
 <p align="center">
@@ -10,8 +9,6 @@
 > 🇨🇳 中文 | [English](README_EN.md)
 
 将旧 Android 手机变成离线语音控制中枢，替代小爱同学，支持多模型 API 接入、Jellyfin/DLNA 音乐控制。
-
-<!-- PROJECT_NAME_END -->
 
 ---
 
@@ -149,7 +146,7 @@ INITIALIZING → IDLE → WAKEWORD_DETECTED → LISTENING → RECORDING → RECO
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/your-repo/voice-assistant.git
+git clone https://github.com/fuyouasdf/voiceassistant.git
 cd voice-assistant
 
 # 2. 进入 Android 工程
@@ -296,7 +293,7 @@ See [LICENSE](LICENSE) for details.
 
 ## 📞 联系方式
 
-- GitHub Issues: [https://github.com/your-repo/voice-assistant/issues](https://github.com/your-repo/voice-assistant/issues)
+- GitHub Issues: [https://github.com/fuyouasdf/voiceassistant/issues](https://github.com/fuyouasdf/voiceassistant/issues)
 - Email: fuyouasdf@gmail.com
 
 ---

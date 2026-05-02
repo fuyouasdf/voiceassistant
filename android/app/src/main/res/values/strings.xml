@@ -52,7 +52,7 @@
     <string name="settings_category_voice">语音设置</string>
 
     <string name="settings_jellyfin_url">Jellyfin 地址</string>
-    <string name="settings_jellyfin_url_hint">http://192.168.1.100:8096</string>
+    <string name="settings_jellyfin_url_hint">http://your-jellyfin-server:8096</string>
     <string name="settings_jellyfin_api_key">API Key</string>
     <string name="settings_jellyfin_api_key_hint">请输入 Jellyfin API Key</string>
 

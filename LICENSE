@@ -188,3 +188,14 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+-----------------------------------------------------------------------
+
+Third Party Components
+
+This project includes the following third-party component:
+
+1. Sherpa-ONNX
+   - Location: android/sherpa-onnx-aar/
+   - License: Apache License 2.0
+   - Source: https://github.com/k2-fsa/sherpa-onnx

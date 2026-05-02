@@ -145,49 +145,115 @@ voice-assistant-android/
 │   └── src/main/java/com/voiceassistant/core/
 │       ├── audio/
 │       │   ├── AudioCapture.kt            # 音频录制
-│       │   └── AudioPlayer.kt             # 音频播放
+│       │   ├── AudioPlayer.kt             # 音频播放
+│       │   ├── RingBuffer.kt              # 环形缓冲区
+│       │   └── AudioPreprocessor.kt       # 音频预处理器
 │       ├── sherpa/                        # Sherpa-ONNX 实现
 │       │   ├── SherpaKWS.kt / Impl       # 关键词唤醒
 │       │   ├── SherpaASR.kt / Impl       # 语音识别
 │       │   ├── SherpaTTS.kt / Impl       # 语音合成
 │       │   ├── SherpaVAD.kt / Impl       # 语音活动检测
+│       │   ├── StatefulVad.kt / Impl      # 状态VAD
+│       │   ├── PartialResultFilter.kt     # 部分结果过滤器
 │       │   └── ModelConfig.kt             # 模型配置
 │       ├── pipeline/
 │       │   ├── VoicePipeline.kt           # 语音管道控制器
-│       │   └── PipelineState.kt           # 管道状态
+│       │   ├── PipelineState.kt           # 管道状态
+│       │   ├── WakeWord.kt                # 唤醒词定义
+│       │   ├── WakeWordDetector.kt        # 唤醒检测器
+│       │   ├── WakeWordManager.kt         # 唤醒管理器
+│       │   ├── ASRManager.kt              # ASR 管理器
+│       │   ├── RecordingManager.kt        # 录音管理器
+│       │   └── PinyinConverter.kt         # 拼音转换器
 │       ├── intent/
 │       │   ├── IntentRouter.kt            # 意图路由
 │       │   ├── IntentExecutor.kt          # 意图执行器
+│       │   ├── IntentParser.kt            # 意图解析器
 │       │   └── ChineseMatcher.kt          # 中文模糊匹配器（拼音首字母+编辑距离）
-│       └── dlna/
-│           ├── DLNAManager.kt             # DLNA 投放管理器 (SSDP 发现)
-│           └── DLNAPlayer.kt             # DLNA 播放器 (PlayerRepository 实现)
+│       ├── skill/                         # 技能系统
+│       │   ├── Skill.kt                   # 技能接口
+│       │   ├── SkillContext.kt            # 技能上下文
+│       │   ├── SkillResult.kt             # 技能结果
+│       │   ├── SkillRegistry.kt           # 技能注册表
+│       │   ├── SkillModule.kt             # 技能模块
+│       │   ├── ChatSkill.kt               # 聊天技能
+│       │   ├── MusicSkill.kt             # 音乐技能
+│       │   ├── DeviceSkill.kt            # 设备控制技能
+│       │   ├── QuerySkill.kt             # 查询技能
+│       │   └── VolumeSkill.kt            # 音量技能
+│       ├── music/                         # 音乐播放
+│       │   ├── MusicPlayer.kt            # 音乐播放器
+│       │   ├── LyricsParser.kt           # 歌词解析器
+│       │   └── PlaybackReporter.kt       # 播放状态上报
+│       ├── playback/                      # 播放控制服务
+│       │   ├── state/
+│       │   │   ├── PlaybackStateHolder.kt # 播放状态持有者
+│       │   │   ├── PlaybackStateManager.kt# 播放状态管理器
+│       │   │   └── RepeatMode.kt         # 循环模式
+│       │   └── service/
+│       │       ├── PlaybackServiceFragment.kt # 播放服务Fragment
+│       │       └── ExoPlaybackStateHolder.kt # ExoPlayer状态持有者
+│       ├── dlna/
+│       │   ├── DLNAManager.kt             # DLNA 投放管理器 (SSDP 发现)
+│       │   ├── DLNAController.kt         # DLNA 控制播放器
+│       │   ├── DLNASoapClient.kt         # DLNA SOAP 客户端
+│       │   └── DLNAPlayer.kt             # DLNA 播放器 (PlayerRepository 实现)
+│       └── ConversationContextManager.kt # 对话上下文管理器
 │
 ├── data/                                  # 数据模块
 │   └── src/main/java/com/voiceassistant/data/
 │       ├── local/
-│       │   ├── AppDatabase.kt
-│       │   ├── ConfigDao.kt
-│       │   └── ConfigEntity.kt
+│       │   ├── AppDatabase.kt             # Room 数据库
+│       │   ├── ConfigDao.kt               # 配置 DAO
+│       │   ├── ConfigEntity.kt            # 配置实体
+│       │   ├── LocalSongDao.kt            # 本地歌曲 DAO
+│       │   ├── LocalSongEntity.kt         # 本地歌曲实体
+│       │   ├── PlaylistDao.kt             # 播放列表 DAO
+│       │   ├── PlaylistEntity.kt          # 播放列表实体
+│       │   ├── ChatMessageDao.kt          # 聊天消息 DAO
+│       │   └── ChatMessageEntity.kt       # 聊天消息实体
 │       ├── remote/
-│       │   ├── LLMApi.kt
-│       │   ├── JellyfinClient.kt            # Jellyfin REST API 客户端
-│       │   └── DLNAAuthHelper.kt            # Subsonic 参数认证生成器
+│       │   ├── LLMApi.kt                  # LLM API 客户端
+│       │   └── JellyfinClient.kt         # Jellyfin REST API 客户端
 │       └── repository/
-│           ├── Repositories.kt
-│           ├── SettingsRepositoryImpl.kt
-│           └── MusicRepositoryImpl.kt
+│           ├── Repositories.kt            # 仓库提供者
+│           ├── SettingsRepositoryImpl.kt  # 设置仓库实现
+│           ├── MusicRepositoryImpl.kt      # 音乐仓库实现
+│           ├── MessageRepositoryImpl.kt    # 消息仓库实现
+│           ├── PlaylistRepository.kt      # 播放列表仓库实现
+│           └── PlaybackQueueManagerImpl.kt# 播放队列管理器实现
 │
 ├── domain/                                # 领域模块
 │   └── src/main/java/com/voiceassistant/domain/
 │       ├── model/
-│       │   ├── ConfigModels.kt
-│       │   └── Song.kt
+│       │   ├── ConfigModels.kt            # 配置模型
+│       │   ├── Song.kt                   # 歌曲模型
+│       │   ├── Album.kt                  # 专辑模型
+│       │   ├── Playlist.kt               # 播放列表模型
+│       │   ├── Lyrics.kt                 # 歌词模型
+│       │   ├── Intent.kt                 # 意图模型
+│       │   ├── ChatMessage.kt            # 聊天消息模型
+│       │   └── ConversationContext.kt    # 对话上下文模型
 │       ├── repository/
-│       │   ├── LLMRepository.kt
-│       │   └── MusicRepository.kt
+│       │   ├── LLMRepository.kt          # LLM 仓库接口
+│       │   ├── MusicRepository.kt         # 音乐仓库接口
+│       │   ├── PlaylistRepository.kt     # 播放列表仓库接口
+│       │   ├── MessageRepository.kt      # 消息仓库接口
+│       │   ├── PlayerRepository.kt       # 播放器仓库接口
+│       │   ├── PlaybackQueueManager.kt   # 播放队列管理器接口
+│       │   └── ChatContextProvider.kt     # 聊天上下文提供者接口
+│       ├── skill/
+│       │   ├── Skill.kt                  # 技能接口
+│       │   ├── SkillContext.kt           # 技能上下文
+│       │   ├── SkillResult.kt            # 技能结果
+│       │   └── SkillRegistry.kt          # 技能注册表
 │       └── usecase/
-│           └── StartVoicePipelineUseCase.kt
+│           ├── StartVoicePipelineUseCase.kt # 启动语音管道用例
+│           ├── HandleQueryUseCase.kt       # 处理查询用例
+│           ├── HandleChatUseCase.kt        # 处理聊天用例
+│           ├── HandleMusicUseCase.kt      # 处理音乐用例
+│           ├── HandleDeviceUseCase.kt     # 处理设备用例
+│           └── HandleVolumeUseCase.kt     # 处理音量用例
 │
 ├── sherpa-onnx-aar/                       # Sherpa-ONNX 库模块 (v1.12.32)
 │   ├── build.gradle.kts
