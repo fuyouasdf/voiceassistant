@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+    App 级别 usesCleartextTraffic="true" 允许所有 HTTP 明文流量（本地局域网使用）。
+    此处 base-config 用于 HTTPS 连接的证书验证配置。
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

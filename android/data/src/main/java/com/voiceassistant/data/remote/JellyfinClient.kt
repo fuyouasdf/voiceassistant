@@ -48,7 +48,7 @@ class JellyfinClient(
     private var lastSessionErrorCode: Int? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.BASIC
     }
 
     // HTTP response cache - 10 MB for caching GET requests (browsing)
