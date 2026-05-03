@@ -19,9 +19,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("voice-assistant-release.jks")
+            storePassword = project.property("STORE_PASSWORD").toString()
+            keyAlias = "voice-assistant"
+            keyPassword = project.property("KEY_PASSWORD").toString()
+        }
+    }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

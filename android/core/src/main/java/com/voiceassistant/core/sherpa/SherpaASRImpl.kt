@@ -19,15 +19,22 @@ package com.voiceassistant.core.sherpa
 import android.content.Context
 import com.k2fsa.sherpa.onnx.*
 import timber.log.Timber
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * Sherpa-ONNX ASR 实现
  * 使用 streaming zipformer2 transducer 模型 (sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30)
+ *
+ * 线程安全：所有操作通过 ReentrantLock 保护，确保多线程环境下安全访问 native 资源
  */
 class SherpaASRImpl(private val context: Context) : SherpaASR {
 
     private var recognizer: OnlineRecognizer? = null
     private var endpointConfig: EndpointTimingConfig = EndpointTimingConfig()
+
+    // 线程安全锁，保护所有访问 recognizer 的操作
+    private val lock = ReentrantLock()
 
     override fun initialize(
         modelPath: String,
@@ -80,8 +87,6 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
     }
 
     override suspend fun recognize(audio: FloatArray): String {
-        val r = recognizer ?: return ""
-
         if (audio.isEmpty()) {
             Timber.w("ASR received empty audio")
             return ""
@@ -89,46 +94,47 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
 
         Timber.d("ASR recognizing: ${audio.size} samples")
 
-        return try {
-            // 每次识别创建新的 stream（参考官方示例）
-            val stream = r.createStream()
+        return lock.withLock {
+            try {
+                val r = recognizer ?: return@withLock ""
+                // 每次识别创建新的 stream（参考官方示例）
+                val stream = r.createStream()
 
-            // 流式处理音频数据（每 100ms 一个 chunk）
-            val interval = 0.1
-            val bufferSize = (interval * 16000).toInt()
-            var offset = 0
+                // 流式处理音频数据（每 100ms 一个 chunk）
+                val interval = 0.1
+                val bufferSize = (interval * 16000).toInt()
+                var offset = 0
 
-            while (offset < audio.size) {
-                val end = minOf(offset + bufferSize, audio.size)
-                val chunk = audio.copyOfRange(offset, end)
+                while (offset < audio.size) {
+                    val end = minOf(offset + bufferSize, audio.size)
+                    val chunk = audio.copyOfRange(offset, end)
 
-                stream.acceptWaveform(chunk, sampleRate = 16000)
+                    stream.acceptWaveform(chunk, sampleRate = 16000)
 
-                // 解码就绪的数据
-                while (r.isReady(stream)) {
-                    r.decode(stream)
+                    // 解码就绪的数据
+                    while (r.isReady(stream)) {
+                        r.decode(stream)
+                    }
+
+                    offset = end
                 }
 
-                offset = end
+                // 获取识别结果
+                val result = r.getResult(stream)
+                val text = result.text ?: ""
+
+                stream.release()
+
+                Timber.d("ASR result: '$text'")
+                text
+            } catch (e: Exception) {
+                Timber.e(e, "ASR recognition error")
+                ""
             }
-
-            // 获取识别结果
-            val result = r.getResult(stream)
-            val text = result.text ?: ""
-
-            stream.release()
-
-            Timber.d("ASR result: '$text'")
-            text
-        } catch (e: Exception) {
-            Timber.e(e, "ASR recognition error")
-            ""
         }
     }
 
     override suspend fun recognizeStreaming(audio: FloatArray, listener: SherpaASR.RecognitionListener) {
-        val r = recognizer ?: return
-
         if (audio.isEmpty()) {
             Timber.w("ASR received empty audio for streaming")
             return
@@ -136,60 +142,63 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
 
         Timber.d("ASR streaming recognition: ${audio.size} samples")
 
-        try {
-            val stream = r.createStream()
-            // 重置 stream 状态，确保新的识别从干净状态开始
-            r.reset(stream)
+        lock.withLock {
+            try {
+                val r = recognizer ?: return@withLock
+                val stream = r.createStream()
+                // 重置 stream 状态，确保新的识别从干净状态开始
+                r.reset(stream)
 
-            val interval = 0.1  // 100ms per chunk
-            val bufferSize = (interval * 16000).toInt()
-            var offset = 0
+                val interval = 0.1  // 100ms per chunk
+                val bufferSize = (interval * 16000).toInt()
+                var offset = 0
 
-            // 先处理完所有音频（不在循环内检查 endpoint，避免 Sherpa 过早锁定中间结果）
-            // 正确做法：先发送所有音频，再统一检查 endpoint
-            while (offset < audio.size) {
-                val end = minOf(offset + bufferSize, audio.size)
-                val chunk = audio.copyOfRange(offset, end)
+                // 先处理完所有音频（不在循环内检查 endpoint，避免 Sherpa 过早锁定中间结果）
+                // 正确做法：先发送所有音频，再统一检查 endpoint
+                while (offset < audio.size) {
+                    val end = minOf(offset + bufferSize, audio.size)
+                    val chunk = audio.copyOfRange(offset, end)
 
-                stream.acceptWaveform(chunk, sampleRate = 16000)
+                    stream.acceptWaveform(chunk, sampleRate = 16000)
 
-                while (r.isReady(stream)) {
-                    r.decode(stream)
+                    while (r.isReady(stream)) {
+                        r.decode(stream)
+                    }
+
+                    // 获取中间结果并回调，实现流式显示
+                    val partialText = r.getResult(stream).text ?: ""
+                    Timber.d("ASR partial: '$partialText'")
+                    if (partialText.isNotEmpty()) {
+                        listener.onPartialResult(partialText)
+                    }
+
+                    offset = end
                 }
 
-                // 获取中间结果并回调，实现流式显示
-                val partialText = r.getResult(stream).text ?: ""
-                Timber.d("ASR partial: '$partialText'")
-                if (partialText.isNotEmpty()) {
-                    listener.onPartialResult(partialText)
+                // 统一在所有音频处理完后检查 endpoint
+                if (r.isEndpoint(stream)) {
+                    Timber.d("ASR endpoint detected after all audio processed")
+                    listener.onEndpointDetected()
+                    // 添加尾部填充以获得更好的识别效果
+                    val tailPaddings = FloatArray((0.8 * 16000).toInt())
+                    stream.acceptWaveform(tailPaddings, sampleRate = 16000)
+                    while (r.isReady(stream)) {
+                        r.decode(stream)
+                    }
                 }
 
-                offset = end
-            }
-
-            // 统一在所有音频处理完后检查 endpoint
-            if (r.isEndpoint(stream)) {
-                Timber.d("ASR endpoint detected after all audio processed")
-                listener.onEndpointDetected()
-                // 添加尾部填充以获得更好的识别效果
-                val tailPaddings = FloatArray((0.8 * 16000).toInt())
-                stream.acceptWaveform(tailPaddings, sampleRate = 16000)
-                while (r.isReady(stream)) {
-                    r.decode(stream)
+                // 获取最终结果
+                val finalText = r.getResult(stream).text ?: ""
+                if (finalText.isNotEmpty()) {
+                    listener.onFinalResult(finalText)
                 }
-            }
 
-            // 获取最终结果
-            val finalText = r.getResult(stream).text ?: ""
-            if (finalText.isNotEmpty()) {
-                listener.onFinalResult(finalText)
+                // 识别完成后重置 stream 状态，为下一次识别做准备
+                r.reset(stream)
+                stream.release()
+            } catch (e: Exception) {
+                Timber.e(e, "ASR streaming recognition error")
             }
-
-            // 识别完成后重置 stream 状态，为下一次识别做准备
-            r.reset(stream)
-            stream.release()
-        } catch (e: Exception) {
-            Timber.e(e, "ASR streaming recognition error")
         }
     }
 
@@ -199,8 +208,10 @@ class SherpaASRImpl(private val context: Context) : SherpaASR {
     }
 
     override fun release() {
-        recognizer?.release()
-        recognizer = null
-        Timber.d("ASR released")
+        lock.withLock {
+            recognizer?.release()
+            recognizer = null
+            Timber.d("ASR released")
+        }
     }
 }

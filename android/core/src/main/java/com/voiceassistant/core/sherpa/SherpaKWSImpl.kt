@@ -331,7 +331,10 @@ class SherpaKWSImpl(private val context: Context) : SherpaKWS {
         val assetModelDir = "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
         val destDir = File(context.filesDir, "models/kws")
 
-        if (destDir.exists() && destDir.listFiles()?.isNotEmpty() == true) {
+        // 检查是否存在有效的模型文件（> 1MB），避免使用旧的/不完整的文件
+        val hasValidOnnx = destDir.listFiles { f -> f.name.endsWith(".onnx") }
+            ?.any { it.length() > 1024 * 1024 } == true
+        if (destDir.exists() && hasValidOnnx) {
             Timber.d("KWS models already copied to: ${destDir.absolutePath}")
             return destDir
         }

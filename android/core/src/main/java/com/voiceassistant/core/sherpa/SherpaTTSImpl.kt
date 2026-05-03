@@ -132,7 +132,11 @@ class SherpaTTSImpl(private val context: Context) : SherpaTTS {
 
     private fun copyModelsFromAssets(assetPath: String): File {
         val destDir = File(context.filesDir, assetPath)
-        if (destDir.exists() && destDir.listFiles()?.isNotEmpty() == true) {
+        // 检查是否存在有效的 .onnx 模型文件（> 1MB），避免使用旧的/不完整的文件
+        val hasValidOnnx = destDir.listFiles { f -> f.name.endsWith(".onnx") }
+            ?.any { it.length() > 1024 * 1024 } == true
+        if (destDir.exists() && hasValidOnnx) {
+            Timber.d("TTS model already exists")
             return destDir
         }
         destDir.mkdirs()
