@@ -40,11 +40,18 @@ data class SkillContext(
     val handleDeviceUseCase: HandleDeviceUseCase?,
     val handleQueryUseCase: HandleQueryUseCase?,
     val handleChatUseCase: HandleChatUseCase?,
-    val savedSessionId: String?
+    val savedSessionIdProvider: () -> String?
 ) {
     companion object {
         const val LOCAL_DEVICE_SESSION_ID = "__local_device_session__"
     }
+
+    /**
+     * Dynamically get the saved session ID from SharedPreferences.
+     * This ensures the latest value is always returned, even after device selection.
+     */
+    val savedSessionId: String?
+        get() = savedSessionIdProvider()
 
     /**
      * Check if the session ID is the local device session.

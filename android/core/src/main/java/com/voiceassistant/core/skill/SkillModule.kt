@@ -62,7 +62,9 @@ object SkillModule {
         handleChatUseCase: HandleChatUseCase?,
         sharedPreferences: SharedPreferences?
     ): SkillContext {
-        val savedSessionId = sharedPreferences?.getString(PREF_LAST_SESSION_ID, null)?.takeIf { it.isNotBlank() }
+        val savedSessionIdProvider = {
+            sharedPreferences?.getString(PREF_LAST_SESSION_ID, null)?.takeIf { it.isNotBlank() }
+        }
         return SkillContext(
             musicRepository = musicRepository,
             playlistRepository = playlistRepository,
@@ -73,7 +75,7 @@ object SkillModule {
             handleDeviceUseCase = handleDeviceUseCase,
             handleQueryUseCase = handleQueryUseCase,
             handleChatUseCase = handleChatUseCase,
-            savedSessionId = savedSessionId
+            savedSessionIdProvider = savedSessionIdProvider
         )
     }
 

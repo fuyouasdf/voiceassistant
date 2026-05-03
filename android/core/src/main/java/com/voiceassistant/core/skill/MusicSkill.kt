@@ -96,6 +96,12 @@ class MusicSkill @Inject constructor(
 
             val invalidArtists = listOf("音乐", "歌曲", "这首", "那首", "歌", "专辑", "歌手")
             if (potentialArtist !in invalidArtists && potentialSong.isNotEmpty() && potentialArtist.isNotEmpty()) {
+                val meaninglessSongs = listOf("歌", "歌曲", "音乐")
+                if (potentialSong in meaninglessSongs) {
+                    // 如果提供了有效的 artist，用 artist 搜索歌曲，而不是随机播放
+                    Timber.d("MusicSkill: meaningless song='$potentialSong', using artist='$potentialArtist' for search")
+                    return Triple(potentialArtist, potentialArtist, potentialArtist)
+                }
                 Timber.d("MusicSkill: artist='$potentialArtist', song='$potentialSong'")
                 return Triple(potentialArtist, potentialSong, potentialSong)
             }
