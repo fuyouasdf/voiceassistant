@@ -43,6 +43,7 @@ import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.domain.repository.LLMRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -107,10 +108,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnCollapseMusic: ImageButton
     private lateinit var btnCollapseAi: ImageButton
     private lateinit var btnCollapseVoice: ImageButton
+    private lateinit var rootLayout: View
     private lateinit var rootScrollView: ScrollView
     private lateinit var contentLayout: View
 
     private var isLoading = false
+    private var cachedHorizontalPadding: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -141,8 +144,10 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        rootLayout = findViewById(R.id.rootLayout)
         rootScrollView = findViewById(R.id.rootScrollView)
         contentLayout = findViewById(R.id.contentLayout)
+        cachedHorizontalPadding = resources.getDimensionPixelSize(R.dimen.settings_horizontal_padding)
 
         // Music Service - Jellyfin
         etJellyfinUrl = findViewById(R.id.etJellyfinUrl)
@@ -190,12 +195,23 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupInsets() {
-        ViewCompat.setOnApplyWindowInsetsListener(rootScrollView) { view, windowInsets ->
+        // Root layout handles system bars insets
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, windowInsets ->
             val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, systemBars.top, 0, 0)
+            windowInsets
+        }
+
+        // Content layout handles IME insets for keyboard
+        ViewCompat.setOnApplyWindowInsetsListener(contentLayout) { view, windowInsets ->
             val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
-            // 取 systemBars 和 ime 中的较大值，键盘弹出时 ime.bottom > 0，键盘收起时 systemBars.bottom > 0
-            val bottomPadding = maxOf(systemBars.bottom, ime.bottom) + 16
-            contentLayout.setPadding(16, systemBars.top + 16, 16, bottomPadding)
+            val bottomPadding = if (ime.bottom > 0) ime.bottom + 16 else 16
+            view.setPadding(
+                cachedHorizontalPadding,
+                view.paddingTop,
+                cachedHorizontalPadding,
+                bottomPadding
+            )
             windowInsets
         }
     }
@@ -530,7 +546,11 @@ class SettingsActivity : AppCompatActivity() {
                 configHolder.reload()
 
                 // Reload JellyfinClient with new server config and clear caches
-                jellyfinClient.reload(configHolder.jellyfinUrl, configHolder.jellyfinApiKey)
+                // 直接从 settingsRepository 获取最新值，避免依赖 configHolder 的缓存
+                val newJellyfinUrl = etJellyfinUrl.text.toString()
+                val newJellyfinApiKey = etJellyfinApiKey.text.toString()
+                Timber.d("saveSettings: reloading JellyfinClient with url=$newJellyfinUrl")
+                jellyfinClient.reload(newJellyfinUrl, newJellyfinApiKey)
 
                 // Hot apply wake sensitivity immediately (no restart required)
                 voicePipeline.applyWakeSensitivity(sliderWakeSensitivity.value)

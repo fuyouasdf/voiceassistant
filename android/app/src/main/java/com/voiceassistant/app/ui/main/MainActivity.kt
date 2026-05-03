@@ -53,6 +53,7 @@ import com.voiceassistant.data.remote.JellyfinClient
 import com.voiceassistant.data.local.ChatMessageDao
 import com.voiceassistant.data.local.ChatMessageEntity
 import com.voiceassistant.domain.repository.LLMRepository
+import com.voiceassistant.data.repository.SettingsRepository
 import com.voiceassistant.app.ui.settings.SettingsActivity
 import com.voiceassistant.app.ui.music.JellyfinBrowseActivity
 import com.voiceassistant.app.ui.music.PlaylistListActivity
@@ -95,6 +96,9 @@ class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var chatMessageDao: ChatMessageDao
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     // UI Components
     private lateinit var statusBarArea: LinearLayout
@@ -142,6 +146,7 @@ class MainActivity : AppCompatActivity() {
     private var hasMoreHistory = true
     private var oldestLoadedMessageId: Long? = null
     private var oldestLoadedMessageCreatedAt: Long? = null
+    private var hasCheckedFirstLaunch = false
 
     // Animation
     private var pulseAnimatorX: ObjectAnimator? = null
@@ -816,29 +821,69 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val jellyfinConfigured = configHolder.jellyfinUrl.isNotEmpty() &&
                 configHolder.jellyfinApiKey.isNotEmpty()
+
             if (!jellyfinConfigured) {
                 tvJellyfinStatus.text = getString(R.string.jellyfin_not_configured)
                 jellyfinStatusDot.setBackgroundResource(R.drawable.circle_status_offline)
+                checkFirstLaunchAndJellyfin()
                 return@launch
             }
 
-            // 重新加载 Jellyfin 配置，确保使用最新地址
             jellyfinClient.reload(configHolder.jellyfinUrl, configHolder.jellyfinApiKey)
-
             tvJellyfinStatus.text = getString(R.string.jellyfin_connecting)
-            try {
-                val result = jellyfinClient.testConnection()
-                val isOnline = result.isSuccess
-                tvJellyfinStatus.text = if (isOnline) getString(R.string.jellyfin_connected) else getString(R.string.jellyfin_not_connected)
-                jellyfinStatusDot.setBackgroundResource(
-                    if (isOnline) R.drawable.circle_status_online else R.drawable.circle_status_offline
-                )
+
+            val isOnline = try {
+                jellyfinClient.testConnection().isSuccess
             } catch (e: Exception) {
                 Timber.e(e, "Jellyfin connection test failed")
-                tvJellyfinStatus.text = getString(R.string.jellyfin_not_connected)
-                jellyfinStatusDot.setBackgroundResource(R.drawable.circle_status_offline)
+                false
+            }
+
+            tvJellyfinStatus.text = if (isOnline) getString(R.string.jellyfin_connected) else getString(R.string.jellyfin_not_connected)
+            jellyfinStatusDot.setBackgroundResource(
+                if (isOnline) R.drawable.circle_status_online else R.drawable.circle_status_offline
+            )
+
+            if (!isOnline) {
+                checkFirstLaunchAndJellyfin()
             }
         }
+    }
+
+    private fun checkFirstLaunchAndJellyfin() {
+        if (hasCheckedFirstLaunch) return
+        hasCheckedFirstLaunch = true
+
+        lifecycleScope.launch {
+            if (settingsRepository.isFirstLaunch()) {
+                showJellyfinSetupDialog()
+            }
+        }
+    }
+
+    /**
+     * 显示 Jellyfin 配置引导对话框
+     */
+    private fun showJellyfinSetupDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.jellyfin_setup_title)
+            .setMessage(R.string.jellyfin_setup_message)
+            .setPositiveButton(R.string.jellyfin_setup_go_settings) { _, _ ->
+                // 标记首次启动完成
+                lifecycleScope.launch {
+                    settingsRepository.setFirstLaunchComplete()
+                }
+                // 跳转到设置页面
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            .setNegativeButton(R.string.jellyfin_setup_later) { _, _ ->
+                // 标记首次启动完成（用户选择稍后配置）
+                lifecycleScope.launch {
+                    settingsRepository.setFirstLaunchComplete()
+                }
+            }
+            .setCancelable(false)
+            .show()
     }
 
     private fun refreshSelectedPlaybackDeviceDisplay() {

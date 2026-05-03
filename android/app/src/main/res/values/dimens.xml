@@ -54,4 +54,7 @@
 
     <!-- Dialog -->
     <dimen name="dialog_padding">24dp</dimen>
+
+    <!-- Settings -->
+    <dimen name="settings_horizontal_padding">24dp</dimen>
 </resources>

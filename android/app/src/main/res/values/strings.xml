@@ -132,6 +132,12 @@
     <string name="jellyfin_connecting">Jellyfin: 连接中…</string>
     <string name="jellyfin_connected">Jellyfin: 已连接</string>
     <string name="jellyfin_not_connected">Jellyfin: 未连接</string>
+
+    <!-- Jellyfin First Launch Setup -->
+    <string name="jellyfin_setup_title">欢迎使用语音助手</string>
+    <string name="jellyfin_setup_message">Jellyfin 媒体服务器未配置或不可用。\n\n要使用音乐播放功能，请先在设置中配置 Jellyfin 服务器地址和 API Key。</string>
+    <string name="jellyfin_setup_go_settings">去设置</string>
+    <string name="jellyfin_setup_later">稍后</string>
     <string name="playback_device_not_selected">播放设备: 未选择</string>
     <string name="playback_device_selected">播放设备: %s</string>
 

@@ -56,4 +56,6 @@ object ConfigKeys {
     const val TTS_SPEED = "tts_speed"
     const val TTS_PITCH = "tts_pitch"
     const val TTS_ENABLED = "tts_enabled"
+
+    const val IS_FIRST_LAUNCH = "is_first_launch"
 }

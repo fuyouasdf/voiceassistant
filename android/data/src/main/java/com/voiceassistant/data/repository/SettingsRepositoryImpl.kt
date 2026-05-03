@@ -147,6 +147,10 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun getTtsEnabled(): Boolean = getString(ConfigKeys.TTS_ENABLED, "true").toBooleanStrictOrNull() ?: true
     override suspend fun setTtsEnabled(enabled: Boolean) = setString(ConfigKeys.TTS_ENABLED, enabled.toString())
+
+    // First Launch
+    override suspend fun isFirstLaunch(): Boolean = getString(ConfigKeys.IS_FIRST_LAUNCH, "true").toBooleanStrictOrNull() ?: true
+    override suspend fun setFirstLaunchComplete() = setString(ConfigKeys.IS_FIRST_LAUNCH, "false")
 }
 
 interface SettingsRepository {
@@ -203,4 +207,8 @@ interface SettingsRepository {
     suspend fun setTtsPitch(pitch: Float)
     suspend fun getTtsEnabled(): Boolean
     suspend fun setTtsEnabled(enabled: Boolean)
+
+    // First Launch
+    suspend fun isFirstLaunch(): Boolean
+    suspend fun setFirstLaunchComplete()
 }

@@ -102,8 +102,9 @@ class JellyfinClient(
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()
 
-    private val api = retrofit.create(JellyfinApi::class.java)
-    private val sessionApi = retrofit.create(JellyfinSessionApi::class.java)
+    // 使用 var 确保 reload() 时可以重新赋值
+    private var api: JellyfinApi = retrofit.create(JellyfinApi::class.java)
+    private var sessionApi: JellyfinSessionApi = retrofit.create(JellyfinSessionApi::class.java)
 
     init {
         Timber.d("JellyfinClient初始化: baseUrl=$baseUrl, apiKey=${if (apiKey.isNotEmpty()) "已设置" else "未设置"}")
@@ -130,6 +131,9 @@ class JellyfinClient(
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
+        // 重建 API 实例，绑定到新的 retrofit
+        api = retrofit.create(JellyfinApi::class.java)
+        sessionApi = retrofit.create(JellyfinSessionApi::class.java)
     }
 
     private fun normalizeUrl(url: String): String {
