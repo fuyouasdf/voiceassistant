@@ -18,8 +18,11 @@ package com.voiceassistant.app.ui.settings
 
 import android.os.Bundle
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import com.google.android.material.card.MaterialCardView
@@ -36,6 +39,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.voiceassistant.app.R
 import com.voiceassistant.app.di.ConfigHolder
+import com.voiceassistant.data.LLMPreset
 import com.voiceassistant.core.ConversationContextManager
 import com.voiceassistant.core.pipeline.VoicePipeline
 import com.voiceassistant.data.remote.JellyfinClient
@@ -77,9 +81,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvJellyfinStatus: TextView
 
     // AI Service
+    private lateinit var spinnerLlmPreset: Spinner
     private lateinit var etLlmUrl: TextInputEditText
     private lateinit var etLlmApiKey: TextInputEditText
     private lateinit var etLlmModel: TextInputEditText
+    private lateinit var etLlmApiPath: TextInputEditText
+    private lateinit var tvLlmFullUrl: TextView
     private lateinit var etLlmSystemPrompt: TextInputEditText
     private lateinit var etLlmRouterPrompt: TextInputEditText
     private lateinit var etLlmCommandPrompt: TextInputEditText
@@ -114,6 +121,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private var isLoading = false
     private var cachedHorizontalPadding: Int = 0
+    private var currentApiPath: String = "/v1/responses"  // 当前 LLM API 路径
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,9 +167,12 @@ class SettingsActivity : AppCompatActivity() {
         tvJellyfinStatus = findViewById(R.id.tvJellyfinStatus)
 
         // AI Service
+        spinnerLlmPreset = findViewById(R.id.spinnerLlmPreset)
         etLlmUrl = findViewById(R.id.etLlmUrl)
         etLlmApiKey = findViewById(R.id.etLlmApiKey)
         etLlmModel = findViewById(R.id.etLlmModel)
+        etLlmApiPath = findViewById(R.id.etLlmApiPath)
+        tvLlmFullUrl = findViewById(R.id.tvLlmFullUrl)
         etLlmSystemPrompt = findViewById(R.id.etLlmSystemPrompt)
         etLlmRouterPrompt = findViewById(R.id.etLlmRouterPrompt)
         etLlmCommandPrompt = findViewById(R.id.etLlmCommandPrompt)
@@ -238,6 +249,9 @@ class SettingsActivity : AppCompatActivity() {
             tvLlmContextCount.text = value.toInt().toString()
         }
 
+        // LLM Preset Spinner
+        setupLlmPresetSpinner()
+
         // Jellyfin test button
         btnTestJellyfin.setOnClickListener {
             if (isLoading) {
@@ -289,6 +303,86 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 设置 LLM 预设 Spinner
+     */
+    private fun setupLlmPresetSpinner() {
+        val presetNames = LLMPreset.PRESETS.map { it.name }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, presetNames)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerLlmPreset.adapter = adapter
+
+        // 设置预设匹配当前配置（优先匹配 baseUrl，其次匹配 baseUrl + model）
+        val currentUrl = etLlmUrl.text.toString()
+        val currentModel = etLlmModel.text.toString()
+        val matchingIndex = when {
+            // 优先精确匹配 baseUrl + model
+            currentUrl.isNotEmpty() -> LLMPreset.PRESETS.indexOfFirst { preset ->
+                preset.baseUrl == currentUrl && preset.defaultModel == currentModel
+            }.takeIf { it >= 0 }
+            // 其次只匹配 baseUrl
+            currentUrl.isNotEmpty() -> LLMPreset.PRESETS.indexOfFirst { preset ->
+                preset.baseUrl == currentUrl
+            }.takeIf { it >= 0 }
+            // 默认自定义
+            else -> 0
+        } ?: 0
+        spinnerLlmPreset.setSelection(matchingIndex)
+        currentApiPath = LLMPreset.PRESETS[matchingIndex].apiPath
+
+        // Spinner 选择监听器
+        spinnerLlmPreset.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (isLoading) return
+                val selectedPreset = LLMPreset.PRESETS[position]
+                currentApiPath = selectedPreset.apiPath  // 保存 API 路径
+                if (selectedPreset.name == "自定义") {
+                    // 自定义选项：清空字段让用户自行填写
+                    etLlmUrl.setText("")
+                    etLlmModel.setText("")
+                    etLlmApiPath.setText("")
+                } else {
+                    // 选择预设时：覆盖 URL 和 API 路径，模型仅在为空时填充
+                    etLlmUrl.setText(selectedPreset.baseUrl)
+                    etLlmApiPath.setText(selectedPreset.apiPath)
+                    if (etLlmModel.text.toString().isEmpty()) {
+                        etLlmModel.setText(selectedPreset.defaultModel)
+                    }
+                }
+                updateFullUrlPreview()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                // 不做任何操作
+            }
+        }
+
+        // 监听 URL 和 API Path 输入框变化，更新完整路径预览
+        val textWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (!isLoading) updateFullUrlPreview()
+            }
+        }
+        etLlmUrl.addTextChangedListener(textWatcher)
+        etLlmApiPath.addTextChangedListener(textWatcher)
+    }
+
+    /**
+     * 更新完整 URL 预览
+     */
+    private fun updateFullUrlPreview() {
+        val baseUrl = etLlmUrl.text.toString().trim().trimEnd('/')
+        val apiPath = etLlmApiPath.text.toString().trim()
+        if (baseUrl.isNotEmpty() && apiPath.isNotEmpty()) {
+            tvLlmFullUrl.text = "完整地址: $baseUrl$apiPath"
+            tvLlmFullUrl.visibility = android.view.View.VISIBLE
+        } else {
+            tvLlmFullUrl.visibility = android.view.View.GONE
+        }
+    }
+
     private fun loadSettings() {
         lifecycleScope.launch {
             // Load Music Service settings - Jellyfin
@@ -302,6 +396,8 @@ class SettingsActivity : AppCompatActivity() {
             etLlmUrl.setText(settingsRepository.getLLMBaseUrl())
             etLlmApiKey.setText(settingsRepository.getLLMApiKey())
             etLlmModel.setText(settingsRepository.getLLMModel())
+            currentApiPath = settingsRepository.getLLMApiPath()  // 加载 API 路径
+            etLlmApiPath.setText(currentApiPath)  // 显示 API 路径到输入框
             etLlmSystemPrompt.setText(settingsRepository.getLLMSystemPrompt())
             etLlmRouterPrompt.setText(settingsRepository.getLLMRouterPrompt())
             etLlmCommandPrompt.setText(settingsRepository.getLLMCommandPrompt())
@@ -314,6 +410,9 @@ class SettingsActivity : AppCompatActivity() {
 
             // Test LLM connection on load
             testLlmConnectionOnLoad()
+
+            // 更新完整 URL 预览
+            updateFullUrlPreview()
 
             // Load Voice Settings
             val wakeSensitivity = settingsRepository.getWakeSensitivity()
@@ -435,6 +534,7 @@ class SettingsActivity : AppCompatActivity() {
                 val url = etLlmUrl.text.toString()
                 val apiKey = etLlmApiKey.text.toString()
                 val model = etLlmModel.text.toString()
+                val apiPath = etLlmApiPath.text.toString()
 
                 if (url.isEmpty() || apiKey.isEmpty() || model.isEmpty()) {
                     progressLlm.visibility = View.GONE
@@ -447,7 +547,8 @@ class SettingsActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                val result = llmRepository.chat("Hello")
+                // 使用 UI 字段的值直接测试，不保存到 SettingsRepository
+                val result = llmRepository.chatWithConfig("Hello", url, apiPath, apiKey, model)
                 progressLlm.visibility = View.GONE
                 btnTestLlm.isEnabled = true
 
@@ -462,7 +563,7 @@ class SettingsActivity : AppCompatActivity() {
                     tvLlmStatus.setTextColor(getColor(R.color.status_offline))
                     tvLlmStatus.visibility = View.VISIBLE
                     updateLlmOnlineStatus(false)
-                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_llm_offline) + ": " + result.exceptionOrNull()?.message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_llm_offline) + ": " + (result.exceptionOrNull()?.message ?: "Unknown error"), Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 progressLlm.visibility = View.GONE
@@ -529,6 +630,7 @@ class SettingsActivity : AppCompatActivity() {
                 settingsRepository.setLLMBaseUrl(etLlmUrl.text.toString())
                 settingsRepository.setLLMApiKey(etLlmApiKey.text.toString())
                 settingsRepository.setLLMModel(etLlmModel.text.toString())
+                settingsRepository.setLLMApiPath(etLlmApiPath.text.toString())  // 保存 API 路径
                 settingsRepository.setLLMSystemPrompt(etLlmSystemPrompt.text.toString())
                 settingsRepository.setLLMRouterPrompt(etLlmRouterPrompt.text.toString())
                 settingsRepository.setLLMCommandPrompt(etLlmCommandPrompt.text.toString())
@@ -554,6 +656,9 @@ class SettingsActivity : AppCompatActivity() {
 
                 // Hot apply wake sensitivity immediately (no restart required)
                 voicePipeline.applyWakeSensitivity(sliderWakeSensitivity.value)
+
+                // 保存后检测 LLM 连接状态
+                testLlmConnection()
 
                 Toast.makeText(this@SettingsActivity, R.string.settings_saved, Toast.LENGTH_SHORT).show()
                 finish()

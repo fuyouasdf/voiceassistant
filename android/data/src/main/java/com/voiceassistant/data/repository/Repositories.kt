@@ -20,6 +20,8 @@ import com.google.gson.Gson
 import com.voiceassistant.data.remote.ErrorResponse
 import com.voiceassistant.data.remote.LLMApi
 import com.voiceassistant.data.remote.LLMRequest
+import com.voiceassistant.data.remote.LLMResponse
+import com.voiceassistant.data.remote.MessageItem
 import com.voiceassistant.domain.repository.LLMParsedIntent
 import com.voiceassistant.domain.repository.LLMRepository
 import com.voiceassistant.domain.repository.LLMRouteDecision
@@ -59,28 +61,52 @@ class LLMRepositoryImpl(
         val systemPrompt = settingsRepository.getLLMSystemPrompt()
         val baseUrl = settingsRepository.getLLMBaseUrl().ifEmpty { "http://localhost:1234" }
         val apiKey = settingsRepository.getLLMApiKey()
+        val apiPath = settingsRepository.getLLMApiPath()
 
         val contextHistory = buildContextString()
-        val requestBody = Gson().toJson(
-            LLMRequest(
-                model = model,
-                input = buildString {
-                    if (systemPrompt.isNotBlank()) {
-                        append("System: $systemPrompt\n")
-                    }
-                    if (contextHistory.isNotBlank()) {
-                        append("$contextHistory\n")
-                    }
-                    append("User: $message")
-                },
-                temperature = 0.7,
-                max_tokens = 1024,
-                stream = true
+
+        // MiniMax 等 OpenAI 兼容 API 使用 messages 格式
+        val isOpenAIFormat = baseUrl.contains("minimaxi", ignoreCase = true) ||
+            apiPath.contains("chatcompletion", ignoreCase = true)
+
+        val requestBody = if (isOpenAIFormat) {
+            val messages = mutableListOf<MessageItem>()
+            if (systemPrompt.isNotBlank()) {
+                messages.add(MessageItem(role = "system", content = systemPrompt))
+            }
+            messages.addAll(buildMessagesFromHistory(contextHistory))
+            messages.add(MessageItem(role = "user", content = message))
+            Gson().toJson(
+                LLMRequest(
+                    model = model,
+                    messages = messages,
+                    temperature = 0.7,
+                    max_tokens = 1024,
+                    stream = true
+                )
             )
-        )
+        } else {
+            Gson().toJson(
+                LLMRequest(
+                    model = model,
+                    input = buildString {
+                        if (systemPrompt.isNotBlank()) {
+                            append("System: $systemPrompt\n")
+                        }
+                        if (contextHistory.isNotBlank()) {
+                            append("$contextHistory\n")
+                        }
+                        append("User: $message")
+                    },
+                    temperature = 0.7,
+                    max_tokens = 1024,
+                    stream = true
+                )
+            )
+        }
 
         val request = Request.Builder()
-            .url("$baseUrl/v1/responses")
+            .url("$baseUrl$apiPath")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .header("Content-Type", "application/json")
             .apply {
@@ -90,6 +116,7 @@ class LLMRepositoryImpl(
             }
             .build()
 
+        Timber.d("LLM request URL: $baseUrl$apiPath")
         httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 close(e)
@@ -149,13 +176,16 @@ class LLMRepositoryImpl(
     override suspend fun heartbeat(): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val model = settingsRepository.getLLMModel()
+            val baseUrl = settingsRepository.getLLMBaseUrl().ifEmpty { "http://localhost:1234" }
+            val apiPath = settingsRepository.getLLMApiPath()
+            Timber.d("LLM heartbeat URL: $baseUrl$apiPath")
             val request = LLMRequest(
                 model = model,
                 input = "ok",
                 temperature = 0.0,
                 max_tokens = 1
             )
-            val response = api.chat(request)
+            val response = api.chat(apiPath, request)
             Result.success(response.isSuccessful)
         } catch (e: Exception) {
             Result.failure(e)
@@ -191,33 +221,53 @@ class LLMRepositoryImpl(
         return try {
             // Read config from settings at runtime
             val model = settingsRepository.getLLMModel()
+            val baseUrl = settingsRepository.getLLMBaseUrl().ifEmpty { "http://localhost:1234" }
+            val apiPath = settingsRepository.getLLMApiPath()
+            Timber.d("LLM chat URL: $baseUrl$apiPath")
             val contextHistory = buildContextString()
 
-            val request = LLMRequest(
-                model = model,
-                input = buildString {
-                    if (systemPrompt.isNotBlank()) {
-                        append("System: $systemPrompt\n")
-                    }
-                    if (contextHistory.isNotBlank()) {
-                        append("$contextHistory\n")
-                    }
-                    append("User: $message")
-                },
-                temperature = temperature,
-                max_tokens = maxTokens
-            )
+            // MiniMax 等 OpenAI 兼容 API 使用 messages 格式
+            val isOpenAIFormat = baseUrl.contains("minimaxi", ignoreCase = true) ||
+                apiPath.contains("chatcompletion", ignoreCase = true)
 
-            val response = api.chat(request)
+            val request = if (isOpenAIFormat) {
+                // 使用 messages 数组格式 (OpenAI/MiniMax/Groq/DeepSeek 等)
+                val messages = mutableListOf<MessageItem>()
+                if (systemPrompt.isNotBlank()) {
+                    messages.add(MessageItem(role = "system", content = systemPrompt))
+                }
+                messages.addAll(buildMessagesFromHistory(contextHistory))
+                messages.add(MessageItem(role = "user", content = message))
+                LLMRequest(
+                    model = model,
+                    messages = messages,
+                    temperature = temperature,
+                    max_tokens = maxTokens
+                )
+            } else {
+                // 使用 input 字符串格式
+                LLMRequest(
+                    model = model,
+                    input = buildString {
+                        if (systemPrompt.isNotBlank()) {
+                            append("System: $systemPrompt\n")
+                        }
+                        if (contextHistory.isNotBlank()) {
+                            append("$contextHistory\n")
+                        }
+                        append("User: $message")
+                    },
+                    temperature = temperature,
+                    max_tokens = maxTokens
+                )
+            }
+
+            val response = api.chat(apiPath, request)
+            val isMiniMax = baseUrl.contains("minimaxi", ignoreCase = true)
 
             if (response.isSuccessful) {
-                val body = response.body()
-                // Parse: output[0].content[0].text
-                val content = body?.output
-                    ?.firstOrNull()
-                    ?.content
-                    ?.firstOrNull()
-                    ?.text
+                val bodyString = response.body()?.string() ?: ""
+                val content = parseLlmResponse(bodyString)
                 if (content != null) {
                     Result.success(content)
                 } else {
@@ -325,6 +375,132 @@ class LLMRepositoryImpl(
         } catch (e: Exception) {
             Timber.e(e, "Failed to build context string")
             ""
+        }
+    }
+
+    /**
+     * Build messages list from context history for OpenAI-format APIs.
+     */
+    private suspend fun buildMessagesFromHistory(contextHistory: String): List<MessageItem> {
+        if (contextHistory.isBlank()) return emptyList()
+        val messages = mutableListOf<MessageItem>()
+        try {
+            val lines = contextHistory.split("\n")
+            for (line in lines) {
+                if (line.startsWith("User: ")) {
+                    messages.add(MessageItem(role = "user", content = line.removePrefix("User: ")))
+                } else if (line.startsWith("Assistant: ")) {
+                    messages.add(MessageItem(role = "assistant", content = line.removePrefix("Assistant: ")))
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to build messages from history")
+        }
+        return messages
+    }
+
+    /**
+     * Send chat with explicit config (used for testing without saving settings).
+     */
+    override suspend fun chatWithConfig(
+        message: String,
+        baseUrl: String,
+        apiPath: String,
+        apiKey: String,
+        model: String
+    ): Result<String> {
+        val isMiniMax = baseUrl.contains("minimaxi", ignoreCase = true)
+        val isOpenAIFormat = isMiniMax || apiPath.contains("chatcompletion", ignoreCase = true)
+
+        val request = if (isOpenAIFormat) {
+            val messages = listOf(MessageItem(role = "user", content = message))
+            LLMRequest(
+                model = model,
+                messages = messages,
+                temperature = 0.7,
+                max_tokens = 32  // 测试时限制响应长度，加快返回
+            )
+        } else {
+            LLMRequest(
+                model = model,
+                input = message,
+                temperature = 0.7,
+                max_tokens = 32  // 测试时限制响应长度，加快返回
+            )
+        }
+
+        val requestBuilder = Request.Builder()
+            .url("$baseUrl$apiPath")
+            .post(Gson().toJson(request).toRequestBody("application/json".toMediaType()))
+            .header("Content-Type", "application/json")
+            .apply {
+                if (apiKey.isNotEmpty()) {
+                    header("Authorization", "Bearer $apiKey")
+                }
+            }
+
+        return doChatWithConfig(requestBuilder.build())
+    }
+
+    private suspend fun doChatWithConfig(request: Request): Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Timber.d("LLM doChatWithConfig: ${request.url}")
+                val response: okhttp3.Response = httpClient.newCall(request).execute()
+                Timber.d("LLM response code: ${response.code}")
+                val bodyString = response.body?.string() ?: ""
+                Timber.d("LLM response body: $bodyString")
+                if (bodyString.isEmpty()) {
+                    return@withContext Result.failure(Exception("Empty response body from LLM"))
+                }
+
+                val content = parseLlmResponse(bodyString)
+                if (content != null) {
+                    Result.success(content)
+                } else {
+                    Result.failure(Exception("Empty response from LLM"))
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "LLM chatWithConfig failed")
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * 统一解析 LLM 响应，自动检测格式
+     * 支持: OpenAI/Ollama/DeepSeek/MiniMax/Groq 等
+     */
+    private fun parseLlmResponse(bodyString: String): String? {
+        return try {
+            val json = JSONObject(bodyString)
+            // 优先尝试 OpenAI/Ollama/DeepSeek/MiniMax/Groq 格式: choices[0].message.content
+            if (json.has("choices")) {
+                val choices = json.getJSONArray("choices")
+                if (choices.length() > 0) {
+                    val choice = choices.getJSONObject(0)
+                    if (choice.has("message")) {
+                        return choice.getJSONObject("message").optString("content", null)
+                    }
+                }
+            }
+            // 其次尝试 output 格式 (某些 API)
+            if (json.has("output")) {
+                val output = json.getJSONArray("output")
+                if (output.length() > 0) {
+                    val outItem = output.getJSONObject(0)
+                    if (outItem.has("content")) {
+                        val content = outItem.getJSONArray("content")
+                        if (content.length() > 0) {
+                            return content.getJSONObject(0).optString("text", null)
+                        }
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to parse LLM response")
+            null
         }
     }
 

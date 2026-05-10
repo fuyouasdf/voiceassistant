@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        startLlmStatusPolling()
+        // 定时心跳已禁用，仅在打开应用、保存配置、测试连接时检测
     }
 
     override fun onStop() {

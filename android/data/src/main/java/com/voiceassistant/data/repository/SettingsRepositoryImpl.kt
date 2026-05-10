@@ -103,6 +103,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setLLMBaseUrl(url: String) = setString(ConfigKeys.LLM_BASE_URL, url)
     override suspend fun getLLMApiKey(): String = getString(ConfigKeys.LLM_API_KEY, "")
     override suspend fun setLLMApiKey(key: String) = setString(ConfigKeys.LLM_API_KEY, key)
+    override suspend fun getLLMApiPath(): String = getString(ConfigKeys.LLM_API_PATH, "/v1/responses")
+    override suspend fun setLLMApiPath(path: String) = setString(ConfigKeys.LLM_API_PATH, path)
     override suspend fun getLLMModel(): String = getString(ConfigKeys.LLM_MODEL, "deepseek-chat")
     override suspend fun setLLMModel(model: String) = setString(ConfigKeys.LLM_MODEL, model)
     override suspend fun getLLMSystemPrompt(): String =
@@ -177,6 +179,8 @@ interface SettingsRepository {
     suspend fun setLLMBaseUrl(url: String)
     suspend fun getLLMApiKey(): String
     suspend fun setLLMApiKey(key: String)
+    suspend fun getLLMApiPath(): String
+    suspend fun setLLMApiPath(path: String)
     suspend fun getLLMModel(): String
     suspend fun setLLMModel(model: String)
     suspend fun getLLMSystemPrompt(): String

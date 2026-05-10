@@ -181,7 +181,10 @@ class AudioPlayer {
                     (samples[i] * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                 }
 
-                audioTrack?.write(shortSamples, 0, shortSamples.size)
+                // Write audio on IO dispatcher to avoid blocking main thread
+                withContext(Dispatchers.IO) {
+                    audioTrack?.write(shortSamples, 0, shortSamples.size)
+                }
 
                 if (!reusePreparedTrack) {
                     audioTrack?.stop()

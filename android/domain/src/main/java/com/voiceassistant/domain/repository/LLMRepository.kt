@@ -50,6 +50,23 @@ interface LLMRepository {
      * Parse command-style user input into a structured intent.
      */
     suspend fun parseCommandIntent(message: String): Result<LLMParsedIntent>
+
+    /**
+     * Send chat message with explicit config (used for testing without saving settings).
+     * @param message The user's message
+     * @param baseUrl Base URL
+     * @param apiPath API path
+     * @param apiKey API key
+     * @param model Model name
+     * @return The LLM's response text
+     */
+    suspend fun chatWithConfig(
+        message: String,
+        baseUrl: String,
+        apiPath: String,
+        apiKey: String,
+        model: String
+    ): Result<String>
 }
 
 data class LLMRouteDecision(

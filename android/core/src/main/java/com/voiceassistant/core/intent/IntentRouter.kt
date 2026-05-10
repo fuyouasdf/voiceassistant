@@ -120,6 +120,8 @@ class IntentRouter @Inject constructor(
         if (skillResult is SkillResult.NotHandled || skillResult is SkillResult.Error) {
             val llm = llmRepository
             if (llm != null) {
+                val startTime = System.currentTimeMillis()
+                Timber.d("IntentRouter: calling routeIntent...")
                 val routingResult = llm.routeIntent(normalizedText).fold(
                     onSuccess = { it },
                     onFailure = {
@@ -127,6 +129,7 @@ class IntentRouter @Inject constructor(
                         null
                     }
                 )
+                Timber.d("IntentRouter: routeIntent took ${System.currentTimeMillis() - startTime}ms")
 
                 if (routingResult != null) {
                     return when (routingResult.mode) {

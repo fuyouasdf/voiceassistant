@@ -34,6 +34,7 @@ class ConfigHolder @Inject constructor() {
     var jellyfinApiKey: String = ""
     var llmBaseUrl: String = ""
     var llmApiKey: String = ""
+    var llmApiPath: String = "/v1/responses"
     var llmModel: String = "deepseek-chat"
     var ttsEnabled: Boolean = true
     var ttsSpeed: Float = 1.0f  // TTS 速度，默认 1.0
@@ -52,6 +53,7 @@ class ConfigHolder @Inject constructor() {
                 jellyfinApiKey = repo.getJellyfinApiKey()
                 llmBaseUrl = repo.getLLMBaseUrl().ifEmpty { "https://api.deepseek.com" }
                 llmApiKey = repo.getLLMApiKey()
+                llmApiPath = repo.getLLMApiPath().ifEmpty { "/v1/responses" }
                 llmModel = repo.getLLMModel().ifEmpty { "deepseek-chat" }
                 ttsEnabled = repo.getTtsEnabled()
                 ttsSpeed = repo.getTtsSpeed()

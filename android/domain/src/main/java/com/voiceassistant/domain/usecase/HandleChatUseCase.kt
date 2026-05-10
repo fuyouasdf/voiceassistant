@@ -54,7 +54,11 @@ class HandleChatUseCase @Inject constructor(
         } ?: query
 
         return try {
-            llmRepository.chat(queryWithContext).fold(
+            val startTime = System.currentTimeMillis()
+            Timber.d("HandleChatUseCase: calling llmRepository.chat...")
+            val result = llmRepository.chat(queryWithContext)
+            Timber.d("HandleChatUseCase: chat took ${System.currentTimeMillis() - startTime}ms")
+            result.fold(
                 onSuccess = { it },
                 onFailure = { e -> getFriendlyErrorMessage(e as? Exception ?: Exception(e.toString())) }
             )

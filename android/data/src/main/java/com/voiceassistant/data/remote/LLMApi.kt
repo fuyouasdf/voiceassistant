@@ -16,20 +16,23 @@
 
 package com.voiceassistant.data.remote
 
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
+import retrofit2.http.Url
 import retrofit2.http.Headers
 
 interface LLMApi {
-    @POST("v1/responses")
+    @POST
     @Headers("Content-Type: application/json")
-    suspend fun chat(@Body request: LLMRequest): Response<LLMResponse>
+    suspend fun chat(@Url apiPath: String, @Body request: LLMRequest): Response<ResponseBody>
 }
 
 data class LLMRequest(
     val model: String,
-    val input: String,
+    val input: String? = null,
+    val messages: List<MessageItem>? = null,
     val previous_response_id: String? = null,
     val reasoning: Reasoning? = null,
     val stream: Boolean = false,
@@ -39,6 +42,11 @@ data class LLMRequest(
 
 data class Reasoning(
     val effort: String = "low"
+)
+
+data class MessageItem(
+    val role: String,
+    val content: String
 )
 
 data class LLMResponse(
@@ -76,4 +84,29 @@ data class ErrorDetail(
     val message: String?,
     val type: String?,
     val code: String?
+)
+
+// MiniMax API 响应格式
+data class MiniMaxResponse(
+    val id: String?,
+    val choices: List<MiniMaxChoice>?,
+    val model: String?,
+    val usage: MiniMaxUsage?
+)
+
+data class MiniMaxChoice(
+    val finish_reason: String?,
+    val index: Int?,
+    val message: MiniMaxMessage?
+)
+
+data class MiniMaxMessage(
+    val content: String?,
+    val role: String?
+)
+
+data class MiniMaxUsage(
+    val total_tokens: Int?,
+    val prompt_tokens: Int?,
+    val completion_tokens: Int?
 )

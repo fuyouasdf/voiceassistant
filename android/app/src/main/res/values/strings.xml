@@ -56,12 +56,15 @@
     <string name="settings_jellyfin_api_key">API Key</string>
     <string name="settings_jellyfin_api_key_hint">请输入 Jellyfin API Key</string>
 
+    <string name="settings_llm_preset">LLM 预设</string>
     <string name="settings_llm_url">LLM API 地址</string>
     <string name="settings_llm_url_hint">https://api.deepseek.com</string>
     <string name="settings_llm_api_key">API Key</string>
     <string name="settings_llm_api_key_hint">请输入 API Key</string>
     <string name="settings_llm_model">模型</string>
     <string name="settings_llm_model_hint">deepseek-chat</string>
+    <string name="settings_llm_api_path">API 路径</string>
+    <string name="settings_llm_api_path_hint">/v1/chat/completions</string>
     <string name="settings_llm_system_prompt">助手提示词</string>
     <string name="settings_llm_router_prompt">路由提示词</string>
     <string name="settings_llm_command_prompt">命令解析提示词</string>

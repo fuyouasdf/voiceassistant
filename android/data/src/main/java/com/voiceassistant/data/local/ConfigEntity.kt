@@ -39,6 +39,7 @@ object ConfigKeys {
 
     const val LLM_BASE_URL = "llm_base_url"
     const val LLM_API_KEY = "llm_api_key"
+    const val LLM_API_PATH = "llm_api_path"
     const val LLM_MODEL = "llm_model"
     const val LLM_SYSTEM_PROMPT = "llm_system_prompt"
     const val LLM_ROUTER_PROMPT = "llm_router_prompt"

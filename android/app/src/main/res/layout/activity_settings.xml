@@ -243,6 +243,24 @@
 
                 </LinearLayout>
 
+                <!-- LLM Preset Spinner -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:text="@string/settings_llm_preset"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <Spinner
+                    android:id="@+id/spinnerLlmPreset"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/spinner_background"
+                    android:padding="8dp"
+                    android:spinnerMode="dropdown" />
+
                 <!-- LLM Base URL -->
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
@@ -259,6 +277,33 @@
                         android:textColor="@color/text_primary" />
 
                 </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- LLM API Path -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:hint="@string/settings_llm_api_path"
+                    style="@style/Widget.VoiceAssistant.TextInputLayout">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etLlmApiPath"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textUri"
+                        android:textColor="@color/text_primary" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- LLM Full URL Preview -->
+                <TextView
+                    android:id="@+id/tvLlmFullUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace" />
 
                 <!-- LLM API Key -->
                 <com.google.android.material.textfield.TextInputLayout
