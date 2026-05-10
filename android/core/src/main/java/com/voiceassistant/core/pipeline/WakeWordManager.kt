@@ -107,10 +107,7 @@ class WakeWordManager(private val context: Context) {
      * These are the original working keywords from assets
      */
     private val defaultWakeWords = listOf(
-        WakeWord("小爱同学", "我在"),
-        WakeWord("蛋哥蛋哥", "我在"),
-        WakeWord("林美丽", "我在"),
-        WakeWord("你好西西", "我在")
+        WakeWord("你好问问", "我在")
     )
 
     /**
